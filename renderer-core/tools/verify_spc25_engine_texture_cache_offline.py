@@ -28,6 +28,7 @@ ANCHORS={
  # A matching opcode does not by itself prove the decoder's registration.
  0x583bc2:"8b732885f67421",
  0x583bd1:"4c8bc78bd6e8d5b3ffff",
+ 0x583bce:"488bc84c8bc78bd6e8d5b3ffffeb15",
  0x57efb0:"48895c2408574883ec20",
  0x57efc3:"ba8d800000",
  0x57efc8:"e84347c300",
@@ -98,6 +99,11 @@ def audit(exe):
   inst=at(src,5)
   if inst[0]!=op or src+5+struct.unpack_from("<i",inst,1)[0]!=dst:
    raise ValueError("Cache command transport xref mismatch: "+hex(src))
+ # Exact hooked callsite includes the original E8 and a rel8 JMP; verify
+ # both transfer destinations before allowing a pass-through CPU probe.
+ pjump=at(0x583bdb,2)
+ if pjump[0]!=0xeb or 0x583bdd+struct.unpack("<b",pjump[1:])[0]!=0x583bf2:
+  raise ValueError("Original 808D writer callsite branch changed")
  # RTTI + vtable independently identify the cache-node producer class
  # and the typed opcode consumer without mistaking CPU objects for ID3D11.
  def read_ptr(rva):
@@ -129,6 +135,7 @@ def audit(exe):
   "status":"CPU_CACHE_NAME_PRODUCER_CONFIRMED__NATIVE_SRV_JOIN_OPEN",
   "sha256":digest,"verified_exact_opcode_anchors":len(ANCHORS),
   "engine_name_lookup":"0x140518a10",
+  "packet_source_detour_site":"0x140583bce (15 exact bytes, writer E8+branch rel8 verified)",
   "cache_entry_name_pointer":"+0x08",
   "cache_entry_bucket_next":"+0x10",
   "cache_entry_refcount_one":"+0x18",
