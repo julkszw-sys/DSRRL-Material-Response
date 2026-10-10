@@ -22,6 +22,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
-          name: spc25-epoch-diagnostic-only
-          path: DSRRL_v203_other_metal_exact_DIAG.addon64
+          name: spc25-c5330-t10-test-nonrelease
+          path: DSRRL_SPC25_C5330_T10_TEST.addon64
           if-no-files-found: error
