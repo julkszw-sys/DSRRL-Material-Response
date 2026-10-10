@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/ptde_metal_envspec_authority.hpp"
+#include "dsrrl/runtime/stock_dsr_compressed_resource_identity.hpp"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -110,6 +111,24 @@ void expect_valid(
 
 int main()
 {
+    // Pure offline stock compressed-mip identity checks; no active SRV swap.
+    namespace bc = dsrrl::runtime::stock_dsr_compressed_identity;
+    std::uint8_t original[8]{0,1,2,3,4,5,6,7};
+    std::uint8_t pitched[12]{0,1,2,3,4,5,6,7,99,99,99,99};
+    const bc::texture2d_descriptor d{4u,4u,1u,1u,1u,71u,true};
+    const bc::mip_initial_data a[]={{original,8u,8u}};
+    const bc::mip_initial_data b[]={{pitched,12u,12u}};
+    const auto original_hash=bc::exact_full_mip_digest(d,a,1u);
+    const auto pitched_hash=bc::exact_full_mip_digest(d,b,1u);
+    assert(original_hash.has_value() && pitched_hash.has_value());
+    assert(*original_hash==*pitched_hash);
+    pitched[0] ^= 1u;
+    assert(bc::exact_full_mip_digest(d,b,1u)!=original_hash);
+    const bc::mip_initial_data short_data[]={{original,7u,7u}};
+    assert(!bc::exact_full_mip_digest(d,short_data,1u).has_value());
+    auto unsupported=d;
+    unsupported.dxgi_format=72u;
+    assert(!bc::exact_full_mip_digest(unsupported,a,1u).has_value());
     using profile = rt::ptde_metal_envspec_profile;
     constexpr auto original_sha =
         "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b";
