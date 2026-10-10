@@ -974,11 +974,13 @@ if(DSRRL_EXPERIMENTAL_SPC25_DECODER_PROBE)
 endif()
 
 if(DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)
-    if(NOT DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
-        message(FATAL_ERROR "c5330 test requires SPC25 exact batch")
-    endif()
-    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
-        DSRRL_EXPERIMENTAL_SPC25_C5330_SWAP_TEST)
+    # c5330_s is a character/NPC texture, not a certified player
+    # equipment member. The project-wide SpecRGB equipment authority
+    # forbids activating an equipment sidecar bridge for this source.
+    message(FATAL_ERROR
+        "SPC25 c5330_s swap REJECTED: character/NPC asset lacks exact "
+        "equipment FLVER/material/slot/SpecRGB authority. "
+        "Use existing equipment-only SpecRGB carrier instead.")
 endif()
 if(DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
     # SPC25 native-view epoch instrumentation is mandatory on this
