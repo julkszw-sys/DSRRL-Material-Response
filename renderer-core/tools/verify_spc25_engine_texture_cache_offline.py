@@ -48,6 +48,10 @@ ANCHORS={
  0x57f18a:"498bd0",
  0x57f18d:"e86efeffff",
  0x57f168:"48c7471800000000",
+ 0x57eeb4:"488b41184885c0",
+ 0x57ee74:"488b41184885c0",
+ 0x57f030:"488d4b08e8f74f7400",
+ 0xcc4030:"83c8fff00fc101c3",
 }
 SAMPLES={
  "utf16_name_cache_lookup":0x518a10,
@@ -130,6 +134,9 @@ def audit(exe):
   "cache_entry_refcount_one":"+0x18",
   "cache_entry_0x28":"integer, not certified native SRV",
   "cache_entry_0x30":"managed pointer, not certified native D3D resource",
+  "entity_payload_release":"0x14057f030 decrements the refcount stored in payload+0x08 via lock xadd helper 0x140cc4030",
+  "entity_payload_accessors":"vtable slot +0x40 and +0x48 return entity+0x18 or fallback manager resource",
+  "native_srv_direct_pointer":"NOT_VALIDATED_BY_TYPED_CPU_HANDLE",
   "source_to_command_transport":{
     "entry_id_read":"0x140583bc2 reads node+0x28 as integer",
     "writer_call":"0x140583bd6 -> 0x14057efb0",
