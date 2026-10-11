@@ -32,6 +32,12 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     if ($LASTEXITCODE -ne 0) { throw "V204 full-resource registration and keyed source overlay failed" }
     python renderer-core/tools/apply_v204_sidecar_resource_and_source_fix.py
     if ($LASTEXITCODE -ne 0) { throw "V204 resource/source overlay drift" }
+    if ($env:DSRRL_V205_SPC25_EPOCH_TRANSPORT -eq "ON") {
+        python renderer-core/tools/apply_v205_spc25_shared_epoch_transport.py --apply
+        if ($LASTEXITCODE -ne 0) { throw "V205 certified CPU/SRV epoch source overlay failed" }
+        python renderer-core/tools/apply_v205_spc25_shared_epoch_transport.py
+        if ($LASTEXITCODE -ne 0) { throw "V205 exact source postcondition failed" }
+    }
 }
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
@@ -90,6 +96,11 @@ if ($env:DSRRL_V203_OWNER_PATH_TRACE -eq "ON") {
 if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     $flags += "-DDSRRL_V203_FULL_SIDECAR_1295=ON"
     Write-Host "DSRRL: all 1295 Specular sidecar resources whitelisted; exact full-owner+MTD semantics for nonmetal only; P_Metal unchanged"
+}
+if ($env:DSRRL_V205_SPC25_EPOCH_TRANSPORT -eq "ON") {
+    if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") { throw "V205 requires full sidecar parent" }
+    $flags += "-DDSRRL_V205_SPC25_EPOCH_TRANSPORT=ON"
+    Write-Host "DSRRL V205: exact CPU writer => native SRV/resource/epoch read-only witness; all rx24-35, P_Metal and SpecRGB pixel bridges unchanged"
 }
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
