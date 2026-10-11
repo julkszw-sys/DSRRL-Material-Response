@@ -5,6 +5,10 @@ cmake --build build/renderer-core-lib --config Release --target $native
 if ($LASTEXITCODE -ne 0) { throw "Native test build failed" }
 ctest --test-dir build/renderer-core-lib -C Release -R "^dsrrl_(pmetal_(selector_policy|producer_state)|renderer_(flver_identity|resource_view_epoch|companion_tls_way))_tests$" --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native tests failed" }
+if ($env:DSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG -eq "ON") {
+    python renderer-core/tools/apply_v218_exact_nonmetal_selector_source.py
+    if ($LASTEXITCODE -ne 0) { throw "V218 exact nonmetal producer source drift" }
+}
 if ($env:DSRRL_V216_BOUND_T1_NATIVE_ALIAS -eq "ON") {
     python renderer-core/tools/apply_v216_bound_t1_native_alias.py
     if ($LASTEXITCODE -ne 0) { throw "V216 final native bound t1 source drift" }
@@ -67,6 +71,15 @@ if ($env:DSRRL_V216_BOUND_T1_NATIVE_ALIAS -eq "ON") {
     $cache = Get-Content 'build/CMakeCache.txt' -Raw
     if (!$cache.Contains('DSRRL_V216_BOUND_T1_NATIVE_ALIAS:BOOL=ON')) {
         throw "V216 draw-bound resource alias compile option disabled"
+    }
+}
+if ($env:DSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG -eq "ON") {
+    if (!$ascii.Contains("[DSRRL V218 SELECTOR SOURCE]")) {
+        throw "V218 native material-scoped source operator marker missing"
+    }
+    $cache = Get-Content 'build/CMakeCache.txt' -Raw
+    if (!$cache.Contains('DSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG:BOOL=ON')) {
+        throw "V218 material-scoped exact selector source flag not compiled"
     }
 }
 $hash = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
