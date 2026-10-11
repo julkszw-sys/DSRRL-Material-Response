@@ -63,6 +63,15 @@ if ($env:DSRRL_V203_EXACT_LEATHER_MTD_INDEX -eq "ON") {
     $flags += "-DDSRRL_V203_EXACT_LEATHER_MTD_INDEX=ON"
     Write-Host "DSRRL: experimental three-record exact raw MTD index, no new authority"
 }
+if ($env:DSRRL_V203_OWNER_PATH_TRACE -eq "ON") {
+    if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -ne "ON" -or
+        $env:DSRRL_V203_CONSTEXPR_OWNER_LOOKUP -ne "ON" -or
+        $env:DSRRL_V203_EXACT_LEATHER_MTD_INDEX -ne "ON") {
+        throw "Owner trace requires the exact v203 three-feature opt-in lineage"
+    }
+    $flags += "-DDSRRL_V203_OWNER_PATH_RUNTIME_DIAG=ON"
+    Write-Host "DSRRL: bounded 12-event-per-family owner route trace enabled"
+}
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
 cmake --build build --config Release --target dsrrl_renderer_core_integrated
