@@ -118,26 +118,48 @@ public:
         init_accepted_.fetch_add(1u,std::memory_order_relaxed);
         return next_epoch_;
     }
-    // Publish only exact engine packet + cache-name + verified DLTexture2D
-    // observations; no pointer deref, COM ownership, or asset loads here.
-    bool observe_writer(std::uintptr_t view,std::uintptr_t resource,
-                        const char *logical_name,std::size_t length,
-                        std::uint32_t source_id) noexcept {
+    // The exact first gate is classified under the SAME mutex as publication;
+    // no racy pre-probe / after-the-fact attribution.
+    enum class writer_result : std::uint8_t {
+        published, rejected_name, view_absent, resource_mismatch,
+        view_ambiguous, snapshot_capacity
+    };
+    writer_result observe_writer_diagnostic(
+        std::uintptr_t view,std::uintptr_t resource,
+        const char *logical_name,std::size_t length,
+        std::uint32_t source_id) noexcept {
         if(!view||!resource||!logical_name||!source_id||
-           !equipment_spec_name(logical_name,length))return false;
+           !equipment_spec_name(logical_name,length))
+            return writer_result::rejected_name;
         std::lock_guard<std::mutex> lock(mutex_);
-        auto *e=current_unlocked(view,resource);
-        if(!e||writer_count_==Writers)return false;
-        // Never reuse a writer slot within the run. Retirement removes its
-        // authority, preventing stale pointer address reuse.
+        view_record *exact=nullptr;
+        for(std::size_t i=0;i<probe_limit;++i) {
+            auto &e=views_[(bucket(view)+i)&(Capacity-1u)];
+            if(!e.active || e.view!=view)continue;
+            if(e.ambiguous || exact)
+                return writer_result::view_ambiguous;
+            if(e.resource!=resource)
+                return writer_result::resource_mismatch;
+            exact=&e;
+        }
+        if(!exact)return writer_result::view_absent;
+        if(writer_count_==Writers)
+            return writer_result::snapshot_capacity;
         auto &w=writers_[writer_count_++];
-        w.view=view;w.resource=resource;w.epoch=e->epoch;
+        w.view=view;w.resource=resource;w.epoch=exact->epoch;
         w.source_id=source_id;
         std::memcpy(w.name.data(),logical_name,length);
         w.name[length]=0;
         w.active=true;
         writer_accepted_.fetch_add(1u,std::memory_order_relaxed);
-        return true;
+        return writer_result::published;
+    }
+    // Preserve the original public boolean API and its negative oracles.
+    bool observe_writer(std::uintptr_t view,std::uintptr_t resource,
+                        const char *logical_name,std::size_t length,
+                        std::uint32_t source_id) noexcept {
+        return observe_writer_diagnostic(view,resource,logical_name,
+                 length,source_id)==writer_result::published;
     }
     // Inspect the live view independently of whether a writer was accepted.
     // Explicitly distinguishes missed lifecycle callbacks from missed names.
