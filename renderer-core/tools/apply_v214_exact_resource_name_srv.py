@@ -126,6 +126,48 @@ void on_destroy_resource(
                          source_name.begin()+source_len,
                          logical_name_raw)))
             return;
+        // V215: the owner runtime proves logical Specular names are present
+        // at init_resource_view (16 confirmed ready loads), while V214's
+        // init_resource-only seed may miss the retail producer lifetime.
+        // A direct, exact native SRV->ID3D11Resource witness can seed the
+        // SAME resource for later distinct SRVs, without FLVER inference.
+        // Names not present in the certified sidecar corpus never seed.
+        if (source_status==v214_resource_provenance::status::absent &&
+            logical_name_length>=3u && logical_name_length<=256u) {
+            const auto direct_hash=fnv_name(
+                logical_name_raw,logical_name_length);
+            if (sidecar_20261010::spec_allowed(direct_hash) ||
+                generated::spec_equipment_name_hash_allowed_v12(
+                    direct_hash) ||
+                generated::diffuse_name_hash_allowed_v12(direct_hash) ||
+                generated::normal_name_hash_allowed_v12(direct_hash)) {
+                auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
+                    view.handle);
+                ID3D11Resource *native_backing=nullptr;
+                srv->GetResource(&native_backing);
+                const bool resource_exact=native_backing!=nullptr &&
+                    reinterpret_cast<std::uintptr_t>(native_backing)==
+                    static_cast<std::uintptr_t>(source_resource.handle);
+                if (native_backing)native_backing->Release();
+                if (!resource_exact)
+                    return;
+                if (!v214_resource_provenance::instance().observe(
+                        static_cast<std::uintptr_t>(device->get_native()),
+                        static_cast<std::uintptr_t>(
+                            source_resource.handle),
+                        logical_name_raw,logical_name_length))
+                    return;
+                static std::atomic<std::uint32_t> published{0u};
+                const auto n=published.fetch_add(
+                    1u,std::memory_order_relaxed)+1u;
+                if (n<=8u || (n<=8192u && (n&(n-1u))==0u))
+                    reshade::log::message(reshade::log::level::info,
+                        "[DSRRL V215 VIEW SOURCE] stage=exact_view_backseed "
+                        "source=RETAIL_TLS_SRV resource_backing=EXACT "
+                        "name=WHITELISTED consumer_permission=UNCHANGED "
+                        "swap=0 pixel=OPEN");
+            }
+        }
     } else {
         if (source_status!=v214_resource_provenance::status::exact ||
             source_len==0u)
