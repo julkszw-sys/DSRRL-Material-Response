@@ -50,8 +50,8 @@ int main(){
     CHECK(!diag.probe(0x3010,0x4010).source);
     CHECK(!diag.observe_writer(0x3010,0x4010,"c5330_s",7u,1u));
     CHECK(diag.probe(0x3010,0x4010).status==probe_status::writer_absent);
-    CHECK(!registry<32,8>::name_is_equipment_spec("c5330_s",7u));
-    CHECK(registry<32,8>::name_is_equipment_spec("BD_M_9380_1_s",13u));
+    CHECK((!registry<32,8>::name_is_equipment_spec("c5330_s",7u)));
+    CHECK((registry<32,8>::name_is_equipment_spec("BD_M_9380_1_s",13u)));
     CHECK(diag.observe_writer(0x3010,0x4010,"BD_M_9380_1_s",13u,1u));
     CHECK(diag.probe(0x3010,0x4010).status==probe_status::matched);
     CHECK(diag.stats().writer_accepted==1u);
