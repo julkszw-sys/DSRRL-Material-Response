@@ -38,6 +38,26 @@ int main(){
     CHECK(!bounded.observe_writer(0x1100,0x2100,"HD_M_9430_s",11,2));
     CHECK(bounded.init(1,0x1101,0x2101));
     CHECK(!bounded.init(1,0x1102,0x2102));
+    // V207 inspection must never fabricate producer authority.
+    using dsrrl::runtime::v206_native_t1::probe_status;
+    registry<32,8> diag{};
+    CHECK(diag.stats().init_called==0u);
+    CHECK(diag.probe(0x3010,0x4010).status==probe_status::view_absent);
+    CHECK(diag.init(7u,0x3010,0x4010)!=0u);
+    CHECK(diag.stats().init_called==1u && diag.stats().init_accepted==1u);
+    CHECK(diag.probe(0x3010,0x4011).status==probe_status::resource_mismatch);
+    CHECK(diag.probe(0x3010,0x4010).status==probe_status::writer_absent);
+    CHECK(!diag.probe(0x3010,0x4010).source);
+    CHECK(!diag.observe_writer(0x3010,0x4010,"c5330_s",7u,1u));
+    CHECK(diag.probe(0x3010,0x4010).status==probe_status::writer_absent);
+    CHECK(!registry<32,8>::name_is_equipment_spec("c5330_s",7u));
+    CHECK(registry<32,8>::name_is_equipment_spec("BD_M_9380_1_s",13u));
+    CHECK(diag.observe_writer(0x3010,0x4010,"BD_M_9380_1_s",13u,1u));
+    CHECK(diag.probe(0x3010,0x4010).status==probe_status::matched);
+    CHECK(diag.stats().writer_accepted==1u);
+    diag.destroy(7u,0x3010);
+    CHECK(diag.probe(0x3010,0x4010).status==probe_status::view_absent);
+    CHECK(!diag.resolve(0x3010,0x4010));
     std::puts("V206_CPU_SRV_RESOURCE_EPOCH_POSITIVE_AND_NEGATIVE_PASS");
     return 0;
 }
