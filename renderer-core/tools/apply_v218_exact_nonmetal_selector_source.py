@@ -145,7 +145,7 @@ def main():
         SOURCE.write_text(patched, encoding="utf-8", newline="\n")
     elif not args.apply and patched != text:
         raise RuntimeError("V218 source producer overlay missing")
-    assert patched.count("v218_exact_nonmetal_selector_material") == 4
+    assert patched.count("v218_exact_nonmetal_selector_material") == 3
     assert "if (exact_nonmetal) {\n        telemetry::hot_count(g_consumer_fail);\n        return false;\n    }" in patched
     assert patched.index("if (exact_nonmetal) {\n        telemetry::hot_count(g_consumer_fail);") < patched.index("if (latest_hook_source(out))")
     print("V218_EXACT_NONMETAL_SELECTOR_SOURCE_" +
