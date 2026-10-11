@@ -5,7 +5,12 @@ cmake --build build/renderer-core-lib --config Release --target $native
 if ($LASTEXITCODE -ne 0) { throw "Native test build failed" }
 ctest --test-dir build/renderer-core-lib -C Release -R "^dsrrl_(pmetal_(selector_policy|producer_state)|renderer_(flver_identity|resource_view_epoch|companion_tls_way))_tests$" --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native tests failed" }
-if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
+if ($env:DSRRL_V214_EXACT_RESOURCE_NAME_SRV -eq "ON") {
+    # The final V214 source is a strict, verified extension of the already
+    # verified V206 intermediate stage in configure_v203_clean_equipment.ps1.
+    python renderer-core/tools/apply_v214_exact_resource_name_srv.py
+    if ($LASTEXITCODE -ne 0) { throw "V214 final exact resource-SRV postcondition drift" }
+} elseif ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     python renderer-core/tools/apply_v206_native_t1_adapter.py
     if ($LASTEXITCODE -ne 0) { throw "V206 exact V204-native transport provenance adapter source drift" }
 } elseif ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
@@ -42,6 +47,15 @@ if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     $cache = Get-Content 'build/CMakeCache.txt' -Raw
     if (!$cache.Contains('DSRRL_V206_SPC25_EQUIPMENT_ID:BOOL=ON')) { throw "V206 adapter not compiled" }
     if ($ascii.Contains("c5330_s")) { throw "NPC SPC25 legacy c5330_s leaked into V206 binary" }
+}
+if ($env:DSRRL_V214_EXACT_RESOURCE_NAME_SRV -eq "ON") {
+    if (!$ascii.Contains("[DSRRL V214 RESOURCE NAME]")) {
+        throw "V214 exact source-resource to SRV compiled marker missing"
+    }
+    $cache = Get-Content 'build/CMakeCache.txt' -Raw
+    if (!$cache.Contains('DSRRL_V214_EXACT_RESOURCE_NAME_SRV:BOOL=ON')) {
+        throw "V214 resource-name transport compile option disabled"
+    }
 }
 $hash = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
