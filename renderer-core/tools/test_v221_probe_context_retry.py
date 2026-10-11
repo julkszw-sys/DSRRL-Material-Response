@@ -13,13 +13,15 @@ fixture = (
     '#include "dsrrl/runtime/pixel_srv_shadow.hpp"\n'
     'constexpr int k_effect_fail_probe = 1;\n'
     'void prepare() {\n'
+    + '    const bool env_resource_ready = true;\n'
     + overlay.OLD
     + '\n effect_fail(k_effect_fail_probe);\n }\n'
 )
 patched = overlay.patch(fixture)
 assert overlay.patch(patched) == patched
-assert patched.count('sidecar_20261010::exact_nonmetal_material(material)') == 1
+assert patched.count('sidecar_20261010::exact_nonmetal_draw(material,decision)') == 1
 assert '!k_native_dsr_cubemap_feed' in patched
+assert '    bool env_resource_ready = true;' in patched
 assert 'shadow_env_ready' in patched
 assert 'PSGetShaderResources(' in patched
 assert 'env_resources_.prepare_bound(' in patched
@@ -33,7 +35,8 @@ assert 'route_index == 345u' not in patched, (
     "P_Metal exclusion is via the exact_nonmetal_material gate")
 try:
     overlay.patch(fixture.replace(
-        'if (!env_resource_ready)', 'if (unknown_resource_failure)'))
+        '    const bool env_resource_ready = true;',
+        '    auto probe_ready = true;'))
 except RuntimeError:
     pass
 else:
