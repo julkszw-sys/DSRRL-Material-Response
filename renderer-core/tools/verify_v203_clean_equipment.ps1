@@ -6,8 +6,12 @@ if ($LASTEXITCODE -ne 0) { throw "Native test build failed" }
 ctest --test-dir build/renderer-core-lib -C Release -R "^dsrrl_(pmetal_(selector_policy|producer_state)|renderer_(flver_identity|resource_view_epoch|companion_tls_way))_tests$" --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native tests failed" }
 if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
-    python renderer-core/tools/apply_v203_full_sidecar_1295.py
-    if ($LASTEXITCODE -ne 0) { throw "Full 1295 sidecar exact-source overlay postcondition failed" }
+    # PR305's verifier must run BEFORE applying V204. It cannot
+    # validate the intentional extended create-time SRV registration.
+    # configure_v203_clean_equipment.ps1 already verified the PR305
+    # upstream postcondition before the V204 overlay was applied.
+    python renderer-core/tools/apply_v204_sidecar_resource_and_source_fix.py
+    if ($LASTEXITCODE -ne 0) { throw "V204 SRV init and keyed nonmetal LightBank postcondition failed" }
 } else {
     python renderer-core/tools/apply_v203_clean_equipment_spec.py
     if ($LASTEXITCODE -ne 0) { throw "Equipment source postcondition failed" }
@@ -21,7 +25,7 @@ foreach ($marker in @($sha,"[DSRRL PMETAL ZERO RE]","v203_clean_equipment_slot_s
   if (!$ascii.Contains($marker)) { throw "Missing $marker" }
 }
 if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
-    foreach ($required in @("[DSRRL SIDECAR 1295]","nonmetal_resource_probe")) {
+    foreach ($required in @("[DSRRL SIDECAR 1295]","nonmetal_resource_probe","stage=resource_view_init","ps012=")) {
         if (!$ascii.Contains($required)) { throw "Missing full sidecar 1295 binary diagnostic $required" }
     }
     $cache = Get-Content 'build/CMakeCache.txt' -Raw
