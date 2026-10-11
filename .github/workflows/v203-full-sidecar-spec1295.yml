@@ -44,7 +44,7 @@ jobs:
           for n in ('bd_m_9430_1_s','bd_m_9430_2_s','lg_m_9430_s','am_m_9430_s','wp_a_0301_estoc_s'):
               assert n in names
           assert fnv1a_ascii_lower('am_fake_0000_s') not in values
-          assert hashlib.sha256(('\\n'.join(names)+'\\n').encode()).hexdigest()=='6f417110f6085ca8389213578eb9c0a86c100070717a9df20d62790052c151e4'
+          assert hashlib.sha256(bytes([10]).join(n.encode() for n in names)+bytes([10])).hexdigest()=='6f417110f6085ca8389213578eb9c0a86c100070717a9df20d62790052c151e4'
           print('1295/1295 exact sidecar name hashes, no duplicate, five tested live gSpec names, negative PASS')
           PY
       - name: Compile native C++17 resource hash whitelist oracle
