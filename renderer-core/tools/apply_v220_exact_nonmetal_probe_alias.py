@@ -32,6 +32,7 @@ def header(s):
         begin = s.index(marker)
         end = s.index('noexcept;',begin)+len('noexcept;')
         chunk=s[begin:end]
+        if chunk.count(b)==1:continue
         if chunk.count(a)!=1:raise RuntimeError('V220 declaration drift: '+name)
         s=s[:begin]+chunk.replace(a,b,1)+s[end:]
     return s
@@ -107,6 +108,7 @@ def resource(s):
         chunk=s[begin:end]
         old_decl='    prepared_envspec_resources &prepared) noexcept'
         new_decl='    prepared_envspec_resources &prepared,\n    bool allow_exact_native_alias) noexcept'
+        if chunk.count(new_decl)==1:continue
         if chunk.count(old_decl)!=1:raise RuntimeError('V220 definition drift: '+name)
         s=s[:begin]+chunk.replace(old_decl,new_decl,1)+s[end:]
     s=once(s,
