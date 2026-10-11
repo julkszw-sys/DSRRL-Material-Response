@@ -1,4 +1,4 @@
-name: V214 Exact Source Resource to SRV Bridge
+name: V215 Verified View-Origin Resource Seed
 
 on:
   push:
@@ -12,6 +12,7 @@ on:
       - agent/v212-diffuse-operator-cut-20261011
       - agent/v213-retail-mtd-diffuse-source-repair-20261011
       - agent/v214-exact-resource-name-to-srv-20261011
+      - agent/v215-view-origin-resource-seed-20261011
   workflow_dispatch:
 
 jobs:
@@ -158,12 +159,13 @@ jobs:
           python renderer-core/tools/apply_v214_exact_resource_name_srv.py
           if ($LASTEXITCODE -ne 0) { throw "V214 final resource provenance not compiled" }
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_native_resource_to_srv' -Quiet)) { throw "V214 source-to-SRV identity transport absent" }
+          if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_view_backseed' -Quiet)) { throw "V215 actual named native SRV to resource producer bridge absent" }
 
           $head = Get-Content 'build/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp' -Raw
           if (!$head.Contains('1295u')) { throw "Not all sidecar entries compiled" }
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V214_EXACT_SOURCE_RESOURCE_TO_SRV_SINGLE_ADDON
+          name: DSRRL_V215_VIEW_ORIGIN_RESOURCE_SEED_SINGLE_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error
