@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           git merge-base --is-ancestor 406d866b131065d60e38ceb8cd79ef18433f8d74 HEAD
-          if git diff --name-only 406d866b131065d60e38ceb8cd79ef18433f8d74 HEAD -- renderer-core/src renderer-core/shaders renderer-core/data/census renderer-core/include/dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp renderer-core/include/dsrrl/runtime/v203_equipment_exact_mtd_router.hpp renderer-core/src/runtime/pmetal_env_source_runtime.cpp | grep -v '^renderer-core/src/runtime/v206_native_t1_writer_adapter.cpp
+          if git diff --name-only 406d866b131065d60e38ceb8cd79ef18433f8d74 HEAD -- renderer-core/src renderer-core/shaders renderer-core/data/census renderer-core/include/dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp renderer-core/include/dsrrl/runtime/v203_equipment_exact_mtd_router.hpp renderer-core/src/runtime/pmetal_env_source_runtime.cpp | grep -v -F renderer-core/src/runtime/v206_native_t1_writer_adapter.cpp | grep -q .; then
             echo "Protected source or manifest modified" >&2
             exit 1
           fi
