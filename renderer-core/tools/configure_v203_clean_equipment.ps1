@@ -18,6 +18,17 @@ python renderer-core/tools/apply_v203_clean_equipment_spec.py --apply
 if ($LASTEXITCODE -ne 0) { throw "Equipment overlay failed" }
 python renderer-core/tools/apply_v203_clean_equipment_spec.py
 if ($LASTEXITCODE -ne 0) { throw "Equipment verification failed" }
+if ($env:DSRRL_V203_LEATHER_PMETAL_STYLE -eq "ON") {
+    foreach ($name in @("DSRRL_V203_EQUIPMENT_ENVSPEC36","DSRRL_V203_CONSTEXPR_OWNER_LOOKUP","DSRRL_V203_EXACT_LEATHER_MTD_INDEX","DSRRL_V203_OWNER_PATH_TRACE")) {
+        if ([Environment]::GetEnvironmentVariable($name) -ne "ON") {
+            throw "Leather source-equivalence requires pinned v203 strict lineage: $name"
+        }
+    }
+    python renderer-core/tools/apply_v203_live_leather_equivalence.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "Exact six-Leather source/consumer overlay failed" }
+    python renderer-core/tools/apply_v203_live_leather_equivalence.py
+    if ($LASTEXITCODE -ne 0) { throw "Exact six-Leather overlay drift" }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -71,6 +82,10 @@ if ($env:DSRRL_V203_OWNER_PATH_TRACE -eq "ON") {
     }
     $flags += "-DDSRRL_V203_OWNER_PATH_RUNTIME_DIAG=ON"
     Write-Host "DSRRL: bounded 12-event-per-family owner route trace enabled"
+}
+if ($env:DSRRL_V203_LEATHER_PMETAL_STYLE -eq "ON") {
+    $flags += "-DDSRRL_V203_LEATHER_PMETAL_STYLE_EXPERIMENT=ON"
+    Write-Host "DSRRL: six exact P_Leather source-only owners, actual flag not required, unkeyed source fallback forbidden, pixel=OPEN"
 }
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
