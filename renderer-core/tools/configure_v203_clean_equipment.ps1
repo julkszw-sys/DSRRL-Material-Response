@@ -64,6 +64,12 @@ if ($env:DSRRL_V219_EXACT_NONMETAL_GATE_TRACE -eq "ON") {
     python renderer-core/tools/apply_v219_exact_nonmetal_first_gate.py
     if ($LASTEXITCODE -ne 0) { throw "V219 exact draw cut postcondition failed" }
 }
+if ($env:DSRRL_V220_NONMETAL_EXACT_PROBE_ALIAS -eq 'ON') {
+    python renderer-core/tools/apply_v220_exact_nonmetal_probe_alias.py --apply
+    if ($LASTEXITCODE -ne 0) { throw 'V220 overlay failed' }
+    python renderer-core/tools/apply_v220_exact_nonmetal_probe_alias.py
+    if ($LASTEXITCODE -ne 0) { throw 'V220 source verification failed' }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -148,6 +154,7 @@ if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     $flags += "-DDSRRL_V206_SPC25_EQUIPMENT_ID=ON"
     Write-Host "DSRRL V206: minimal native writer + SRV/epoch adapter; NO SPC25 code transplant, no NPC c5330"
 }
+if ($env:DSRRL_V220_NONMETAL_EXACT_PROBE_ALIAS -eq 'ON') { $flags += '-DDSRRL_V220_NONMETAL_EXACT_PROBE_ALIAS=ON' }
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
 cmake --build build --config Release --target dsrrl_renderer_core_integrated

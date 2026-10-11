@@ -1,0 +1,36 @@
+name: V220 Nonmetal Exact Probe
+on:
+  push:
+    branches: [agent/v220-nonmetal-exact-probe-srv-alias-20261011]
+jobs:
+  native-build:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_EXACT_PROBE_ALIAS: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - shell: pwsh
+        run: ./renderer-core/tools/configure_v203_clean_equipment.ps1
+      - shell: pwsh
+        run: ./renderer-core/tools/verify_v203_clean_equipment.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V220_SINGLE_ADDON
+          path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
+          if-no-files-found: error
