@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V206_SPC25_EQUIPMENT_ID
+    "Minimal V204-native CPU texture writer and exact stock D3D11 SRV/resource generation witness (observe only)"
+    OFF)
+
+option(
     DSRRL_V203_FULL_SIDECAR_1295
     "Experimental full 1295 Specular resource-name whitelist, exact nonmetal FLVER/MTD/receiver semantic route, no blanket EnvSpec"
     OFF)
@@ -845,6 +850,21 @@ if(DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_OWNER_PATH_RUNTIME_DIAG>)
+endif()
+
+if(DSRRL_V206_SPC25_EQUIPMENT_ID)
+    if(NOT DSRRL_V203_FULL_SIDECAR_1295 OR
+       NOT DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
+        message(FATAL_ERROR
+          "V206 requires exact V204 sidecar, full source ownership and PR304 owner witness")
+    endif()
+    target_sources(
+        dsrrl_renderer_core_integrated PRIVATE
+        v206_cpu_texture_writer_detour.asm
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/v206_native_t1_writer_adapter.cpp")
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V206_SPC25_EQUIPMENT_ID>)
 endif()
 
 if(DSRRL_V203_FULL_SIDECAR_1295)
