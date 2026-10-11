@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V203_OWNER_PATH_RUNTIME_DIAG
+    "PR304 strict bounded owner/MTD/gSpec logging, diagnostic only; requires exact v203 triad"
+    OFF)
+
+option(
     DSRRL_V203_EXACT_LEATHER_MTD_INDEX
     "Experimental immutable three-record raw MTD EnvSpec index, requires isolated v203 and full-SHA owner"
     OFF)
@@ -811,6 +816,18 @@ if(DSRRL_V203_EXACT_LEATHER_MTD_INDEX)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_EXACT_LEATHER_MTD_INDEX>)
+endif()
+
+if(DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
+    if(NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG OR
+       NOT DSRRL_V203_CONSTEXPR_OWNER_LOOKUP OR
+       NOT DSRRL_V203_EXACT_LEATHER_MTD_INDEX)
+        message(FATAL_ERROR "Owner path trace requires experimental v203 exact equipment + constexpr FLVER and raw MTD")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_OWNER_PATH_RUNTIME_DIAG>)
 endif()
 
 if(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
