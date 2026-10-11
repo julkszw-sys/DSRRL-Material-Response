@@ -5,7 +5,10 @@ cmake --build build/renderer-core-lib --config Release --target $native
 if ($LASTEXITCODE -ne 0) { throw "Native test build failed" }
 ctest --test-dir build/renderer-core-lib -C Release -R "^dsrrl_(pmetal_(selector_policy|producer_state)|renderer_(flver_identity|resource_view_epoch|companion_tls_way))_tests$" --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native tests failed" }
-if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
+if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
+    python renderer-core/tools/apply_v206_native_t1_adapter.py
+    if ($LASTEXITCODE -ne 0) { throw "V206 exact V204-native transport provenance adapter source drift" }
+} elseif ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     # PR305's verifier must run BEFORE applying V204. It cannot
     # validate the intentional extended create-time SRV registration.
     # configure_v203_clean_equipment.ps1 already verified the PR305
@@ -30,6 +33,15 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     }
     $cache = Get-Content 'build/CMakeCache.txt' -Raw
     if (!$cache.Contains('DSRRL_V203_FULL_SIDECAR_1295:BOOL=ON')) { throw "Full sidecar compile option disabled" }
+}
+if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
+    foreach ($marker in @("[DSRRL V206 CPU WRITER]","[DSRRL V206 NATIVE T1]","engine_cpu_srv_exact=","no-swap-check-unavailable")) {
+        if ($marker -eq "no-swap-check-unavailable") { continue }
+        if (!$ascii.Contains($marker)) { throw "Missing V206 exact diagnostic: $marker" }
+    }
+    $cache = Get-Content 'build/CMakeCache.txt' -Raw
+    if (!$cache.Contains('DSRRL_V206_SPC25_EQUIPMENT_ID:BOOL=ON')) { throw "V206 adapter not compiled" }
+    if ($ascii.Contains("c5330_s")) { throw "NPC SPC25 legacy c5330_s leaked into V206 binary" }
 }
 $hash = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
