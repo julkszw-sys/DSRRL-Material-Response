@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V203_EXACT_LEATHER_MTD_INDEX
+    "Experimental immutable three-record raw MTD EnvSpec index, requires isolated v203 and full-SHA owner"
+    OFF)
+
+option(
     DSRRL_V203_CONSTEXPR_OWNER_LOOKUP
     "Experimentally predecode exact 36-equipment full-SHA and material/spec hashes at compile time; default unchanged"
     OFF)
@@ -795,6 +800,17 @@ if(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_CONSTEXPR_OWNER_LOOKUP>)
+endif()
+
+if(DSRRL_V203_EXACT_LEATHER_MTD_INDEX)
+    if(NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG OR
+       NOT DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
+        message(FATAL_ERROR "Experimental leather raw MTD index requires exact-owner and isolated v203 EnvSpec36")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_EXACT_LEATHER_MTD_INDEX>)
 endif()
 
 if(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
