@@ -190,7 +190,16 @@ def material(s: str) -> str:
     }
 #endif
 """
-    s=replace_once(s,anchor,anchor+diag)
+    # The shared resource file has several hash triplets (probe, bounded
+    # prepare, diagnostics). Attach only to the actual material draw request.
+    method="bool material_resource_draw_runtime::\\nprepare_draw_requests_bound("
+    method=method.replace("\\\\n","\\n")
+    if s.count(method)!=1:
+        raise AssertionError("Missing unique native consumer method")
+    start=s.index(method)
+    cut=s.index(anchor,start)
+    if "stage=native_cpu_srv_epoch" not in s[cut:cut+len(anchor)+len(diag)+100]:
+        s=s[:cut+len(anchor)]+diag+s[cut+len(anchor):]
     return s
 
 def main() -> None:
