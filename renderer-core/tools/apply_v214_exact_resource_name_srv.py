@@ -74,7 +74,7 @@ void on_init_resource(
         !generated::normal_name_hash_allowed_v12(hash))
         return;
     (void)v214_resource_provenance::instance().observe(
-        reinterpret_cast<std::uintptr_t>(device->get_native()),
+        static_cast<std::uintptr_t>(device->get_native()),
         static_cast<std::uintptr_t>(resource.handle),name,n);
 }
 
@@ -86,7 +86,7 @@ void on_destroy_resource(
         device->get_api() != reshade::api::device_api::d3d11)
         return;
     v214_resource_provenance::instance().destroy(
-        reinterpret_cast<std::uintptr_t>(device->get_native()),
+        static_cast<std::uintptr_t>(device->get_native()),
         static_cast<std::uintptr_t>(resource.handle));
 }
 
@@ -111,7 +111,7 @@ void on_destroy_resource(
     std::size_t source_len=0u;
     const auto source_status =
         v214_resource_provenance::instance().snapshot(
-            reinterpret_cast<std::uintptr_t>(device->get_native()),
+            static_cast<std::uintptr_t>(device->get_native()),
             static_cast<std::uintptr_t>(source_resource.handle),
             source_name,source_len);
 
