@@ -192,8 +192,7 @@ def material(s: str) -> str:
 """
     # The shared resource file has several hash triplets (probe, bounded
     # prepare, diagnostics). Attach only to the actual material draw request.
-    method="bool material_resource_draw_runtime::\\nprepare_draw_requests_bound("
-    method=method.replace("\\\\n","\\n")
+    method="bool material_resource_draw_runtime::"+chr(10)+"prepare_draw_requests_bound("
     if s.count(method)!=1:
         raise AssertionError("Missing unique native consumer method")
     start=s.index(method)
