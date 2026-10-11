@@ -163,6 +163,54 @@ def resource(s: str) -> str:
                     source_hash=fnv_name(name.data(),len);
                     whitelisted=sidecar_20261010::spec_allowed(source_hash);
                 }
+                // V210 diagnostic: do NOT use these partial matches as
+                // material authority. The 36-row whitelist is provenance
+                // evidence, not a fallback for missing runtime actual MTD.
+#if defined(DSRRL_V203_EXACT_EQUIPMENT_SPEC)
+                bool name_in_36=false;
+                bool flver_in_36=false;
+                bool slot_in_36=false;
+                bool mtd_in_36=false;
+                bool tuple_with_t1_in_36=false;
+                for(const auto &row:v203_equipment::k_proven_parts_specs){
+                    const bool name_match=h1!=0u &&
+                        v203_equipment::logical_spec_hash(row.spec)==h1;
+                    name_in_36 |= name_match;
+                    if(!v203_equipment::digest_matches(
+                           query.material.flver_sha256,row.flver_sha256))
+                        continue;
+                    flver_in_36=true;
+                    if(!query.material.material_slot_valid ||
+                       query.material.material_slot!=row.slot)
+                        continue;
+                    slot_in_36=true;
+                    if(query.material.semantic_name_hash!=
+                       operators::material_response::mtd_semantic_hash(
+                           row.mtd))
+                        continue;
+                    mtd_in_36=true;
+                    if(name_match)tuple_with_t1_in_36=true;
+                }
+                char auth_line[440]{};
+                std::snprintf(auth_line,sizeof(auth_line),
+                    "[DSRRL V210 MATERIAL CUT] rx=%u slot=%u "
+                    "h1=%016llx name36=%u flver36=%u slot36=%u "
+                    "mtd36=%u full_tuple36=%u "
+                    "actual_mtd=%u owner_tuple=%u "
+                    "flver_mtd_owner=%u consumer_authority=0 "
+                    "bridge_authority=0 swap=0 pixel=OPEN",
+                    static_cast<unsigned>(receiver_id),
+                    static_cast<unsigned>(query.material.material_slot),
+                    static_cast<unsigned long long>(h1),
+                    name_in_36?1u:0u,flver_in_36?1u:0u,
+                    slot_in_36?1u:0u,mtd_in_36?1u:0u,
+                    tuple_with_t1_in_36?1u:0u,
+                    query.material.actual_material_exact?1u:0u,
+                    query.material.owner_tuple_exact?1u:0u,
+                    operators::material_response::
+                        has_exact_flver_material_ownership(query)?1u:0u);
+                reshade::log::message(reshade::log::level::info,auth_line);
+#endif
                 char line[640]{};
                 std::snprintf(line,sizeof(line),
                     "[DSRRL V208 NATIVE T1] rx=%u slot=%u route=%u "

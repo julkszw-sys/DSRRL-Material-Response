@@ -7,6 +7,7 @@ on:
       - agent/v207-nativet1-rejection-census-20261011
       - agent/v208-t1-dual-lane-census
       - agent/v209-vtable-source-census-20261011
+      - agent/v210-owner-slot-semantic-cut-20261011
   workflow_dispatch:
 
 jobs:
@@ -138,6 +139,6 @@ jobs:
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V209_ENGINE_CLASS_DIAGNOSTIC_ADDON
+          name: DSRRL_V210_MATERIAL_SEMANTIC_CUT_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error
