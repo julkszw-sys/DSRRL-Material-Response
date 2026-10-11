@@ -119,6 +119,16 @@ option(
     DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG
     "Experimental exact 36-FLVER equipment EnvSpec source/consumer port; separate from generic MR and disabled for releases"
     OFF)
+option(
+    DSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG
+    "Experimental exact equipment36 own-selector source/epoch bridge; no global P_Metal source fallback"
+    OFF)
+if(DSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG AND
+   (NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG OR
+    NOT DSRRL_V203_FULL_SIDECAR_1295))
+    message(FATAL_ERROR
+        "V218 source bridge requires exact V203 equipment36 consumer and full 1295 manifest")
+endif()
 
 option(
     DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG
