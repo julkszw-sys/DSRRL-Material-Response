@@ -88,7 +88,7 @@ def material(s: str) -> str:
     // Observe ALL native D3D11 shader views even if the loader's thread-local
     // resource name is missing; exact parent resource+generation are required.
     native_ps_t1_lifetime::instance().init(
-        reinterpret_cast<std::uintptr_t>(device->get_native()),
+        static_cast<std::uintptr_t>(device->get_native()),
         static_cast<std::uintptr_t>(view.handle),
         static_cast<std::uintptr_t>(resource.handle));
 #endif
@@ -107,7 +107,7 @@ def material(s: str) -> str:
 #if defined(DSRRL_V205_SPC25_EPOCH_TRANSPORT)
     if (device && device->get_api()==reshade::api::device_api::d3d11)
         native_ps_t1_lifetime::instance().destroy(
-            reinterpret_cast<std::uintptr_t>(device->get_native()),
+            static_cast<std::uintptr_t>(device->get_native()),
             static_cast<std::uintptr_t>(view.handle));
     texture_identity_transport::retire_native_ps_t1(
         reinterpret_cast<const void *>(
