@@ -1,0 +1,60 @@
+name: V203 Offline FLVER Owner Prefix Crosswalk
+on:
+  push:
+    branches:
+      - agent/v203-flver-prefix-source-lookup-20261011
+  workflow_dispatch:
+jobs:
+  source-prefix-lookup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify canonical 3944-owner FLVER corpus and resolve PR304 sha4 prefixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path('renderer-core/tools').resolve()))
+          from generate_dsr_flver_owner_tuple_header import load_payload
+          groups, hashes = load_payload(Path('renderer-core/data/census/dsr_flver_owner_tuple_corpus_v1.bin.z'))
+          prefixes = ['2733aa06','39232650','3d5571cd','5a49a584','890e8003','8e093612','b86e7c23','ee4b4962']
+          observed = {
+              '2733aa06': [('P_DullLeather[DSB].mtd',0),('P_DullLeather[DSB]_Edge.mtd',1)],
+              '39232650': [('P_Leather[DSB].mtd',1),('P_Leather[DSB].mtd',2),('P_Leather[DSB].mtd',3),('P_Leather[DSB].mtd',4)],
+              '3d5571cd': [('P_Leather[DSB].mtd',0)],
+              '5a49a584': [('P_DullLeather[DSB].mtd',0),('P_DullLeather[DSB].mtd',6)],
+              '890e8003': [('P_DullLeather[DSB]_Edge.mtd',0)],
+              '8e093612': [('P_DullLeather[DSB].mtd',1)],
+              'b86e7c23': [('P_Leather[DSB].mtd',0)],
+              'ee4b4962': [('P_DullLeather[DSB].mtd',1)],
+          }
+          def fnv(name):
+              h=14695981039346656037
+              for byte in name.encode('utf-8'):
+                  h=((h ^ byte)*1099511628211)&((1<<64)-1)
+              return h
+          report={'scope':'SOURCE_ONLY_NOT_RUNTIME_AUTHORIZATION','corpus_groups':len(groups),'corpus_slots':len(hashes),'matches':[]}
+          for prefix in prefixes:
+              candidates=[]
+              for digest,first,count in groups:
+                  if not digest.hex().startswith(prefix): continue
+                  matches=[]
+                  for name,slot in observed.get(prefix,[]):
+                      matched=(0<=slot<count and hashes[first+slot]==fnv(name))
+                      matches.append({'mtd':name,'slot':slot,'mtd_hash_matches':matched})
+                  candidates.append({'full_flver_sha256':digest.hex(),'material_count':count,'first':first,'observed_checks':matches,'all_observed_mtd_match':all(m['mtd_hash_matches'] for m in matches)})
+              report['matches'].append({'sha4':prefix,'candidates':candidates,'candidate_count':len(candidates)})
+          print('V203_FLVER_SOURCE_CROSSWALK_BEGIN')
+          print(json.dumps(report,sort_keys=True,indent=2))
+          print('V203_FLVER_SOURCE_CROSSWALK_END')
+          out=Path('v203_flver_source_prefix_crosswalk.json')
+          out.write_text(json.dumps(report,sort_keys=True,indent=2)+'\n')
+          assert len(groups)==3944 and len(hashes)==19985
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V203_SOURCE_ONLY_OWNER_PREFIX_CROSSWALK
+          path: v203_flver_source_prefix_crosswalk.json
