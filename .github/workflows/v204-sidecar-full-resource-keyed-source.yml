@@ -117,8 +117,6 @@ jobs:
         shell: pwsh
         run: |
           ./renderer-core/tools/verify_v203_clean_equipment.ps1
-          python renderer-core/tools/apply_v203_full_sidecar_1295.py
-          if ($LASTEXITCODE -ne 0) { throw "Sidecar build source drift" }
           python renderer-core/tools/apply_v204_sidecar_resource_and_source_fix.py
           if ($LASTEXITCODE -ne 0) { throw "V204 source material/LightBank drift" }
           $head = Get-Content 'build/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp' -Raw
