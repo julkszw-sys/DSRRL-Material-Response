@@ -211,12 +211,69 @@ def resource(s: str) -> str:
                         has_exact_flver_material_ownership(query)?1u:0u);
                 reshade::log::message(reshade::log::level::info,auth_line);
 #endif
+                // V211: the actual full-sidecar predicate, not the 36-row
+                // historical equipment manifest. Diagnostic only.
+#if defined(DSRRL_V203_FULL_SIDECAR_1295)
+                const auto &mat=query.material;
+                const auto exact_query=
+                    sidecar_20261010::make_query(mat,receiver_id);
+                const auto env=operators::material_response::
+                    classify_mtd_envspec_semantics(exact_query);
+                const auto sem=operators::material_response::
+                    classify_mtd_semantic(
+                        exact_query,
+                        operators::material_response::
+                            mtd_semantic_operator::env_spec);
+                const bool family_difspcbmp=
+                    mat.material_family_hash==
+                    operators::material_response::
+                        mtd_semantic_hash("DifSpcBmp");
+                const bool stock_t1_1295=
+                    h1!=0u && sidecar_20261010::spec_allowed(h1);
+                const bool companion_ready=companions[1]!=nullptr;
+                const bool nonmetal_material=
+                    sidecar_20261010::exact_nonmetal_material(mat);
+                const bool complete_t1_gate=
+                    sidecar_20261010::exact_nonmetal_stock_t1(
+                        exact_query,h1,companion_ready);
+                char cut[900]{};
+                std::snprintf(cut,sizeof(cut),
+                    "[DSRRL V211 EXACT NONMETAL CUT] "
+                    "rx=%u slot=%u h1=%016llx "
+                    "stock_t1_in_1295=%u cpu_witness_in_1295=%u "
+                    "ptde_companion=%u flver_owner=%u "
+                    "family_difspcbmp=%u route345=%u actual_mtd=%u "
+                    "env_exact=%u env_presence=%u env_router=%u "
+                    "env_slot_valid=%u env_slot=%u mtd_envspec_use=%u "
+                    "nonmetal_material=%u complete_t1_gate=%u "
+                    "bridge_authority=0 swap=0 pixel=OPEN",
+                    static_cast<unsigned>(receiver_id),
+                    static_cast<unsigned>(mat.material_slot),
+                    static_cast<unsigned long long>(h1),
+                    stock_t1_1295?1u:0u,
+                    whitelisted?1u:0u,companion_ready?1u:0u,
+                    operators::material_response::
+                        has_exact_flver_material_ownership(exact_query)?1u:0u,
+                    family_difspcbmp?1u:0u,
+                    mat.route_index==345u?1u:0u,
+                    mat.actual_material_exact?1u:0u,
+                    env.exact_identity_match?1u:0u,
+                    static_cast<unsigned>(env.presence),
+                    static_cast<unsigned>(env.router_state),
+                    env.envspc_slot_valid?1u:0u,
+                    static_cast<unsigned>(env.envspc_slot),
+                    sem.state==operators::material_response::
+                        mtd_semantic_state::use?1u:0u,
+                    nonmetal_material?1u:0u,
+                    complete_t1_gate?1u:0u);
+                reshade::log::message(reshade::log::level::info,cut);
+#endif
                 char line[640]{};
                 std::snprintf(line,sizeof(line),
                     "[DSRRL V208 NATIVE T1] rx=%u slot=%u route=%u "
                     "v208_lane=%s h1=%016llx companion_present=%u "
                     "epoch=%llu engine_cpu_srv_exact=%u name=%s "
-                    "in_sidecar_1295=%u live_stock_t1=%p "
+                    "cpu_witness_in_1295=%u live_stock_t1=%p "
                     "resource=%p v207_view_state=%u "
                     "v207_registry_init=%llu/%llu writers=%llu "
                     "v207_writer_hook_armed=%u "
