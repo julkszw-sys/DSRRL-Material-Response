@@ -273,7 +273,7 @@ def resource(s: str) -> str:
                     "[DSRRL V208 NATIVE T1] rx=%u slot=%u route=%u "
                     "v208_lane=%s h1=%016llx companion_present=%u "
                     "epoch=%llu engine_cpu_srv_exact=%u name=%s "
-                    "in_sidecar_1295=%u live_stock_t1=%p "
+                    "cpu_witness_in_1295=%u live_stock_t1=%p "
                     "resource=%p v207_view_state=%u "
                     "v207_registry_init=%llu/%llu writers=%llu "
                     "v207_writer_hook_armed=%u "
