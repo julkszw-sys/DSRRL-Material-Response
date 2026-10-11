@@ -27,7 +27,14 @@ def header(s):
     a='''        prepared_envspec_resources &prepared) noexcept;'''
     b='''        prepared_envspec_resources &prepared,
         bool allow_exact_native_alias = false) noexcept;'''
-    return once(s,a,b,2)
+    for name in ('prepare', 'prepare_bound'):
+        marker = '    bool '+name+'(\n'
+        begin = s.index(marker)
+        end = s.index(');',begin)+2
+        chunk=s[begin:end]
+        if chunk.count(a)!=1:raise RuntimeError('V220 declaration drift: '+name)
+        s=s[:begin]+chunk.replace(a,b,1)+s[end:]
+    return s
 
 def resource(s):
     s=once(s,
@@ -93,15 +100,14 @@ def resource(s):
             return true;'''
     s=once(s,old,new)
     # Signatures of the two methods, not the independent native-DSR diagnostic.
-    s=once(s,
-        '''        prepared_envspec_resources &prepared) noexcept
-{
-    prepared = {};''',
-        '''        prepared_envspec_resources &prepared,
-        bool allow_exact_native_alias) noexcept
-{
-    prepared = {};''',
-        2)
+    for name in ('prepare','prepare_bound'):
+        begin=s.index('bool envspec_resource_runtime::'+name+'(')
+        end=s.index('    prepared = {};',begin)
+        chunk=s[begin:end]
+        old_decl='    prepared_envspec_resources &prepared) noexcept'
+        new_decl='    prepared_envspec_resources &prepared,\n    bool allow_exact_native_alias) noexcept'
+        if chunk.count(old_decl)!=1:raise RuntimeError('V220 definition drift: '+name)
+        s=s[:begin]+chunk.replace(old_decl,new_decl,1)+s[end:]
     s=once(s,
         '''            probe_b_required,
             prepared);''',
