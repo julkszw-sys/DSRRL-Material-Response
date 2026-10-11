@@ -7,6 +7,9 @@
 #if defined(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
 #include "dsrrl/runtime/v203_equipment_constexpr_lookup.hpp"
 #endif
+#if defined(DSRRL_V203_EXACT_LEATHER_MTD_INDEX)
+#include "dsrrl/runtime/v203_equipment_exact_mtd_router.hpp"
+#endif
 #include <cmath>
 
 namespace dsrrl::runtime::v203_equipment {
@@ -52,7 +55,11 @@ inline bool exact_envspec36_material(
         return false;
 #endif
 
+#if defined(DSRRL_V203_EXACT_LEATHER_MTD_INDEX)
+    const auto env = mtd_fast::classify(query);
+#else
     const auto env = mr::classify_mtd_envspec_semantics(query);
+#endif
     return env.exact_identity_match &&
            env.presence == mr::ptde_envspec_presence::present &&
            env.router_state == mr::mtd_envspec_router_state::present &&
