@@ -86,6 +86,46 @@ void stage_log(writer_stage stage,std::uint64_t call,
         static_cast<unsigned>(probe));
     reshade::log::message(reshade::log::level::info,line);
 }
+// V209: read-only census at the first engine class mismatch. TLS/cache
+// identity was already checked above. This function never grants a writer.
+std::atomic<std::uint64_t> g_v209_class_mismatches{0u};
+void audit_other_engine_class(const wchar_t *wide,std::size_t length,
+                              std::uint32_t source_id,
+                              std::uintptr_t vtable,
+                              std::uintptr_t host_base) noexcept {
+    const auto n=g_v209_class_mismatches.fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    if(!(n<=32u || (n<=65536u && (n&(n-1u))==0u)))
+        return;
+    if(!wide || length<6u || length>64u || !host_base)
+        return;
+    std::array<char,65u> ascii{};
+    bool printable=true;
+    for(std::size_t i=0;i<length;++i){
+        const wchar_t c=wide[i];
+        if(c<0x21u || c>0x7eu){
+            ascii[i]='?';
+            printable=false;
+        }else{
+            ascii[i]=static_cast<char>(c);
+        }
+    }
+    const bool equipment=printable &&
+        dsrrl::runtime::v206_native_t1::registry<>::name_is_equipment_spec(
+            ascii.data(),length);
+    char line[340]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V209 ENGINE CLASS] name=%s "
+        "equipment_syntax=%u vtable_rva=%llx "
+        "expected_vtable_rva=14AA4A8 source_id=%u count=%llu "
+        "bridge_authority=0 swap=0 pixel=OPEN",
+        ascii.data(),equipment?1u:0u,
+        static_cast<unsigned long long>(
+            vtable>=host_base?vtable-host_base:0u),
+        static_cast<unsigned>(source_id),
+        static_cast<unsigned long long>(n));
+    reshade::log::message(reshade::log::level::info,line);
+}
 } // namespace
 
 // The verified retail writer passes TexHdlResCap cache node (RBX),
@@ -129,8 +169,10 @@ extern "C" void dsrrl_v206_writer_observer(
     if(!host_base || !readable(engine_object,sizeof(vtable)))
         return reject(writer_stage::engine_read);
     std::memcpy(&vtable,engine_object,sizeof(vtable));
-    if(vtable!=host_base+0x014AA4A8u)
+    if(vtable!=host_base+0x014AA4A8u){
+        audit_other_engine_class(name,length,source_id,vtable,host_base);
         return reject(writer_stage::vtable);
+    }
     const auto *fields=static_cast<const std::uint8_t *>(engine_object)+0x28u;
     std::array<std::uintptr_t,2u> pair{};
     if(!readable(fields,sizeof(pair)))
