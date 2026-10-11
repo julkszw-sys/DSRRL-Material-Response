@@ -36,8 +36,13 @@ v220_exact_nonmetal_source_key(
 
 """
 CHANGES = (
-    ("pmetal_producer_state_begin(\n        material,\n        epoch);",
-     "pmetal_producer_state_begin(\n        v220_exact_nonmetal_source_key(material),\n        epoch);", 1),
+    ("if (telemetry::effect_enabled())\n        g_selector_exact_seen.store(",
+     """if (sidecar_20261010::exact_nonmetal_material(material))
+        pmetal_producer_state_begin(
+            v220_exact_nonmetal_source_key(material), epoch);
+
+    if (telemetry::effect_enabled())
+        g_selector_exact_seen.store(""", 1),
     ("pmetal_producer_state_publish(\n            material,\n            next,\n            epoch);",
      "pmetal_producer_state_publish(\n            v220_exact_nonmetal_source_key(material),\n            next,\n            epoch);", 1),
     ("pmetal_producer_state_publish(\n        material,\n        next,\n        epoch);",
