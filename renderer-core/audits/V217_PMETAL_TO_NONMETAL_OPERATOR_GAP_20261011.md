@@ -1,3 +1,5 @@
+> **CORRECTION — 2026-10-11, canonical Supabase revision 12642:** The previous *conditional equipment36 producer dead-end* finding below was **FALSIFIED** by the actual build pipeline. V216 applies `apply_v203_envspec36_generated_source.py` and then `apply_v203_full_sidecar_1295.py` before compiling C++. They already replace **both** exact-P_Metal selector and consumer gates with per-material/epoch exact nonmetal authority; V204 confirms this and preserves the nonmetal global-hook fallback prohibition. The prior analysis read unmaterialized tracked R43 source. **DO NOT use the dead-end assertion below as current canon.** The real unresolved point is draw-time eligibility/resource/consumer activation, not absence of the generated producer branch. V218 PR319 was closed without merge after proving it redundant. V219 moves to owner-triggered draw-frontier evidence, not a producer patch.
+
 # V217 operator audit — P_Metal versus ordinary equipment
 Date: 2026-10-11
 Grounded source: V216 `7cb9fff1c9ceddd70f911b061299da7706ac073d`
