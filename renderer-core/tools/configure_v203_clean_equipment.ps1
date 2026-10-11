@@ -54,6 +54,16 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
         if ($LASTEXITCODE -ne 0) { throw "V216 bound t1 bridge drift" }
     }
 }
+if ($env:DSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG -eq "ON") {
+    if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -ne "ON" -or
+        $env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {
+        throw "V218 selector source requires exact V203 36-owner EnvSpec island and full 1295 sidecar"
+    }
+    python renderer-core/tools/apply_v218_exact_nonmetal_selector_source.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "V218 material-scoped selector source overlay failed" }
+    python renderer-core/tools/apply_v218_exact_nonmetal_selector_source.py
+    if ($LASTEXITCODE -ne 0) { throw "V218 exact selector source verification failed" }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -83,6 +93,10 @@ $flags = @(
 if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -eq "ON") {
     $flags += "-DDSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG=ON"
     Write-Host "DSRRL: exact 36-owner experimental EnvSpec route enabled; pixel=OPEN"
+}
+if ($env:DSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG -eq "ON") {
+    $flags += "-DDSRRL_V218_NONMETAL_SELECTOR_SOURCE_DIAG=ON"
+    Write-Host "DSRRL V218: 36 exact nonmetal own-selector published-source only; fallback forbidden; pixel=OPEN"
 }
 if ($env:DSRRL_V203_CONSTEXPR_OWNER_LOOKUP -eq "ON") {
     if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -ne "ON") {
