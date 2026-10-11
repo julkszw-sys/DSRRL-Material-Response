@@ -89,6 +89,51 @@ int main()
     CHECK(pmetal_id.owner_tuple_exact);
     CHECK(pmetal_id.route_index==345u);
 
+    // V213: original DSR Mtd.mtdbnd.dcx (pinned SHA256) first-name BND3
+    // entries, checked against full FLVER+slot owner corpus. This repairs
+    // Diffuse source identity and route; it does not authorize a new consumer.
+    struct retail_diffuse_case {
+        const char *name;
+        const char *sha;
+        std::uint32_t route;
+    };
+    constexpr retail_diffuse_case retail_diffuse_cases[]{
+        {"P_DullLeather[DSB].mtd",
+         "7ea7d6ce9bb7148db62e8c27ee45edefb9547018d0b723dd4753d4c37e29f293",160u},
+        {"P_DullLeather[DSB]_Edge.mtd",
+         "44e1188bafa99d49349883dcc2052c13365f196e341ca5e7c788cbad0a4e058d",88u},
+        {"Ps_Body[DSB].mtd",
+         "af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",232u}
+    };
+    for(const auto &retail:retail_diffuse_cases){
+        const auto semantic=operators::material_response::
+            mtd_semantic_hash(retail.name);
+        runtime::actual_material_owner_observation observed{};
+        bool source_owner_found=false;
+        for(const auto &group:generated::k_dsr_flver_owner_groups){
+            for(std::uint32_t slot=0u;slot<group.material_count;++slot){
+                const auto index=static_cast<std::size_t>(
+                    group.first_material)+slot;
+                if(generated::k_dsr_flver_owner_mtd_hashes[index]!=semantic)
+                    continue;
+                observed.flver_sha256=group.flver_sha256;
+                observed.material_slot=slot;
+                observed.material_slot_valid=true;
+                source_owner_found=true;
+                break;
+            }
+            if(source_owner_found)break;
+        }
+        CHECK(source_owner_found);
+        CHECK(runtime::enrich_exact_owner_mtd_identity(observed));
+        CHECK(observed.material.valid);
+        CHECK(observed.material.raw_mtd_sha256==digest(retail.sha));
+        CHECK(observed.material.route_index==retail.route);
+        CHECK(observed.material.material_family_hash==
+            operators::material_response::mtd_semantic_hash("DifSpcBmp"));
+        CHECK(runtime::make_actual_material_identity(observed).owner_tuple_exact);
+    }
+
     // Shared-base exact-binding extension: unlike the retail MTD fallback,
     // the authenticated FLVER+slot owner path may carry the
     // PTDE_COMPANION_REQUIRED profile.
