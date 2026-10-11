@@ -153,10 +153,10 @@ jobs:
         shell: pwsh
         run: |
           ./renderer-core/tools/verify_v203_clean_equipment.ps1
-          python renderer-core/tools/apply_v206_native_t1_adapter.py
-          if ($LASTEXITCODE -ne 0) { throw "V206 V204-native source drift" }
+          # Config verifies V206 before applying V214. Replaying a V206
+          # postcondition on the final V214-modified file is invalid.
           python renderer-core/tools/apply_v214_exact_resource_name_srv.py
-          if ($LASTEXITCODE -ne 0) { throw "V214 source provenance not compiled" }
+          if ($LASTEXITCODE -ne 0) { throw "V214 final resource provenance not compiled" }
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_native_resource_to_srv' -Quiet)) { throw "V214 source-to-SRV identity transport absent" }
 
           $head = Get-Content 'build/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp' -Raw
