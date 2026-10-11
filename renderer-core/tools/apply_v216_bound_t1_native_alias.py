@@ -47,18 +47,12 @@ def patch(s):
         release_set(old);''')
 
     s=once(s,
-        '''void on_destroy_resource_view(
-    reshade::api::device *,
-    reshade::api::resource_view view)
-{
-    companion_set dead{};''',
-        '''void on_destroy_resource_view(
-    reshade::api::device *,
-    reshade::api::resource_view view)
-{
-    v216_native_resource_alias::instance().destroy_view(
+        '''    companion_set dead{};
+    bool found = false;''',
+        '''    v216_native_resource_alias::instance().destroy_view(
         static_cast<std::uintptr_t>(view.handle));
-    companion_set dead{};''')
+    companion_set dead{};
+    bool found = false;''')
 
     s=once(s,
         '''    v214_resource_provenance::instance().destroy(
