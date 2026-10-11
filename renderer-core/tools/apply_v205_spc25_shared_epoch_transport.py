@@ -49,7 +49,7 @@ def transport(apply: bool) -> None:
             # Idempotent replay: already transformed; verify instead.
             module.process(TEX,module.TEXTURE,False)
             return
-        if "void dsrrl_texture_name_observer" not in current:
+        if "dsrrl_texture_name_observer(" not in current:
             raise AssertionError("Pinned DSR retail texture hook missing")
         TEX.write_text(historical,encoding="utf-8",newline="\n")
         module.process(TEX,module.TEXTURE,True)
