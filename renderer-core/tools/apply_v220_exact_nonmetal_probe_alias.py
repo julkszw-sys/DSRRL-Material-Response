@@ -135,9 +135,21 @@ def draw(s):
         k_native_dsr_cubemap_feed'''
     s=once(s,old,new)
     s=once(s,
-        '''                      probe_b_required,
+        '''                ? env_resources_.prepare_bound(
+                      shadow_env[0],
+                      probe_b_required
+                          ? shadow_env[2]
+                          : nullptr,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
                       prepared.env_resources)''',
-        '''                      probe_b_required,
+        '''                ? env_resources_.prepare_bound(
+                      shadow_env[0],
+                      probe_b_required
+                          ? shadow_env[2]
+                          : nullptr,
+                      env_semantics.envspc_slot,
+                      probe_b_required,
                       prepared.env_resources,
                       v220_nonmetal_probe_alias)''')
     s=once(s,
