@@ -114,12 +114,10 @@ def resource(s):
         '''            probe_b_required,
             prepared,
             allow_exact_native_alias);''')
-    s=once(s,
-        '''            sampler_native,
-            needs_cube);''',
-        '''            sampler_native,
-            needs_cube,
-            allow_exact_native_alias);''',2)
+    for indent in ('            ', '                    '):
+        s=once(s,
+            indent+'sampler_native,\n'+indent+'needs_cube);',
+            indent+'sampler_native,\n'+indent+'needs_cube,\n'+indent+'allow_exact_native_alias);')
     return s
 
 def draw(s):
