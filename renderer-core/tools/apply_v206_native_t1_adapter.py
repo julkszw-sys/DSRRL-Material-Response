@@ -96,7 +96,7 @@ def resource(s: str) -> str:
           "    // Full stock D3D11 lifecycle witness even when original name\n"
           "    // callback was missed. No companion is admitted by this call.\n"
           "    v206_native_t1::instance().init(\n"
-          "        reinterpret_cast<std::uintptr_t>(device->get_native()),\n"
+          "        static_cast<std::uintptr_t>(device->get_native()),\n"
           "        static_cast<std::uintptr_t>(view.handle),\n"
           "        static_cast<std::uintptr_t>(source_resource.handle));\n"
           +token)
@@ -111,7 +111,7 @@ def resource(s: str) -> str:
           "{\n"
           "    if (device && device->get_api()==reshade::api::device_api::d3d11)\n"
           "        v206_native_t1::instance().destroy(\n"
-          "            reinterpret_cast<std::uintptr_t>(device->get_native()),\n"
+          "            static_cast<std::uintptr_t>(device->get_native()),\n"
           "            static_cast<std::uintptr_t>(view.handle));\n"
           "    companion_set dead{};")
     s=one(s,
