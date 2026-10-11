@@ -50,7 +50,7 @@ def resource(s):
         '''    const auto resolve_probe_locked =
         [allow_exact_native_alias](ID3D11ShaderResourceView *view,
            std::uint16_t &probe) noexcept {''')
-    old='''            if (by_view == g_resource_by_view.end())
+    old='''            if (by_view ==\n                g_resource_by_view.end())
                 return false;
 
             probe =
@@ -99,6 +99,7 @@ def resource(s):
                 by_view->second.probe_ordinal;
             return true;'''
     s=once(s,old,new)
+    s=once(s,'#include <cstring>','#include <cstring>\n#include <cstdio>')
     # Signatures of the two methods, not the independent native-DSR diagnostic.
     for name in ('prepare','prepare_bound'):
         begin=s.index('bool envspec_resource_runtime::'+name+'(')
