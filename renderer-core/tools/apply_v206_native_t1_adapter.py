@@ -137,9 +137,12 @@ def resource(s: str) -> str:
             ID3D11Resource *resource=nullptr;
             views[1]->GetResource(&resource);
             if (resource) {
-                const auto witness=v206_native_t1::instance().resolve(
+                const auto probe=v206_native_t1::instance().probe(
                     reinterpret_cast<std::uintptr_t>(views[1]),
                     reinterpret_cast<std::uintptr_t>(resource));
+                const auto witness=probe.source;
+                const auto census=v206_native_t1::instance().stats();
+                const auto hook=texture_identity_transport::status();
                 std::uint64_t source_hash=0ull;
                 bool whitelisted=false;
                 if (witness) {
@@ -158,7 +161,10 @@ def resource(s: str) -> str:
                     "[DSRRL V206 NATIVE T1] rx=%u slot=%u route=%u "
                     "epoch=%llu engine_cpu_srv_exact=%u name=%s "
                     "in_sidecar_1295=%u live_stock_t1=%p "
-                    "resource=%p bridge_authority=0 swap=0 pixel=OPEN",
+                    "resource=%p v207_view_state=%u "
+                    "v207_registry_init=%llu/%llu writers=%llu "
+                    "v207_writer_hook_armed=%u "
+                    "bridge_authority=0 swap=0 pixel=OPEN",
                     static_cast<unsigned>(receiver_id),
                     static_cast<unsigned>(query.material.material_slot),
                     static_cast<unsigned>(query.material.route_index),
@@ -167,7 +173,12 @@ def resource(s: str) -> str:
                     witness?witness.logical_name.data():"NONE",
                     whitelisted?1u:0u,
                     static_cast<void *>(views[1]),
-                    static_cast<void *>(resource));
+                    static_cast<void *>(resource),
+                    static_cast<unsigned>(probe.status),
+                    static_cast<unsigned long long>(census.init_accepted),
+                    static_cast<unsigned long long>(census.init_called),
+                    static_cast<unsigned long long>(census.writer_accepted),
+                    hook.cpu_writer_hook_armed?1u:0u);
                 reshade::log::message(reshade::log::level::info,line);
                 resource->Release();
             }

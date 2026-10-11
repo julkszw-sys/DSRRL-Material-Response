@@ -1,9 +1,10 @@
-name: V206 V204-Native CPU SRV Equipment Witness
+name: V206/V207 V204-Native CPU SRV Equipment Witness
 
 on:
   push:
     branches:
       - agent/v206-native-t1-adapt-v204-20261011
+      - agent/v207-nativet1-rejection-census-20261011
   workflow_dispatch:
 
 jobs:
@@ -87,6 +88,9 @@ jobs:
           python3 renderer-core/tools/test_v203_clean_equipment_manifest.py
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -Irenderer-core/include renderer-core/tests/test_v206_native_t1_provenance.cpp -o /tmp/test_v206_native_t1
           /tmp/test_v206_native_t1
+          grep -q 'enum class probe_status' renderer-core/include/dsrrl/runtime/v206_native_t1_provenance.hpp
+          grep -q 'V207 WRITER STAGE' renderer-core/src/runtime/v206_native_t1_writer_adapter.cpp
+          grep -q 'v207_view_state=' renderer-core/tools/apply_v206_native_t1_adapter.py
           test ! -e renderer-core/data/spc25_v205/texture_identity_transport.cpp
           if grep -q 'TEX.write_text(historical' renderer-core/tools/apply_v206_native_t1_adapter.py; then
             echo 'Forbidden wholesale SPC25 source replacement' >&2
@@ -132,6 +136,6 @@ jobs:
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V206_V204_NATIVE_EQUIPMENT_PROVENANCE_DIAGNOSTIC_ADDON_ONLY
+          name: DSRRL_V207_WRITER_REJECTION_CENSUS_SINGLE_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error
