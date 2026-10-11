@@ -1,0 +1,131 @@
+name: V204 Full Sidecar 1295 Keyed LightBank and Resource Fix
+
+on:
+  push:
+    branches:
+      - agent/v204-resource-source-20261011
+  workflow_dispatch:
+
+jobs:
+  sidecar-source-and-negative-oracles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Protect original R43, 36-row manifest, P_Metal and original 325-row MTD router
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 406d866b131065d60e38ceb8cd79ef18433f8d74 HEAD
+          if git diff --name-only 406d866b131065d60e38ceb8cd79ef18433f8d74 HEAD -- renderer-core/src renderer-core/shaders renderer-core/data/census renderer-core/include/dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp renderer-core/include/dsrrl/runtime/v203_equipment_exact_mtd_router.hpp renderer-core/src/runtime/pmetal_env_source_runtime.cpp | grep .; then
+            echo "Protected source or manifest modified" >&2
+            exit 1
+          fi
+      - name: Recover all 1295 names and generate exact FNV64 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 renderer-core/tools/generate_sidecar_spec_whitelist_20261010.py \
+            --input renderer-core/data/provenance/sidecar_specular_20261010_names.b85 \
+            --output /tmp/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp \
+            --names-out /tmp/sidecar_names_1295.txt
+          python3 - <<'PY'
+          import sys,hashlib
+          from pathlib import Path
+          sys.path.insert(0, str(Path('renderer-core/tools').resolve()))
+          from generate_sidecar_spec_whitelist_20261010 import fnv1a_ascii_lower,load_names
+          src=Path('renderer-core/data/provenance/sidecar_specular_20261010_names.b85')
+          names=load_names(src)
+          header=Path('/tmp/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp').read_text()
+          values={int(line.strip().removeprefix('0x').removesuffix('ull,'),16) for line in header.splitlines() if line.strip().startswith('0x')}
+          assert len(names)==len(values)==1295,(len(names),len(values))
+          assert all(fnv1a_ascii_lower(n) in values for n in names)
+          for n in ('bd_m_9430_1_s','bd_m_9430_2_s','lg_m_9430_s','am_m_9430_s','wp_a_0301_estoc_s'):
+              assert n in names
+          assert fnv1a_ascii_lower('am_fake_0000_s') not in values
+          assert hashlib.sha256(bytes([10]).join(n.encode() for n in names)+bytes([10])).hexdigest()=='6f417110f6085ca8389213578eb9c0a86c100070717a9df20d62790052c151e4'
+          print('1295/1295 exact sidecar name hashes, no duplicate, five tested live gSpec names, negative PASS')
+          PY
+      - name: Compile native C++17 resource hash whitelist oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/test_whitelist.cpp <<'CPP'
+          #include "dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp"
+          #include <cassert>
+          #include <cstdint>
+          static std::uint64_t fnv(const char*s) {
+            auto h=14695981039346656037ull;
+            for(;*s;++s){auto c=static_cast<unsigned char>(*s);
+              if(c>='A'&&c<='Z')c=static_cast<unsigned char>(c+32);
+              h^=c;h*=1099511628211ull;}return h;
+          }
+          int main(){
+            using namespace dsrrl::runtime::sidecar_20261010;
+            static_assert(k_spec_hashes.size()==1295u);
+            static_assert(sorted_unique());
+            assert(spec_allowed(fnv("BD_M_9430_1_s")));
+            assert(spec_allowed(fnv("BD_M_9430_2_s")));
+            assert(spec_allowed(fnv("LG_M_9430_s")));
+            assert(spec_allowed(fnv("AM_M_9430_s")));
+            assert(spec_allowed(fnv("WP_A_0301_estoc_s")));
+            assert(!spec_allowed(fnv("AM_fake_0000_s")));
+            assert(!spec_allowed(0ull));
+          }
+          CPP
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -I/tmp/generated /tmp/test_whitelist.cpp -o /tmp/test_whitelist
+          /tmp/test_whitelist
+      - name: Compile and run 36-owner & 325-MTD parent negative-control oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tools/test_v203_constexpr_owner_lookup.cpp -o /tmp/test_owner
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tools/test_v203_exact_leather_mtd_index.cpp -o /tmp/test_mtd
+          /tmp/test_owner
+          /tmp/test_mtd
+          python3 renderer-core/tools/test_v203_clean_equipment_manifest.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V203_FULL_SIDECAR_1295_REPRODUCIBLE_NAMES_AND_HEADER
+          path: |
+            /tmp/sidecar_names_1295.txt
+            /tmp/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp
+
+  addon-windows-native:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build strict one-file addon with all 1295 Specular names
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/configure_v203_clean_equipment.ps1
+      - name: Five native regressions and binary verification
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/verify_v203_clean_equipment.ps1
+          python renderer-core/tools/apply_v203_full_sidecar_1295.py
+          if ($LASTEXITCODE -ne 0) { throw "Sidecar build source drift" }
+          python renderer-core/tools/apply_v204_sidecar_resource_and_source_fix.py
+          if ($LASTEXITCODE -ne 0) { throw "V204 source material/LightBank drift" }
+          $head = Get-Content 'build/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp' -Raw
+          if (!$head.Contains('1295u')) { throw "Not all sidecar entries compiled" }
+          Write-Host 'NATIVE_V204_1295_KEYED_SOURCE_COMPILED'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V204_FULL_SIDECAR_1295_KEYED_SOURCE_ADDON_ONLY
+          path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
+          if-no-files-found: error
