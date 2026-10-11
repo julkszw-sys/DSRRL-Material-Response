@@ -55,6 +55,14 @@ if ($env:DSRRL_V203_CONSTEXPR_OWNER_LOOKUP -eq "ON") {
     $flags += "-DDSRRL_V203_CONSTEXPR_OWNER_LOOKUP=ON"
     Write-Host "DSRRL: exact full-SHA constexpr owner lookup EXPERIMENTAL"
 }
+if ($env:DSRRL_V203_EXACT_LEATHER_MTD_INDEX -eq "ON") {
+    if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -ne "ON" -or
+        $env:DSRRL_V203_CONSTEXPR_OWNER_LOOKUP -ne "ON") {
+        throw "Raw leather MTD index requires both isolated EnvSpec36 and full-SHA constexpr owner"
+    }
+    $flags += "-DDSRRL_V203_EXACT_LEATHER_MTD_INDEX=ON"
+    Write-Host "DSRRL: experimental three-record exact raw MTD index, no new authority"
+}
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
 cmake --build build --config Release --target dsrrl_renderer_core_integrated
