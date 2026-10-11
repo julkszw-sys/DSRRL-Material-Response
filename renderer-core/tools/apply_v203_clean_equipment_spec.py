@@ -85,6 +85,54 @@ PROBE = """
                 "consumer=UNCHANGED");
         const auto owner_probe =
             v203_equipment::classify_exact_owner_slot(query);
+#if defined(DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
+        // Bounded per-family trace only; no owner/consumer decision changes.
+        static std::atomic<std::uint32_t> trace_seen[3]{};
+        const auto sem = query.material.semantic_name_hash;
+        const auto leather =
+            operators::material_response::mtd_semantic_hash(
+                "P_Leather[DSB].mtd");
+        const auto dull =
+            operators::material_response::mtd_semantic_hash(
+                "P_DullLeather[DSB].mtd");
+        const unsigned group = sem == leather ? 1u
+                             : sem == dull ? 2u : 0u;
+        auto &counter = trace_seen[group];
+        if (counter.load(std::memory_order_relaxed) < 12u &&
+            counter.fetch_add(1u, std::memory_order_relaxed) < 12u) {
+            char detail[640]{};
+            const auto &m = query.material;
+            std::snprintf(detail,sizeof(detail),
+                "[DSRRL V203 OWNER TRACE] group=%u rx=%u route=%u "
+                "probe=%u valid=%u actual=%u owner=%u slotvalid=%u "
+                "slot=%u semantic=%016llx family=%016llx "
+                "raw4=%02x%02x%02x%02x flver4=%02x%02x%02x%02x "
+                "t1_hash=%016llx spec_companion=%u",
+                group,
+                static_cast<unsigned>(receiver_id),
+                static_cast<unsigned>(m.route_index),
+                static_cast<unsigned>(owner_probe),
+                m.valid ? 1u : 0u,
+                m.actual_material_exact ? 1u : 0u,
+                m.owner_tuple_exact ? 1u : 0u,
+                m.material_slot_valid ? 1u : 0u,
+                static_cast<unsigned>(m.material_slot),
+                static_cast<unsigned long long>(m.semantic_name_hash),
+                static_cast<unsigned long long>(m.material_family_hash),
+                static_cast<unsigned>(m.raw_mtd_sha256[0]),
+                static_cast<unsigned>(m.raw_mtd_sha256[1]),
+                static_cast<unsigned>(m.raw_mtd_sha256[2]),
+                static_cast<unsigned>(m.raw_mtd_sha256[3]),
+                static_cast<unsigned>(m.flver_sha256[0]),
+                static_cast<unsigned>(m.flver_sha256[1]),
+                static_cast<unsigned>(m.flver_sha256[2]),
+                static_cast<unsigned>(m.flver_sha256[3]),
+                static_cast<unsigned long long>(h1),
+                companions[1] != nullptr ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::info, detail);
+        }
+#endif
         static std::atomic_bool owner_auth_missing{false};
         if (owner_probe ==
                 v203_equipment::owner_slot_probe::authority_missing &&
