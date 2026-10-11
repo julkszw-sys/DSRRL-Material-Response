@@ -48,6 +48,13 @@ int main(){
     CHECK(diag.probe(0x3010,0x4011).status==probe_status::resource_mismatch);
     CHECK(diag.probe(0x3010,0x4010).status==probe_status::writer_absent);
     CHECK(!diag.probe(0x3010,0x4010).source);
+    using writer_result=registry<32,8>::writer_result;
+    CHECK(diag.observe_writer_diagnostic(0x3010,0x4011,
+          "BD_M_9380_1_s",13u,1u)==writer_result::resource_mismatch);
+    CHECK(diag.observe_writer_diagnostic(0x9999,0x4010,
+          "BD_M_9380_1_s",13u,1u)==writer_result::view_absent);
+    CHECK(diag.observe_writer_diagnostic(0x3010,0x4010,
+          "c5330_s",7u,1u)==writer_result::rejected_name);
     CHECK(!diag.observe_writer(0x3010,0x4010,"c5330_s",7u,1u));
     CHECK(diag.probe(0x3010,0x4010).status==probe_status::writer_absent);
     CHECK((!registry<32,8>::name_is_equipment_spec("c5330_s",7u)));
