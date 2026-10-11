@@ -35,7 +35,7 @@ def include_gate(s: str) -> str:
 
 def patch_resources(s: str) -> str:
     s=include_gate(s)
-    marker="#if defined(DSRRL_V203_FULL_SIDECAR_1295)\n        const bool exact_companion ="
+    marker="// Original P_Metal resource policy remains byte-for-byte equivalent."
     if marker not in s:
         begin=s.find("        const bool exact_companion =\n")
         if begin<0 or s.find("        const bool exact_companion =\n",begin+1)>=0:
