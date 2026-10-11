@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 
 extern "C" {
 void *g_dsrrl_v206_writer_target=nullptr;
