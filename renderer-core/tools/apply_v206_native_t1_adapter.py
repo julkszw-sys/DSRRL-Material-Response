@@ -130,9 +130,16 @@ def resource(s: str) -> str:
     if (receiver_id>=24u && receiver_id<=35u &&
         query.material.owner_tuple_exact &&
         query.material.route_index!=345u &&
-        views[1]!=nullptr && h1==0u) {
-        static std::atomic<std::uint32_t> sampled{0u};
-        const auto n=sampled.fetch_add(1u,std::memory_order_relaxed)+1u;
+        views[1]!=nullptr) {
+        // V207 sampled only h1==0, excluding the named/companion
+        // candidates already visible in V203 OWNER TRACE.
+        // V208 keeps independent budgets so stock/unknown PS t1
+        // cannot starve named sidecar SRVs; diagnostic only.
+        const bool known_sidecar=(h1!=0u);
+        static std::atomic<std::uint32_t> sampled_known{0u};
+        static std::atomic<std::uint32_t> sampled_unknown{0u};
+        const auto n=(known_sidecar?sampled_known:sampled_unknown)
+            .fetch_add(1u,std::memory_order_relaxed)+1u;
         if (n<=20u || (n<=8192u && (n&(n-1u))==0u)) {
             ID3D11Resource *resource=nullptr;
             views[1]->GetResource(&resource);
@@ -156,9 +163,10 @@ def resource(s: str) -> str:
                     source_hash=fnv_name(name.data(),len);
                     whitelisted=sidecar_20261010::spec_allowed(source_hash);
                 }
-                char line[480]{};
+                char line[640]{};
                 std::snprintf(line,sizeof(line),
-                    "[DSRRL V206 NATIVE T1] rx=%u slot=%u route=%u "
+                    "[DSRRL V208 NATIVE T1] rx=%u slot=%u route=%u "
+                    "v208_lane=%s h1=%016llx companion_present=%u "
                     "epoch=%llu engine_cpu_srv_exact=%u name=%s "
                     "in_sidecar_1295=%u live_stock_t1=%p "
                     "resource=%p v207_view_state=%u "
@@ -168,6 +176,9 @@ def resource(s: str) -> str:
                     static_cast<unsigned>(receiver_id),
                     static_cast<unsigned>(query.material.material_slot),
                     static_cast<unsigned>(query.material.route_index),
+                    known_sidecar?"NAMED":"UNNAMED",
+                    static_cast<unsigned long long>(h1),
+                    companions[1]?1u:0u,
                     static_cast<unsigned long long>(witness.epoch),
                     witness?1u:0u,
                     witness?witness.logical_name.data():"NONE",
