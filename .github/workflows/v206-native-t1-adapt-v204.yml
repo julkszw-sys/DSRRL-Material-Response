@@ -10,6 +10,7 @@ on:
       - agent/v210-owner-slot-semantic-cut-20261011
       - agent/v211-exact-nonmetal-gate-census-20261011
       - agent/v212-diffuse-operator-cut-20261011
+      - agent/v213-retail-mtd-diffuse-source-repair-20261011
   workflow_dispatch:
 
 jobs:
@@ -28,6 +29,10 @@ jobs:
             echo "Protected source or manifest modified" >&2
             exit 1
           fi
+      - name: Verify owner-original DSR retail Diffuse raw MTD identity repair
+        run: |
+          python3 renderer-core/tools/verify_retail_diffuse_mtd_provenance.py
+          python3 renderer-core/tools/verify_dsr_mtd_identity_registry.py
       - name: Recover all 1295 names and generate exact FNV64 manifest
         shell: bash
         run: |
@@ -126,6 +131,11 @@ jobs:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
+      - name: Prebuild original retail MTD SHA first-entry source verification
+        shell: pwsh
+        run: |
+          python renderer-core/tools/verify_retail_diffuse_mtd_provenance.py
+          if ($LASTEXITCODE -ne 0) { throw "Owner retail MTD SHA drift" }
       - name: Build strict one-file addon with all 1295 Specular names
         shell: pwsh
         run: |
@@ -141,6 +151,6 @@ jobs:
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V212_DIFFUSE_FIRST_T0_CENSUS_ADDON
+          name: DSRRL_V213_RETAIL_DSR_DIFFUSE_MTD_SOURCE_REPAIR_SINGLE_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error
