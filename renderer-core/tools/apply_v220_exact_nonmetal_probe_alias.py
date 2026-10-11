@@ -30,7 +30,7 @@ def header(s):
     for name in ('prepare', 'prepare_bound'):
         marker = '    bool '+name+'(\n'
         begin = s.index(marker)
-        end = s.index(');',begin)+2
+        end = s.index('noexcept;',begin)+len('noexcept;')
         chunk=s[begin:end]
         if chunk.count(a)!=1:raise RuntimeError('V220 declaration drift: '+name)
         s=s[:begin]+chunk.replace(a,b,1)+s[end:]
