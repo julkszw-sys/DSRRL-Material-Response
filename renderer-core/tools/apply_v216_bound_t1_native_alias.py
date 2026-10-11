@@ -140,7 +140,7 @@ prepare_draw_requests_bound(''',func+'''bool material_resource_draw_runtime::
 prepare_draw_requests_bound(''')
 
     if "    auto h1 = hashes[1];" not in s:
-        begin=s.index("bool material_resource_draw_runtime::\\nprepare_draw_requests_bound(")
+        begin=s.index("bool material_resource_draw_runtime::\nprepare_draw_requests_bound(")
         old="    const auto h0 = hashes[0];\n    const auto h1 = hashes[1];\n    const auto h2 = hashes[2];"
         target=s.find(old,begin)
         if target<0 or target-begin>5000:
