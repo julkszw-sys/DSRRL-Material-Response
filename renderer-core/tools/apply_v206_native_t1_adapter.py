@@ -268,6 +268,34 @@ def resource(s: str) -> str:
                     complete_t1_gate?1u:0u);
                 reshade::log::message(reshade::log::level::info,cut);
 #endif
+                // V212: read-only first consumer cut for t0 Diffuse.
+                const bool t0_allowed=h0!=0ull &&
+                    generated::diffuse_name_hash_allowed_v12(h0);
+                const bool pair=h0!=0ull && h1!=0ull &&
+                    generated::diffuse_pair_allowed_v12(h1,h0);
+                const bool target=h0!=0ull &&
+                    generated::diffuse_target_hash_allowed_v12(h0);
+                const auto diffuse_class=
+                    operators::material_response::classify_mtd_semantic(
+                        query,operators::material_response::
+                            mtd_semantic_operator::diffuse);
+                char diag[560]{};
+                std::snprintf(diag,sizeof(diag),
+                    "[DSRRL V212 DIFFUSE FIRST] rx=%u slot=%u "
+                    "h0=%016llx h1=%016llx t0_allowed=%u "
+                    "t0_target=%u pair=%u companion0=%u "
+                    "mr_ready=%u diffuse_mtd_use=%u spec_ready=%u",
+                    static_cast<unsigned>(receiver_id),
+                    static_cast<unsigned>(query.material.material_slot),
+                    static_cast<unsigned long long>(h0),
+                    static_cast<unsigned long long>(h1),
+                    t0_allowed?1u:0u,target?1u:0u,pair?1u:0u,
+                    companions[0]?1u:0u,
+                    full_material_response_ready?1u:0u,
+                    diffuse_class.state==operators::material_response::
+                        mtd_semantic_state::use?1u:0u,
+                    spec_rgb_consumer_ready?1u:0u);
+                reshade::log::message(reshade::log::level::info,diag);
                 char line[640]{};
                 std::snprintf(line,sizeof(line),
                     "[DSRRL V208 NATIVE T1] rx=%u slot=%u route=%u "

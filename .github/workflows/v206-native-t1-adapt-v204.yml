@@ -9,6 +9,7 @@ on:
       - agent/v209-vtable-source-census-20261011
       - agent/v210-owner-slot-semantic-cut-20261011
       - agent/v211-exact-nonmetal-gate-census-20261011
+      - agent/v212-diffuse-operator-cut-20261011
   workflow_dispatch:
 
 jobs:
@@ -140,6 +141,6 @@ jobs:
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V211_EXACT_NONMETAL_T1_GATE_CENSUS_ADDON
+          name: DSRRL_V212_DIFFUSE_FIRST_T0_CENSUS_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error
