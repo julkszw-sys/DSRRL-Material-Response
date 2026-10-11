@@ -1,0 +1,94 @@
+name: v203 Exact Leather Raw MTD 3 Row Fastpath
+
+on:
+  push:
+    branches:
+      - agent/v203-exact-mtd-3row-constexpr-20261011
+  workflow_dispatch:
+
+jobs:
+  strict-source-oracle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact v203 descendant
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Protect unchanged R43, PointLight, DoF and legacy material carriers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor d21f71bd61de34a60f780891e460a5e73792c4c6 HEAD
+          if git diff --name-only d21f71bd61de34a60f780891e460a5e73792c4c6 HEAD -- renderer-core/src renderer-core/data renderer-core/shaders | grep .; then
+            echo "ERROR: renderer executable or asset source mutated in owner-lookup experiment" >&2
+            exit 1
+          fi
+      - name: Compile C++17 original versus constexpr identity oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -I renderer-core/include \
+            renderer-core/tools/test_v203_constexpr_owner_lookup.cpp \
+            -o /tmp/test_v203_constexpr_owner_lookup
+      - name: Compile original raw MTD 325 scan versus pinned three-entry oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -I renderer-core/include \
+            renderer-core/tools/test_v203_exact_leather_mtd_index.cpp \
+            -o /tmp/test_v203_exact_leather_mtd_index
+      - name: Run original raw MTD semantic oracle
+        shell: bash
+        run: |
+          /tmp/test_v203_exact_leather_mtd_index
+      - name: Run exhaustive/cross-slot/negative checks and print host-only timing
+        shell: bash
+        run: |
+          /tmp/test_v203_constexpr_owner_lookup
+          python3 renderer-core/tools/test_v203_clean_equipment_manifest.py
+
+  experimental-native-addon:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+    steps:
+      - name: Check out v203 lineage with original R43 pinned source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify source mutation surface
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor 6381743f5e5f82c75bd7e5b7ea6d0f7675e62eea HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Not v203 PR302 descendant" }
+          $changed = @(git diff --name-only d21f71bd61de34a60f780891e460a5e73792c4c6 HEAD -- renderer-core/src renderer-core/data renderer-core/shaders)
+          if ($changed.Count -ne 0) { throw "Changed protected runtime/shader/asset source: $changed" }
+      - name: Check out pinned ReShade SDK
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build single exact-owner plus exact raw-MTD experimental addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/configure_v203_clean_equipment.ps1
+      - name: Reproduce source and native regressions
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v203_envspec36_offline_port.py
+          if ($LASTEXITCODE -ne 0) { throw "EnvSpec36 original owner/consumer regression" }
+          python renderer-core/tools/apply_v203_envspec36_generated_source.py
+          if ($LASTEXITCODE -ne 0) { throw "Pinned donor source drift" }
+          ./renderer-core/tools/verify_v203_clean_equipment.ps1
+      - name: Upload optional fast experimental addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: V203_LEATHER_RAW_MTD_INDEX_EXPERIMENT_NOT_RELEASE
+          path: |
+            DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
+            DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
