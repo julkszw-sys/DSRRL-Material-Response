@@ -1,4 +1,4 @@
-name: V215 Verified View-Origin Resource Seed
+name: V216 Draw-Bound Stock T1 Native Resource Bridge
 
 on:
   push:
@@ -13,6 +13,7 @@ on:
       - agent/v213-retail-mtd-diffuse-source-repair-20261011
       - agent/v214-exact-resource-name-to-srv-20261011
       - agent/v215-view-origin-resource-seed-20261011
+      - agent/v216-bound-t1-srv-alias-20261011
   workflow_dispatch:
 
 jobs:
@@ -42,6 +43,13 @@ jobs:
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -Irenderer-core/include renderer-core/tests/test_v214_exact_resource_name_provenance.cpp -o /tmp/test_v214
           /tmp/test_v214
           python3 -m py_compile renderer-core/tools/apply_v214_exact_resource_name_srv.py
+      - name: V216 exact live resource alias lifecycle regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -Irenderer-core/include renderer-core/tests/test_v216_native_resource_alias.cpp -o /tmp/test_v216
+          /tmp/test_v216
+          python3 -m py_compile renderer-core/tools/apply_v216_bound_t1_native_alias.py
       - name: Recover all 1295 names and generate exact FNV64 manifest
         shell: bash
         run: |
@@ -132,6 +140,7 @@ jobs:
       DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
       DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
       DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -156,16 +165,17 @@ jobs:
           ./renderer-core/tools/verify_v203_clean_equipment.ps1
           # Config verifies V206 before applying V214. Replaying a V206
           # postcondition on the final V214-modified file is invalid.
-          python renderer-core/tools/apply_v214_exact_resource_name_srv.py
-          if ($LASTEXITCODE -ne 0) { throw "V214 final resource provenance not compiled" }
+          python renderer-core/tools/apply_v216_bound_t1_native_alias.py
+          if ($LASTEXITCODE -ne 0) { throw "V216 actual native bound-t1 source not compiled" }
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_native_resource_to_srv' -Quiet)) { throw "V214 source-to-SRV identity transport absent" }
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_view_backseed' -Quiet)) { throw "V215 actual named native SRV to resource producer bridge absent" }
+          if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_resource_view_alias' -Quiet)) { throw "V216 actual bound stock t1 resource alias source absent" }
 
           $head = Get-Content 'build/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp' -Raw
           if (!$head.Contains('1295u')) { throw "Not all sidecar entries compiled" }
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V215_VIEW_ORIGIN_RESOURCE_SEED_SINGLE_ADDON
+          name: DSRRL_V216_EXACT_DRAW_BOUND_T1_RESOURCE_ALIAS_SINGLE_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error

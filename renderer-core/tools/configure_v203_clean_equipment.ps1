@@ -44,6 +44,15 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
         python renderer-core/tools/apply_v214_exact_resource_name_srv.py
         if ($LASTEXITCODE -ne 0) { throw "V214 exact producer-to-SRV source drift" }
     }
+    if ($env:DSRRL_V216_BOUND_T1_NATIVE_ALIAS -eq "ON") {
+        if ($env:DSRRL_V214_EXACT_RESOURCE_NAME_SRV -ne "ON") {
+            throw "V216 live native t1 alias requires V214 source provenance"
+        }
+        python renderer-core/tools/apply_v216_bound_t1_native_alias.py --apply
+        if ($LASTEXITCODE -ne 0) { throw "V216 actual bound t1 resource alias failed" }
+        python renderer-core/tools/apply_v216_bound_t1_native_alias.py
+        if ($LASTEXITCODE -ne 0) { throw "V216 bound t1 bridge drift" }
+    }
 }
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
@@ -110,6 +119,13 @@ if ($env:DSRRL_V214_EXACT_RESOURCE_NAME_SRV -eq "ON") {
     }
     $flags += "-DDSRRL_V214_EXACT_RESOURCE_NAME_SRV=ON"
     Write-Host "DSRRL V214: full 1295 loader and exact init_resource to SRV provenance; consumer gates unchanged"
+}
+if ($env:DSRRL_V216_BOUND_T1_NATIVE_ALIAS -eq "ON") {
+    if ($env:DSRRL_V214_EXACT_RESOURCE_NAME_SRV -ne "ON") {
+        throw "V216 requires V214 exact identity bridge"
+    }
+    $flags += "-DDSRRL_V216_BOUND_T1_NATIVE_ALIAS=ON"
+    Write-Host "DSRRL V216: draw-bound t1 alternate view of EXACT native resource; PTDE consumer not promoted"
 }
 if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {
