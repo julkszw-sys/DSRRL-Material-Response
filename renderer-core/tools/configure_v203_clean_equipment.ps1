@@ -28,6 +28,10 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     if ($LASTEXITCODE -ne 0) { throw "Full 1295-sidecar routing overlay failed" }
     python renderer-core/tools/apply_v203_full_sidecar_1295.py
     if ($LASTEXITCODE -ne 0) { throw "Full 1295-sidecar routing overlay drift" }
+    python renderer-core/tools/apply_v204_sidecar_resource_and_source_fix.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "V204 full-resource registration and keyed source overlay failed" }
+    python renderer-core/tools/apply_v204_sidecar_resource_and_source_fix.py
+    if ($LASTEXITCODE -ne 0) { throw "V204 resource/source overlay drift" }
 }
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
