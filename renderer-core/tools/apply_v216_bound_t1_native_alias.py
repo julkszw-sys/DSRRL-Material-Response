@@ -139,7 +139,7 @@ bool try_v216_bound_t1_alias(
 prepare_draw_requests_bound(''',func+'''bool material_resource_draw_runtime::
 prepare_draw_requests_bound(''')
 
-    begin=s.index("bool material_resource_draw_runtime::\\nprepare_draw_requests_bound(")
+    begin=s.index("bool material_resource_draw_runtime::\nprepare_draw_requests_bound(")
     target=s.index("    const auto h0 = hashes[0];\n    const auto h1 = hashes[1];\n    const auto h2 = hashes[2];",begin)
     if begin<0 or target<0 or "if (full_material_response_ready" not in s[target:target+2300]:
         raise RuntimeError("V216 receiver-first bound t1 exact h1 anchor drift")
