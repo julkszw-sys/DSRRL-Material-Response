@@ -18,6 +18,9 @@ HEADER_ADD = '''#include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/v203_sidecar_operator_gate.hpp"
 #endif'''
 
+MUTABLE_BEFORE = '    const bool env_resource_ready ='
+MUTABLE_AFTER = '    bool env_resource_ready ='
+
 OLD = '''    if (!env_resource_ready) {
         if (shader != nullptr)
             shader->Release();
@@ -32,7 +35,7 @@ NEW = '''#if defined(DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY)
     // and the correct PTDE PackedGI slot; unknowns remain stock DSR.
     if (!env_resource_ready && !k_native_dsr_cubemap_feed &&
         shadow_env_ready &&
-        sidecar_20261010::exact_nonmetal_material(material)) {
+        sidecar_20261010::exact_nonmetal_draw(material,decision)) {
         ID3D11ShaderResourceView *native_views[3]{};
         context->PSGetShaderResources(
             12u, probe_b_required ? 3u : 1u, native_views);
@@ -105,9 +108,11 @@ def replace_once(s: str, before: str, after: str) -> str:
 
 def patch(s: str) -> str:
     s = replace_once(s, HEADER_ANCHOR, HEADER_ADD)
+    s = replace_once(s, MUTABLE_BEFORE, MUTABLE_AFTER)
     s = replace_once(s, OLD, NEW)
     assert s.count('if (!env_resource_ready) {') == 1
-    assert s.count('sidecar_20261010::exact_nonmetal_material(material)') == 1
+    assert s.count('sidecar_20261010::exact_nonmetal_draw(material,decision)') == 1
+    assert s.count('    bool env_resource_ready =') == 1
     assert s.count('k_effect_fail_probe') >= 2
     assert s.count('"[DSRRL V221 PROBE JOIN] "') == 1
     return s
