@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "scope": "SOURCE_PINNED_DSR_RETAIL_BND3_FIRST_NAME_WINS__DIFFUSE_ONLY",
+  "provenance": "Owner supplied DSRRL_FINAL_EVIDENCE_PART02(2).zip/DSR/mtd/Mtd.mtdbnd.dcx; no copyrighted asset bytes redistributed",
+  "binder": "DSR/mtd/Mtd.mtdbnd.dcx",
+  "binder_sha256": "7c5a0952c1016a3efa3c6a7180bc60af81ccf7b2a4685c3c89028eda78c2d8b5",
+  "archive_entry_sha_required": true,
+  "entries": [
+    {
+      "name": "P_DullLeather[DSB].mtd",
+      "bnd_index": 460,
+      "bnd_bytes": 2540,
+      "sha256": "7ea7d6ce9bb7148db62e8c27ee45edefb9547018d0b723dd4753d4c37e29f293",
+      "legacy_registry_sha256": "8a577e8ec9422e911845a52ae45e8cc50d1f570cc44ae9317931c4143ea29d48",
+      "route_index": 160,
+      "duplicate_shadow_index": 553,
+      "duplicate_shadow_sha256": "9376d84c81f0b1e77dc728dc469ce9fa281c41d6a7ccd23ec415471aa28341a3"
+    },
+    {
+      "name": "P_DullLeather[DSB]_Edge.mtd",
+      "bnd_index": 461,
+      "bnd_bytes": 2552,
+      "sha256": "44e1188bafa99d49349883dcc2052c13365f196e341ca5e7c788cbad0a4e058d",
+      "legacy_registry_sha256": "8a577e8ec9422e911845a52ae45e8cc50d1f570cc44ae9317931c4143ea29d48",
+      "route_index": 88
+    },
+    {
+      "name": "Ps_Body[DSB].mtd",
+      "bnd_index": 492,
+      "bnd_bytes": 2504,
+      "sha256": "af2f108831b783a43b0e02f047919719d14f38e68d6c5a97b80678d593ba1c95",
+      "legacy_registry_sha256": "217f980c5d3964690f61f47452f1d1e2f65c317eb4b71374991f4c824570d554",
+      "route_index": 232
+    }
+  ],
+  "negative_contract": {
+    "P_Metal[DSB].mtd": "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b",
+    "M_7Metal[DSB].mtd": "184c9c731c98b642d478930a723989e9490c35e642803dd417f4e56f9077c50d",
+    "Ptde SpecRGB scope": "equipment only; no t10 injection, no generic PBL hybrid",
+    "historical_36_rows": "negative-control only; never an asset-whitelist or scope cap"
+  }
+}
