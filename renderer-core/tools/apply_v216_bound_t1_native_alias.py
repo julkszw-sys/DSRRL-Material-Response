@@ -141,7 +141,7 @@ prepare_draw_requests_bound(''')
 
     begin=s.index("bool material_resource_draw_runtime::\nprepare_draw_requests_bound(")
     target=s.index("    const auto h0 = hashes[0];\n    const auto h1 = hashes[1];\n    const auto h2 = hashes[2];",begin)
-    if begin<0 or target<0 or "if (full_material_response_ready" not in s[target:target+2300]:
+    if begin<0 or target<0 or target-begin>5000:
         raise RuntimeError("V216 receiver-first bound t1 exact h1 anchor drift")
     s=s[:target]+"    const auto h0 = hashes[0];\n    auto h1 = hashes[1];\n    const auto h2 = hashes[2];\n#if defined(DSRRL_V203_FULL_SIDECAR_1295)\n    if (h1==0u && companions[1]==nullptr &&\n        receiver_id>=33u && receiver_id<=35u &&\n        sidecar_20261010::exact_nonmetal_material(query.material))\n        (void)try_v216_bound_t1_alias(\n            views[1],h1,companions[1]);\n#endif"+s[target+len("    const auto h0 = hashes[0];\n    const auto h1 = hashes[1];\n    const auto h2 = hashes[2];"):]
     return s
