@@ -35,7 +35,7 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     if (!$cache.Contains('DSRRL_V203_FULL_SIDECAR_1295:BOOL=ON')) { throw "Full sidecar compile option disabled" }
 }
 if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
-    foreach ($marker in @("[DSRRL V206 CPU WRITER]","[DSRRL V206 NATIVE T1]","engine_cpu_srv_exact=","no-swap-check-unavailable")) {
+    foreach ($marker in @("[DSRRL V206 CPU WRITER]","[DSRRL V208 NATIVE T1]","v208_lane=","companion_present=","[DSRRL V208 CPU NAME]","engine_cpu_srv_exact=","no-swap-check-unavailable")) {
         if ($marker -eq "no-swap-check-unavailable") { continue }
         if (!$ascii.Contains($marker)) { throw "Missing V206 exact diagnostic: $marker" }
     }

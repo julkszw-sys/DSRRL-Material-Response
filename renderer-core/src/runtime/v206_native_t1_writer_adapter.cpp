@@ -145,8 +145,18 @@ extern "C" void dsrrl_v206_writer_observer(
         ascii[i]=static_cast<char>(name[i]);
     }
     if(!dsrrl::runtime::v206_native_t1::registry<>::name_is_equipment_spec(
-           ascii.data(),length))
+           ascii.data(),length)){
+        static std::atomic<std::uint64_t> sampled{0u};
+        const auto n=sampled.fetch_add(1u,std::memory_order_relaxed)+1u;
+        if(n<=12u || (n<=8192u && (n&(n-1u))==0u)){
+            char line[240]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V208 CPU NAME] type=NON_EQUIPMENT name=%s source=%u "
+                "bridge_authority=0 swap=0 pixel=OPEN",ascii.data(),source_id);
+            reshade::log::message(reshade::log::level::info,line);
+        }
         return reject(writer_stage::non_equipment);
+    }
     using writer_result=dsrrl::runtime::v206_native_t1::registry<>::writer_result;
     const auto result=registry.observe_writer_diagnostic(
         pair[1],pair[0],ascii.data(),length,source_id);
