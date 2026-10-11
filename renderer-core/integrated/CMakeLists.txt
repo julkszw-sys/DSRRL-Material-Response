@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V205_SPC25_EPOCH_TRANSPORT
+    "V205 exact native CPU texture writer to PS SRV/resource/epoch source census (read-only, no global SpecRGB authorization)"
+    OFF)
+
+option(
     DSRRL_V203_FULL_SIDECAR_1295
     "Experimental full 1295 Specular resource-name whitelist, exact nonmetal FLVER/MTD/receiver semantic route, no blanket EnvSpec"
     OFF)
@@ -845,6 +850,25 @@ if(DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_OWNER_PATH_RUNTIME_DIAG>)
+endif()
+
+# V205 is a read-only general receiver source/transport witness.
+# Compile legacy CPU writer hook ONLY into its own TU; never switch on the
+# historical SPC25 material batch across the shared renderer.
+if(DSRRL_V205_SPC25_EPOCH_TRANSPORT)
+    if(NOT DSRRL_V203_FULL_SIDECAR_1295)
+        message(FATAL_ERROR "V205 requires complete PR306 Specular sidecar source")
+    endif()
+    target_sources(
+        dsrrl_renderer_core_integrated PRIVATE
+        spc25_packet_source_detour.asm
+        spc25_packet_reader_detour.asm)
+    set_source_files_properties(
+        "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/texture_identity_transport.cpp"
+        PROPERTIES COMPILE_DEFINITIONS DSRRL_EXPERIMENTAL_SPC_MATERIAL_BATCH)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V205_SPC25_EPOCH_TRANSPORT>)
 endif()
 
 if(DSRRL_V203_FULL_SIDECAR_1295)
