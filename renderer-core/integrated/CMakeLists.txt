@@ -82,6 +82,16 @@ option(
     OFF)
 
 option(
+    DSRRL_V214_EXACT_RESOURCE_NAME_SRV
+    "Native CPU logical texture name -> exact D3D11 resource -> SRV fallback with 1295 sidecar loader"
+    OFF)
+if(DSRRL_V214_EXACT_RESOURCE_NAME_SRV AND
+   (NOT DSRRL_V206_SPC25_EQUIPMENT_ID OR NOT DSRRL_V203_FULL_SIDECAR_1295))
+    message(FATAL_ERROR
+        "V214 exact resource identity needs V206 native witness and full sidecar 1295")
+endif()
+
+option(
     DSRRL_V203_OWNER_PATH_RUNTIME_DIAG
     "PR304 strict bounded owner/MTD/gSpec logging, diagnostic only; requires exact v203 triad"
     OFF)
