@@ -52,48 +52,20 @@ def resource(s):
     return s
 
 def source(s):
-    # Shared LightBank producer, exact per-material selector authority.
-    # P_Metal continues to use original narrow fallback; nonmetals only
-    # consume their complete material/epoch keyed source publication.
-    old="""        !exact_pmetal_material_selection(
-            material) ||
-        owner == nullptr ||"""
-    new="""        !(
-            exact_pmetal_material_selection(material)
-#if defined(DSRRL_V203_FULL_SIDECAR_1295)
-            || sidecar_20261010::exact_nonmetal_material(material)
-#endif
-        ) ||
-        owner == nullptr ||"""
-    s=once(s,old,new)
-    old="""        !exact_pmetal_material_selection(
-            material)) {
-        telemetry::hot_count(
-            g_consumer_fail);"""
-    new="""        !(
-            exact_pmetal_material_selection(material)
-#if defined(DSRRL_V203_FULL_SIDECAR_1295)
-            || sidecar_20261010::exact_nonmetal_material(material)
-#endif
-        )) {
-        telemetry::hot_count(
-            g_consumer_fail);"""
-    s=once(s,old,new)
-    # Explicitly forbid the unkeyed global/latest-hook LightBank fallback
-    # for nonmetal. This source is not tied to the complete material key.
-    old="""    // Narrow fallback carrier recovered from the attested retail LightBank
-    // single/blend packers (V13 semantic cut)."""
-    new="""#if defined(DSRRL_V203_FULL_SIDECAR_1295)
-    if (!exact_pmetal_material_selection(material)) {
-        // For nonmetals, a matching selector event must have published its
-        // material+source+epoch payload. Never use global latest_hook_source.
-        telemetry::hot_count(g_consumer_fail);
-        return false;
-    }
-#endif
-
-"""+old
-    s=once(s,old,new)
+    # PR303's generated-source overlay already replaces BOTH selector and
+    # consumer with exact_envspec36_or_pmetal_source(material), and PR305
+    # replaces that helper's nonmetal branch with full-sidecar exact
+    # material authority. No additional gate change is necessary.
+    # In particular the original unkeyed latest_hook_source fallback is
+    # correctly reserved to P_Metal in that generated source.
+    for required in (
+        "exact_envspec36_or_pmetal_source(",
+        "sidecar_20261010::exact_nonmetal_material(material)",
+        "pmetal_producer_state_latest(",
+        "if (!exact_pmetal_material_selection(material))",
+    ):
+        if required not in s:
+            raise AssertionError("Missing original material-keyed producer or fallback guard: "+required)
     return s
 
 def diag(s):
