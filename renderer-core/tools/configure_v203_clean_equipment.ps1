@@ -54,6 +54,16 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
         if ($LASTEXITCODE -ne 0) { throw "V216 bound t1 bridge drift" }
     }
 }
+if ($env:DSRRL_V219_EXACT_NONMETAL_GATE_TRACE -eq "ON") {
+    if ($env:DSRRL_V203_EQUIPMENT_ENVSPEC36 -ne "ON" -or
+        $env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {
+        throw "V219 draw gating trace requires exact nonmetal shader/sidecar build"
+    }
+    python renderer-core/tools/apply_v219_exact_nonmetal_first_gate.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "V219 exact draw cut overlay failed" }
+    python renderer-core/tools/apply_v219_exact_nonmetal_first_gate.py
+    if ($LASTEXITCODE -ne 0) { throw "V219 exact draw cut postcondition failed" }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -126,6 +136,10 @@ if ($env:DSRRL_V216_BOUND_T1_NATIVE_ALIAS -eq "ON") {
     }
     $flags += "-DDSRRL_V216_BOUND_T1_NATIVE_ALIAS=ON"
     Write-Host "DSRRL V216: draw-bound t1 alternate view of EXACT native resource; PTDE consumer not promoted"
+}
+if ($env:DSRRL_V219_EXACT_NONMETAL_GATE_TRACE -eq "ON") {
+    $flags += "-DDSRRL_V219_EXACT_NONMETAL_GATE_TRACE=ON"
+    Write-Host "DSRRL V219: bounded first exact nonmetal draw and operator failure stage; no shader or resource mutation"
 }
 if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {

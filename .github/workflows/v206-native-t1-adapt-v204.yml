@@ -1,4 +1,4 @@
-name: V216 Draw-Bound Stock T1 Native Resource Bridge
+name: V219 Exact Nonmetal Operator Draw Frontier
 
 on:
   push:
@@ -14,6 +14,7 @@ on:
       - agent/v214-exact-resource-name-to-srv-20261011
       - agent/v215-view-origin-resource-seed-20261011
       - agent/v216-bound-t1-srv-alias-20261011
+      - agent/v219-exact-nonmetal-operator-first-gate-20261011
   workflow_dispatch:
 
 jobs:
@@ -50,6 +51,19 @@ jobs:
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -Irenderer-core/include renderer-core/tests/test_v216_native_resource_alias.cpp -o /tmp/test_v216
           /tmp/test_v216
           python3 -m py_compile renderer-core/tools/apply_v216_bound_t1_native_alias.py
+      - name: V219 source syntax and no visual operator mutation contract
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/apply_v219_exact_nonmetal_first_gate.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('renderer-core/tools/apply_v219_exact_nonmetal_first_gate.py').read_text()
+          assert 'DSRRL_V219_EXACT_NONMETAL_GATE_TRACE' in s
+          assert 'DSRRL V219 MATERIAL DRAW' in s
+          assert 'exact_pmetal_envspec_candidate' in s
+          assert 'log_prepare_stage_once' not in s or 'g_prepare_stage_log_mask' in s
+          print('V219_SOURCE_NEGATIVE_ORACLE_PASS no_render_operator_mutation=1')
+          PY
       - name: Recover all 1295 names and generate exact FNV64 manifest
         shell: bash
         run: |
@@ -141,6 +155,7 @@ jobs:
       DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
       DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
       DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -170,12 +185,14 @@ jobs:
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_native_resource_to_srv' -Quiet)) { throw "V214 source-to-SRV identity transport absent" }
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_view_backseed' -Quiet)) { throw "V215 actual named native SRV to resource producer bridge absent" }
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'stage=exact_resource_view_alias' -Quiet)) { throw "V216 actual bound stock t1 resource alias source absent" }
+          python renderer-core/tools/apply_v219_exact_nonmetal_first_gate.py
+          if ($LASTEXITCODE -ne 0) { throw "V219 exact draw source not materialized" }
 
           $head = Get-Content 'build/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp' -Raw
           if (!$head.Contains('1295u')) { throw "Not all sidecar entries compiled" }
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V216_EXACT_DRAW_BOUND_T1_RESOURCE_ALIAS_SINGLE_ADDON
+          name: DSRRL_V219_NONMETAL_DRAW_OPERATOR_FRONTIER_DIAGNOSTIC_ONE_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error

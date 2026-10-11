@@ -5,6 +5,10 @@ cmake --build build/renderer-core-lib --config Release --target $native
 if ($LASTEXITCODE -ne 0) { throw "Native test build failed" }
 ctest --test-dir build/renderer-core-lib -C Release -R "^dsrrl_(pmetal_(selector_policy|producer_state)|renderer_(flver_identity|resource_view_epoch|companion_tls_way))_tests$" --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native tests failed" }
+if ($env:DSRRL_V219_EXACT_NONMETAL_GATE_TRACE -eq "ON") {
+    python renderer-core/tools/apply_v219_exact_nonmetal_first_gate.py
+    if ($LASTEXITCODE -ne 0) { throw "V219 exact draw source drift" }
+}
 if ($env:DSRRL_V216_BOUND_T1_NATIVE_ALIAS -eq "ON") {
     python renderer-core/tools/apply_v216_bound_t1_native_alias.py
     if ($LASTEXITCODE -ne 0) { throw "V216 final native bound t1 source drift" }
@@ -67,6 +71,15 @@ if ($env:DSRRL_V216_BOUND_T1_NATIVE_ALIAS -eq "ON") {
     $cache = Get-Content 'build/CMakeCache.txt' -Raw
     if (!$cache.Contains('DSRRL_V216_BOUND_T1_NATIVE_ALIAS:BOOL=ON')) {
         throw "V216 draw-bound resource alias compile option disabled"
+    }
+}
+if ($env:DSRRL_V219_EXACT_NONMETAL_GATE_TRACE -eq "ON") {
+    if (!$ascii.Contains("[DSRRL V219 MATERIAL DRAW]")) {
+        throw "V219 actual nonmetal owner draw cut marker not compiled"
+    }
+    $cache = Get-Content 'build/CMakeCache.txt' -Raw
+    if (!$cache.Contains('DSRRL_V219_EXACT_NONMETAL_GATE_TRACE:BOOL=ON')) {
+        throw "V219 exact nonmetal trace flag missing in CMake cache"
     }
 }
 $hash = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()

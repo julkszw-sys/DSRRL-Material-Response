@@ -119,6 +119,15 @@ option(
     DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG
     "Experimental exact 36-FLVER equipment EnvSpec source/consumer port; separate from generic MR and disabled for releases"
     OFF)
+option(
+    DSRRL_V219_EXACT_NONMETAL_GATE_TRACE
+    "Capture first distinct full-owner nonmetal RX33-35 material draw and dedicated EnvSpec failure cut"
+    OFF)
+if(DSRRL_V219_EXACT_NONMETAL_GATE_TRACE AND
+   (NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG OR
+    NOT DSRRL_V203_FULL_SIDECAR_1295))
+    message(FATAL_ERROR "V219 requires compiled exact nonmetal EnvSpec candidate and full 1295 sidecar")
+endif()
 
 option(
     DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG
@@ -898,6 +907,12 @@ if(DSRRL_V203_FULL_SIDECAR_1295)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_FULL_SIDECAR_1295>)
+endif()
+
+if(DSRRL_V219_EXACT_NONMETAL_GATE_TRACE)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V219_EXACT_NONMETAL_GATE_TRACE>)
 endif()
 
 if(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
