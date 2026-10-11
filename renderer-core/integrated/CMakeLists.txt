@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V203_LEATHER_PMETAL_STYLE_EXPERIMENT
+    "Experimental six exact full-FLVER Leather owners with original P_Metal-style no actual_material_exact and per-material LightBank source"
+    OFF)
+
+option(
     DSRRL_V203_OWNER_PATH_RUNTIME_DIAG
     "PR304 strict bounded owner/MTD/gSpec logging, diagnostic only; requires exact v203 triad"
     OFF)
@@ -828,6 +833,20 @@ if(DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_OWNER_PATH_RUNTIME_DIAG>)
+endif()
+
+if(DSRRL_V203_LEATHER_PMETAL_STYLE_EXPERIMENT)
+    if(NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG OR
+       NOT DSRRL_V203_CONSTEXPR_OWNER_LOOKUP OR
+       NOT DSRRL_V203_EXACT_LEATHER_MTD_INDEX OR
+       NOT DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
+        message(FATAL_ERROR
+            "Exact six Leather owner route requires EnvSpec36, constexpr full SHA, 3-MTD strict router and PR304 owner trace opt-ins")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_LEATHER_PMETAL_STYLE_EXPERIMENT>)
 endif()
 
 if(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
