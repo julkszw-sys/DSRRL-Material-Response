@@ -5,7 +5,12 @@ cmake --build build/renderer-core-lib --config Release --target $native
 if ($LASTEXITCODE -ne 0) { throw "Native test build failed" }
 ctest --test-dir build/renderer-core-lib -C Release -R "^dsrrl_(pmetal_(selector_policy|producer_state)|renderer_(flver_identity|resource_view_epoch|companion_tls_way))_tests$" --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Native tests failed" }
-if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
+if ($env:DSRRL_V205_SPC25_EPOCH_TRANSPORT -eq "ON") {
+    # V204 postcondition was already validated in configure, before the
+    # opt-in source-complete legacy SPC25 producer/consumer transport port.
+    python renderer-core/tools/apply_v205_spc25_shared_epoch_transport.py
+    if ($LASTEXITCODE -ne 0) { throw "V205 CPU/SRV/epoch source postcondition failed" }
+} elseif ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     # PR305's verifier must run BEFORE applying V204. It cannot
     # validate the intentional extended create-time SRV registration.
     # configure_v203_clean_equipment.ps1 already verified the PR305
@@ -30,6 +35,13 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     }
     $cache = Get-Content 'build/CMakeCache.txt' -Raw
     if (!$cache.Contains('DSRRL_V203_FULL_SIDECAR_1295:BOOL=ON')) { throw "Full sidecar compile option disabled" }
+}
+if ($env:DSRRL_V205_SPC25_EPOCH_TRANSPORT -eq "ON") {
+    foreach ($name in @("[DSRRL SPC25 CPU 808D]","[DSRRL V205 SPC25 SHARED T1]","native_cpu_srv_epoch","matching_epoch=%u live_epoch=%llu writer_epoch=%llu")) {
+        if (!$ascii.Contains($name)) { throw "Missing V205 exact source witness $name" }
+    }
+    $cache = Get-Content 'build/CMakeCache.txt' -Raw
+    if (!$cache.Contains('DSRRL_V205_SPC25_EPOCH_TRANSPORT:BOOL=ON')) { throw "V205 exact source port not enabled" }
 }
 $hash = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
