@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V203_FULL_SIDECAR_1295
+    "Experimental full 1295 Specular resource-name whitelist, exact nonmetal FLVER/MTD/receiver semantic route, no blanket EnvSpec"
+    OFF)
+
+option(
     DSRRL_V203_OWNER_PATH_RUNTIME_DIAG
     "PR304 strict bounded owner/MTD/gSpec logging, diagnostic only; requires exact v203 triad"
     OFF)
@@ -362,6 +367,17 @@ add_custom_command(
     VERBATIM)
 
 add_custom_command(
+    OUTPUT "${DSRRL_CORE_GENERATED_RUNTIME}/generated_sidecar_spec_whitelist_20261010.hpp"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_sidecar_spec_whitelist_20261010.py"
+            --input "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/sidecar_specular_20261010_names.b85"
+            --output "${DSRRL_CORE_GENERATED_RUNTIME}/generated_sidecar_spec_whitelist_20261010.hpp"
+    DEPENDS
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_sidecar_spec_whitelist_20261010.py"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/sidecar_specular_20261010_names.b85"
+    VERBATIM)
+
+add_custom_command(
     OUTPUT "${DSRRL_CORE_GENERATED_RUNTIME}/generated_diffuse_routes_v12.hpp"
     COMMAND "${Python3_EXECUTABLE}"
             "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_diffuse_routes_v12.py"
@@ -387,6 +403,7 @@ add_custom_target(
     dsrrl_core_material_resource_routes
     DEPENDS
         "${DSRRL_CORE_GENERATED_RUNTIME}/generated_spec_routes_v12.hpp"
+        "${DSRRL_CORE_GENERATED_RUNTIME}/generated_sidecar_spec_whitelist_20261010.hpp"
         "${DSRRL_CORE_GENERATED_RUNTIME}/generated_diffuse_routes_v12.hpp"
         "${DSRRL_CORE_GENERATED_RUNTIME}/generated_normal_routes_v12.hpp")
 
@@ -828,6 +845,20 @@ if(DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_OWNER_PATH_RUNTIME_DIAG>)
+endif()
+
+if(DSRRL_V203_FULL_SIDECAR_1295)
+    if(NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG OR
+       NOT DSRRL_V203_CONSTEXPR_OWNER_LOOKUP OR
+       NOT DSRRL_V203_EXACT_LEATHER_MTD_INDEX OR
+       NOT DSRRL_V203_OWNER_PATH_RUNTIME_DIAG)
+        message(FATAL_ERROR
+          "Full sidecar nonmetal operator requires PR304 isolated EnvSpec, full source owner, raw MTD index, and owner trace")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_FULL_SIDECAR_1295>)
 endif()
 
 if(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
