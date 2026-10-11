@@ -21,9 +21,11 @@ foreach ($marker in @($sha,"[DSRRL PMETAL ZERO RE]","v203_clean_equipment_slot_s
   if (!$ascii.Contains($marker)) { throw "Missing $marker" }
 }
 if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
-    foreach ($required in @("[DSRRL SIDECAR 1295]","nonmetal_resource_probe","DSRRL_V203_FULL_SIDECAR_1295")) {
+    foreach ($required in @("[DSRRL SIDECAR 1295]","nonmetal_resource_probe")) {
         if (!$ascii.Contains($required)) { throw "Missing full sidecar 1295 binary diagnostic $required" }
     }
+    $cache = Get-Content 'build/CMakeCache.txt' -Raw
+    if (!$cache.Contains('DSRRL_V203_FULL_SIDECAR_1295:BOOL=ON')) { throw "Full sidecar compile option disabled" }
 }
 $hash = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $bin" | Set-Content -Encoding ascii SHA256SUMS.txt
