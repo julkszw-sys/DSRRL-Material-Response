@@ -10,6 +10,9 @@
 #if defined(DSRRL_V203_EXACT_LEATHER_MTD_INDEX)
 #include "dsrrl/runtime/v203_equipment_exact_mtd_router.hpp"
 #endif
+#if defined(DSRRL_V203_LEATHER_PMETAL_STYLE_EXPERIMENT)
+#include "dsrrl/runtime/v203_live_leather_source_authority.hpp"
+#endif
 #include <cmath>
 
 namespace dsrrl::runtime::v203_equipment {
@@ -37,7 +40,6 @@ inline bool exact_envspec36_material(
     // The original exact P_Metal island remains the only owner of route 345
     // and P_Metal[DSB]. Do not broaden its authority with a second gate.
     if (!material.valid || !material.owner_tuple_exact ||
-        !material.actual_material_exact ||
         !material.material_slot_valid ||
         material.route_index == 345u ||
         material.semantic_name_hash ==
@@ -46,12 +48,32 @@ inline bool exact_envspec36_material(
             mr::mtd_semantic_hash("DifSpcBmp"))
         return false;
 
-    const auto query = make_envspec36_query(material);
-#if defined(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
-    if (!constexpr_lookup::exact_proven_owner_slot_fast(query))
+#if defined(DSRRL_V203_LEATHER_PMETAL_STYLE_EXPERIMENT)
+    // Unchanged 36-row gate continues to require actual_material_exact.
+    // Only six new fully-specified Leather tuples can use the independent
+    // exact-source authority, identical to P_Metal in not consulting the
+    // actual_material_exact flag. DullLeather is NOT eligible.
+    if (!material.actual_material_exact &&
+        !live_leather::exact_material(material))
         return false;
 #else
-    if (!exact_proven_owner_slot(query))
+    if (!material.actual_material_exact)
+        return false;
+#endif
+
+    const auto query = make_envspec36_query(material);
+#if defined(DSRRL_V203_CONSTEXPR_OWNER_LOOKUP)
+    const bool original_authority =
+        constexpr_lookup::exact_proven_owner_slot_fast(query);
+#else
+    const bool original_authority = exact_proven_owner_slot(query);
+#endif
+#if defined(DSRRL_V203_LEATHER_PMETAL_STYLE_EXPERIMENT)
+    if (!original_authority &&
+        !live_leather::exact_owner_slot(query))
+        return false;
+#else
+    if (!original_authority)
         return false;
 #endif
 
