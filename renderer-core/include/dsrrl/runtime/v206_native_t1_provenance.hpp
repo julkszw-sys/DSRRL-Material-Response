@@ -3,6 +3,7 @@
 // Not a sidecar permission; no shader/material routes or global LightBank.
 // In particular legacy SPC25 NPC c5330_s probes are intentionally absent.
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -16,6 +17,19 @@ struct witness {
     std::uint32_t source_id = 0;
     std::array<char,65u> logical_name{};
     explicit operator bool() const noexcept { return epoch != 0u; }
+};
+
+// Observation-only diagnostics: these values never authorize a replacement.
+enum class probe_status : std::uint8_t {
+    matched=0, view_absent, resource_mismatch, view_ambiguous,
+    writer_absent, writer_conflict
+};
+struct probe_result {
+    witness source{};
+    probe_status status=probe_status::view_absent;
+};
+struct registry_stats {
+    std::uint64_t init_called=0, init_accepted=0, writer_accepted=0;
 };
 
 template<std::size_t Capacity=4096u, std::size_t Writers=1024u>
@@ -35,6 +49,8 @@ class registry final {
         bool active=false;
     };
     std::mutex mutex_;
+    std::atomic<std::uint64_t> init_called_{0u}, init_accepted_{0u};
+    std::atomic<std::uint64_t> writer_accepted_{0u};
     std::array<view_record,Capacity> views_{};
     std::array<writer_record,Writers> writers_{};
     std::uint64_t next_epoch_=0u;
@@ -71,10 +87,20 @@ class registry final {
         return true;
     }
 public:
+    static bool name_is_equipment_spec(
+        const char *name, std::size_t length) noexcept {
+        return name && equipment_spec_name(name,length);
+    }
+    registry_stats stats() const noexcept {
+        return {init_called_.load(std::memory_order_relaxed),
+                init_accepted_.load(std::memory_order_relaxed),
+                writer_accepted_.load(std::memory_order_relaxed)};
+    }
     // Called on the V204 ReShade creation callback for EVERY stock D3D11 SRV,
     // not just already-named sidecar resources. Ambiguity poisons live view.
     std::uint64_t init(std::uintptr_t device,std::uintptr_t view,
                        std::uintptr_t resource) noexcept {
+        init_called_.fetch_add(1u,std::memory_order_relaxed);
         if(!device||!view||!resource)return 0u;
         std::lock_guard<std::mutex> lock(mutex_);
         const auto start=bucket(view);
@@ -89,6 +115,7 @@ public:
             next_epoch_==std::numeric_limits<std::uint64_t>::max())
             return 0u;
         views_[empty]={device,view,resource,++next_epoch_,true,false};
+        init_accepted_.fetch_add(1u,std::memory_order_relaxed);
         return next_epoch_;
     }
     // Publish only exact engine packet + cache-name + verified DLTexture2D
@@ -109,23 +136,44 @@ public:
         std::memcpy(w.name.data(),logical_name,length);
         w.name[length]=0;
         w.active=true;
+        writer_accepted_.fetch_add(1u,std::memory_order_relaxed);
         return true;
     }
-    witness resolve(std::uintptr_t view,std::uintptr_t resource) noexcept {
+    // Inspect the live view independently of whether a writer was accepted.
+    // Explicitly distinguishes missed lifecycle callbacks from missed names.
+    probe_result probe(std::uintptr_t view,
+                       std::uintptr_t resource) noexcept {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto *live=current_unlocked(view,resource);
-        if(!live)return {};
+        view_record *live=nullptr;
+        bool saw_view=false;
+        for(std::size_t i=0;i<probe_limit;++i) {
+            auto &e=views_[(bucket(view)+i)&(Capacity-1u)];
+            if(!e.active || e.view!=view)continue;
+            saw_view=true;
+            if(e.ambiguous || live)
+                return {{},probe_status::view_ambiguous};
+            if(e.resource!=resource)
+                return {{},probe_status::resource_mismatch};
+            live=&e;
+        }
+        if(!live)
+            return {{},saw_view ? probe_status::resource_mismatch :
+                                probe_status::view_absent};
         witness found{};
         for(std::size_t i=0;i<writer_count_;++i){
             const auto &w=writers_[i];
             if(!w.active||w.view!=view)continue;
-            // A second stale/conflicting writer makes identity ambiguous.
             if(w.resource!=resource||w.epoch!=live->epoch||found.epoch)
-                return {};
+                return {{},probe_status::writer_conflict};
             found.epoch=w.epoch;found.source_id=w.source_id;
             found.logical_name=w.name;
         }
-        return found;
+        return {found,found ? probe_status::matched :
+                            probe_status::writer_absent};
+    }
+    witness resolve(std::uintptr_t view,
+                    std::uintptr_t resource) noexcept {
+        return probe(view,resource).source;
     }
     void destroy(std::uintptr_t device,std::uintptr_t view) noexcept {
         if(!device||!view)return;
