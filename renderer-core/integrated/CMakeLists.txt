@@ -82,6 +82,15 @@ option(
     OFF)
 
 option(
+    DSRRL_V216_BOUND_T1_NATIVE_ALIAS
+    "RX33-35 draw-bound stock t1 alternate SRV via exact native resource and live named owner view"
+    OFF)
+if(DSRRL_V216_BOUND_T1_NATIVE_ALIAS AND
+   (NOT DSRRL_V214_EXACT_RESOURCE_NAME_SRV OR NOT DSRRL_V203_FULL_SIDECAR_1295))
+    message(FATAL_ERROR "V216 requires V214 resource provenance and full pinned 1295 sidecar")
+endif()
+
+option(
     DSRRL_V214_EXACT_RESOURCE_NAME_SRV
     "Native CPU logical texture name -> exact D3D11 resource -> SRV fallback with 1295 sidecar loader"
     OFF)
