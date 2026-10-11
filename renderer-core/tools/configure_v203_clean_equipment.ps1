@@ -38,6 +38,12 @@ if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
         python renderer-core/tools/apply_v206_native_t1_adapter.py
         if ($LASTEXITCODE -ne 0) { throw "V206 adapter postcondition failed" }
     }
+    if ($env:DSRRL_V214_EXACT_RESOURCE_NAME_SRV -eq "ON") {
+        python renderer-core/tools/apply_v214_exact_resource_name_srv.py --apply
+        if ($LASTEXITCODE -ne 0) { throw "V214 exact resource name to SRV bridge failed" }
+        python renderer-core/tools/apply_v214_exact_resource_name_srv.py
+        if ($LASTEXITCODE -ne 0) { throw "V214 exact producer-to-SRV source drift" }
+    }
 }
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
@@ -96,6 +102,14 @@ if ($env:DSRRL_V203_OWNER_PATH_TRACE -eq "ON") {
 if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
     $flags += "-DDSRRL_V203_FULL_SIDECAR_1295=ON"
     Write-Host "DSRRL: all 1295 Specular sidecar resources whitelisted; exact full-owner+MTD semantics for nonmetal only; P_Metal unchanged"
+}
+if ($env:DSRRL_V214_EXACT_RESOURCE_NAME_SRV -eq "ON") {
+    if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON" -or
+        $env:DSRRL_V206_NATIVE_T1_ADAPTER -ne "ON") {
+        throw "V214 exact transport requires full 1295 sidecar and V206 native lifetime bridge"
+    }
+    $flags += "-DDSRRL_V214_EXACT_RESOURCE_NAME_SRV=ON"
+    Write-Host "DSRRL V214: full 1295 loader and exact init_resource to SRV provenance; consumer gates unchanged"
 }
 if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {
