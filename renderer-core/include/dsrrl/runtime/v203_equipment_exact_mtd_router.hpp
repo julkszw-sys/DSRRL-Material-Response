@@ -39,6 +39,13 @@ constexpr std::array<std::size_t,3> make_indices() noexcept {
 }
 inline constexpr auto k_indices = make_indices();
 
+constexpr bool same_digest(
+    const std::array<std::uint8_t,32> &a,
+    const std::array<std::uint8_t,32> &b) noexcept {
+    for (std::size_t j = 0; j < a.size(); ++j)
+        if (a[j] != b[j]) return false;
+    return true;
+}
 constexpr bool validate() noexcept {
     std::size_t dull = 0, leather = 0;
     for (const auto i : k_indices) {
@@ -53,7 +60,7 @@ constexpr bool validate() noexcept {
         std::size_t duplicates = 0;
         for (const auto &other : gen::k_envspec_router_v1)
             if (r.semantic_name_hash == other.semantic_name_hash &&
-                r.raw_mtd_sha256 == other.raw_mtd_sha256) ++duplicates;
+                same_digest(r.raw_mtd_sha256,other.raw_mtd_sha256)) ++duplicates;
         if (duplicates != 1) return false;
     }
     return dull == 2 && leather == 1;
