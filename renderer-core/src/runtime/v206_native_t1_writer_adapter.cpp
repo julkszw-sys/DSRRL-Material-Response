@@ -8,6 +8,8 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <cstddef>
+#include <string>
 #include <cstring>
 #include <cstdio>
 
@@ -46,6 +48,44 @@ bool readable(const void *ptr,std::size_t size) noexcept {
     }
     return true;
 }
+enum class writer_stage : std::size_t {
+    input, tls, cache_pointer, cache_name, engine_read, vtable,
+    native_fields, native_pair, non_ascii, non_equipment,
+    no_view, wrong_resource, ambiguous_view, no_writer_or_capacity,
+    writer_conflict, published, count
+};
+constexpr std::array<const char *,static_cast<std::size_t>(writer_stage::count)>
+    stage_labels{{
+        "INPUT", "TLS_EMPTY", "CACHE_PTR_UNREADABLE", "CACHE_NAME_MISMATCH",
+        "ENGINE_UNREADABLE", "VTABLE_NOT_DLTexture2D", "NATIVE_FIELDS_UNREADABLE",
+        "NATIVE_PAIR_EMPTY", "NON_ASCII", "NOT_EQUIPMENT_SPEC",
+        "VIEW_NOT_REGISTERED", "RESOURCE_MISMATCH", "VIEW_AMBIGUOUS",
+        "WRITER_CAPACITY_OR_NO_WRITER", "WRITER_CONFLICT", "PUBLISHED"
+    }};
+std::array<std::atomic<std::uint64_t>,
+           static_cast<std::size_t>(writer_stage::count)> g_stage_hits{};
+void stage_log(writer_stage stage,std::uint64_t call,
+               dsrrl::runtime::v206_native_t1::probe_status probe) noexcept {
+    const auto index=static_cast<std::size_t>(stage);
+    const auto n=g_stage_hits[index].fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    if(!(n<=8u || (n<=65536u && (n&(n-1u))==0u)))return;
+    const auto stats=dsrrl::runtime::v206_native_t1::instance().stats();
+    char line[360]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V207 WRITER STAGE] stage=%s stage_hits=%llu "
+        "writer_calls=%llu registry_init=%llu/%llu "
+        "registry_writers=%llu probe_code=%u "
+        "equipment_authority=0 swap=0 pixel=OPEN",
+        stage_labels[index],
+        static_cast<unsigned long long>(n),
+        static_cast<unsigned long long>(call),
+        static_cast<unsigned long long>(stats.init_accepted),
+        static_cast<unsigned long long>(stats.init_called),
+        static_cast<unsigned long long>(stats.writer_accepted),
+        static_cast<unsigned>(probe));
+    reshade::log::message(reshade::log::level::info,line);
+}
 } // namespace
 
 // The verified retail writer passes TexHdlResCap cache node (RBX),
@@ -57,45 +97,75 @@ extern "C" void dsrrl_v206_writer_observer(
     const void *cache_entry,
     const void *engine_object,
     std::uint32_t source_id) noexcept {
+    using dsrrl::runtime::v206_native_t1::probe_status;
+    auto &registry=dsrrl::runtime::v206_native_t1::instance();
     const auto call=g_writer_calls.fetch_add(1u,
         std::memory_order_relaxed)+1u;
+    auto reject=[&](writer_stage stage,
+                    probe_status probe=probe_status::view_absent) noexcept {
+        stage_log(stage,call,probe);
+    };
     const auto flags=dsrrl::runtime::texture_identity_transport::status();
     if(!flags.provenance_ok || !flags.name_hook_armed ||
-       !cache_entry || !engine_object || !source_id)return;
+       !cache_entry || !engine_object || !source_id)
+        return reject(writer_stage::input);
     const wchar_t *name=nullptr;
     std::size_t length=0u;
     if(!dsrrl::runtime::texture_identity_transport::snapshot_raw(
             name,length) || !name || length<6u || length>64u)
-        return;
+        return reject(writer_stage::tls);
     const auto *slot=static_cast<const std::uint8_t *>(cache_entry)+8u;
-    if(!readable(slot,sizeof(const wchar_t *)))return;
+    if(!readable(slot,sizeof(const wchar_t *)))
+        return reject(writer_stage::cache_pointer);
     const wchar_t *node_name=nullptr;
     std::memcpy(&node_name,slot,sizeof(node_name));
     if(!node_name || !readable(node_name,(length+1u)*sizeof(wchar_t)) ||
        node_name[length]!=L'\0' ||
        std::char_traits<wchar_t>::compare(node_name,name,length)!=0)
-        return;
+        return reject(writer_stage::cache_name);
     const auto host_base=reinterpret_cast<std::uintptr_t>(
         GetModuleHandleW(nullptr));
     std::uintptr_t vtable=0u;
-    if(!host_base || !readable(engine_object,sizeof(vtable)))return;
+    if(!host_base || !readable(engine_object,sizeof(vtable)))
+        return reject(writer_stage::engine_read);
     std::memcpy(&vtable,engine_object,sizeof(vtable));
-    // Vtable + exact EXE hash + exact cache-key identity are required;
-    // this does NOT accept any object merely because its name ends "_s".
-    if(vtable!=host_base+0x014AA4A8u)return;
+    if(vtable!=host_base+0x014AA4A8u)
+        return reject(writer_stage::vtable);
     const auto *fields=static_cast<const std::uint8_t *>(engine_object)+0x28u;
     std::array<std::uintptr_t,2u> pair{};
-    if(!readable(fields,sizeof(pair)))return;
+    if(!readable(fields,sizeof(pair)))
+        return reject(writer_stage::native_fields);
     std::memcpy(pair.data(),fields,sizeof(pair));
-    if(!pair[0] || !pair[1])return;
+    if(!pair[0] || !pair[1])
+        return reject(writer_stage::native_pair);
     std::array<char,65u> ascii{};
     for(std::size_t i=0u;i<length;++i){
-        if(name[i]<0x21u || name[i]>0x7eu)return;
+        if(name[i]<0x21u || name[i]>0x7eu)
+            return reject(writer_stage::non_ascii);
         ascii[i]=static_cast<char>(name[i]);
     }
-    const bool accepted=dsrrl::runtime::v206_native_t1::instance().
-        observe_writer(pair[1],pair[0],ascii.data(),length,source_id);
-    if(!accepted)return;
+    if(!dsrrl::runtime::v206_native_t1::registry<>::name_is_equipment_spec(
+           ascii.data(),length))
+        return reject(writer_stage::non_equipment);
+    const auto before=registry.probe(pair[1],pair[0]);
+    const bool accepted=registry.observe_writer(
+        pair[1],pair[0],ascii.data(),length,source_id);
+    if(!accepted){
+        writer_stage failure=writer_stage::no_writer_or_capacity;
+        switch(before.status){
+        case probe_status::view_absent:
+            failure=writer_stage::no_view;break;
+        case probe_status::resource_mismatch:
+            failure=writer_stage::wrong_resource;break;
+        case probe_status::view_ambiguous:
+            failure=writer_stage::ambiguous_view;break;
+        case probe_status::writer_conflict:
+            failure=writer_stage::writer_conflict;break;
+        default:break;
+        }
+        return reject(failure,before.status);
+    }
+    stage_log(writer_stage::published,call,probe_status::matched);
     const auto n=g_witnesses.fetch_add(1u,
         std::memory_order_relaxed)+1u;
     if(n<=8u || (n<=8192u && (n&(n-1u))==0u)){
