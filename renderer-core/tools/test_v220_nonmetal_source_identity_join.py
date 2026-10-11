@@ -29,7 +29,8 @@ assert after.count("if (latest_hook_source(out))") == 1
 assert after.count("if (!exact_pmetal_material_selection(material))") == 1
 for original, replacement, expected in m.CHANGES:
     assert after.count(replacement) == expected
-    assert after.count(original) == 0
+    if original not in replacement:
+        assert after.count(original) == 0
 assert "pmetal_producer_state_begin(" in after
 print("V220_GENERATED_R43_ZERO_SELECTOR_TEST_PASS")
 print("V220_PMETAL_FALLBACK_BYTE_PATTERN_UNCHANGED=TRUE")
