@@ -60,7 +60,7 @@ constexpr std::array<const char *,static_cast<std::size_t>(writer_stage::count)>
         "ENGINE_UNREADABLE", "VTABLE_NOT_DLTexture2D", "NATIVE_FIELDS_UNREADABLE",
         "NATIVE_PAIR_EMPTY", "NON_ASCII", "NOT_EQUIPMENT_SPEC",
         "VIEW_NOT_REGISTERED", "RESOURCE_MISMATCH", "VIEW_AMBIGUOUS",
-        "WRITER_CAPACITY_OR_NO_WRITER", "WRITER_CONFLICT", "PUBLISHED"
+        "WRITER_SNAPSHOT_CAPACITY", "WRITER_CONFLICT", "PUBLISHED"
     }};
 std::array<std::atomic<std::uint64_t>,
            static_cast<std::size_t>(writer_stage::count)> g_stage_hits{};
@@ -147,23 +147,26 @@ extern "C" void dsrrl_v206_writer_observer(
     if(!dsrrl::runtime::v206_native_t1::registry<>::name_is_equipment_spec(
            ascii.data(),length))
         return reject(writer_stage::non_equipment);
-    const auto before=registry.probe(pair[1],pair[0]);
-    const bool accepted=registry.observe_writer(
+    using writer_result=dsrrl::runtime::v206_native_t1::registry<>::writer_result;
+    const auto result=registry.observe_writer_diagnostic(
         pair[1],pair[0],ascii.data(),length,source_id);
-    if(!accepted){
-        writer_stage failure=writer_stage::no_writer_or_capacity;
-        switch(before.status){
-        case probe_status::view_absent:
-            failure=writer_stage::no_view;break;
-        case probe_status::resource_mismatch:
-            failure=writer_stage::wrong_resource;break;
-        case probe_status::view_ambiguous:
-            failure=writer_stage::ambiguous_view;break;
-        case probe_status::writer_conflict:
-            failure=writer_stage::writer_conflict;break;
-        default:break;
+    if(result!=writer_result::published){
+        switch(result){
+        case writer_result::rejected_name:
+            return reject(writer_stage::non_equipment);
+        case writer_result::view_absent:
+            return reject(writer_stage::no_view,probe_status::view_absent);
+        case writer_result::resource_mismatch:
+            return reject(writer_stage::wrong_resource,
+                          probe_status::resource_mismatch);
+        case writer_result::view_ambiguous:
+            return reject(writer_stage::ambiguous_view,
+                          probe_status::view_ambiguous);
+        case writer_result::snapshot_capacity:
+            return reject(writer_stage::no_writer_or_capacity,
+                          probe_status::writer_absent);
+        case writer_result::published: break;
         }
-        return reject(failure,before.status);
     }
     stage_log(writer_stage::published,call,probe_status::matched);
     const auto n=g_witnesses.fetch_add(1u,
