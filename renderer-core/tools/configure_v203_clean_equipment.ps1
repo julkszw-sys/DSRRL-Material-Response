@@ -18,6 +18,17 @@ python renderer-core/tools/apply_v203_clean_equipment_spec.py --apply
 if ($LASTEXITCODE -ne 0) { throw "Equipment overlay failed" }
 python renderer-core/tools/apply_v203_clean_equipment_spec.py
 if ($LASTEXITCODE -ne 0) { throw "Equipment verification failed" }
+if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
+    foreach ($name in @("DSRRL_V203_EQUIPMENT_ENVSPEC36","DSRRL_V203_CONSTEXPR_OWNER_LOOKUP","DSRRL_V203_EXACT_LEATHER_MTD_INDEX","DSRRL_V203_OWNER_PATH_TRACE")) {
+        if ([Environment]::GetEnvironmentVariable($name) -ne "ON") {
+            throw "Full sidecar Specular whitelist requires pinned PR304 lineage option: $name"
+        }
+    }
+    python renderer-core/tools/apply_v203_full_sidecar_1295.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "Full 1295-sidecar routing overlay failed" }
+    python renderer-core/tools/apply_v203_full_sidecar_1295.py
+    if ($LASTEXITCODE -ne 0) { throw "Full 1295-sidecar routing overlay drift" }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -71,6 +82,10 @@ if ($env:DSRRL_V203_OWNER_PATH_TRACE -eq "ON") {
     }
     $flags += "-DDSRRL_V203_OWNER_PATH_RUNTIME_DIAG=ON"
     Write-Host "DSRRL: bounded 12-event-per-family owner route trace enabled"
+}
+if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -eq "ON") {
+    $flags += "-DDSRRL_V203_FULL_SIDECAR_1295=ON"
+    Write-Host "DSRRL: all 1295 Specular sidecar resources whitelisted; exact full-owner+MTD semantics for nonmetal only; P_Metal unchanged"
 }
 cmake -S renderer-core/integrated -B build -A x64 @flags
 if ($LASTEXITCODE -ne 0) { throw "CMake production config failed" }
