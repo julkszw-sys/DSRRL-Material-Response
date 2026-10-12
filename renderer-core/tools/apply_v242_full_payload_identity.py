@@ -71,6 +71,7 @@ NEW_TEST="""    // V242: equality/hash MUST include independent EnvDiffuse and P
     assert(latest_carrier.envdiffuse_linear_valid);
     assert(latest_carrier.phn_k135_valid);
     assert(latest_carrier.generation > first_carrier.generation);
+    if (latest_carrier.envdiffuse_a[0] != 0.25f || latest_carrier.envdiffuse_b[2] != 0.35f || latest_carrier.phn_k135 != 1.5f || latest_carrier.generation <= first_carrier.generation) return 43;
 
     return 0;
 }
