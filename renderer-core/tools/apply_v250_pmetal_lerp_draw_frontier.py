@@ -55,7 +55,6 @@ FAIL="""        mark_effect_probe_mask(
 """
 FAIL_ADD="""        v250_pmetal_lerp_draw_proof(
             receiver_id, decision.route_index, decision.active,
-        hemenvlerp_bound,
             hemenvlerp_bound,
             0u, false, false, 0u);
 """+FAIL
