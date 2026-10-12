@@ -34,7 +34,7 @@ class V235ExactSource(unittest.TestCase):
         after = audit(self.stock,True)
         self.assertIn("} else if (!lock.try_lock())",after)
         self.assertIn("if (hook_producer_cache_lookup(\n            selector_identity,",after)
-        self.assertIn("if (hook_producer_cache_lookup(\n            query,\n            cached,\n            nullptr,\n            true))",after)
+        self.assertIn("if (!hook_producer_cache_lookup(\n            query,\n            cached,\n            nullptr,\n            true))",after)
         self.assertIn("g_hook_source_mutex",after)
         self.assertIn("same_hook_source_payload(",after)
         self.assertIn("same_hook_selector_identity(",after)
