@@ -15,20 +15,18 @@ ROOT = Path(__file__).resolve().parents[2]
 FLVER = ROOT / "renderer-core/src/runtime/flver_engine_hooks.cpp"
 SOURCE = ROOT / "renderer-core/src/runtime/pmetal_env_source_runtime.cpp"
 
-FLVER_OLD = """  telemetry::hot_count(g_selector_events);
-  material_owner_selection_clear();
-  pmetal_env_source_selector_clear();
+FLVER_OLD = """ telemetry::hot_count(g_selector_events);
+ material_owner_selection_clear();
+ pmetal_env_source_selector_clear();
 
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE"""
-FLVER_NEW = """  telemetry::hot_count(g_selector_events);
-  material_owner_selection_clear();
-  // V249: An unrelated FLVER selector must not wipe the P_Metal producer
-  // TLS. An exact P_Metal selector still clears and re-begins its own
-  // material-local transaction in pmetal_env_source_selector_event().
-  // Uninstall/reset still call pmetal_env_source_selector_clear().
-  // This intentionally affects ONLY the P_Metal selector TLS transport.
-  // No material authority is granted by preserving the record.
-  
+FLVER_NEW = """ telemetry::hot_count(g_selector_events);
+ material_owner_selection_clear();
+ // V249: no unconditional P_Metal producer TLS clear on unrelated FLVER
+ // selectors. An exact material still clears/starts a transaction inside
+ // pmetal_env_source_selector_event(), while reset/uninstall still clear.
+ // No material authorizations are granted by preserving this TLS record.
+
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE"""
 
 # The V220 generated source includes a first-choice *nonmetal* join.
