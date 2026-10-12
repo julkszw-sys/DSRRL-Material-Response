@@ -1,0 +1,58 @@
+name: V236 PMetal Producer Slot Serialization Diagnostic
+on:
+  push:
+    branches:
+      - agent/v236-pmetal-producer-slot-publication-sync-20261012
+  workflow_dispatch:
+jobs:
+  source-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          python3 renderer-core/tools/test_v236_slot_sync.py
+          python3 renderer-core/tools/apply_v236_slot_sync.py
+          git diff --exit-code cfc200b8106369ef65c4070a22580a230e9e343a HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/data
+  native-exact-lock:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Native addon and producer-state invariance checks
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v236_slot_sync.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'V236 build failed' }
+          if (!(Test-Path DSRRL_V236_SLOT_SYNC_DIAG.addon64)) { throw 'Addon missing' }
+          cmake --build build/renderer-core-lib --config Release --target dsrrl_pmetal_producer_state_tests
+          if ($LASTEXITCODE -ne 0) { throw 'Producer test target failed' }
+          ctest --test-dir build/renderer-core-lib -C Release -R '^dsrrl_pmetal_producer_state_tests$' --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Producer state regression' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V236_PER_SLOT_SERIALIZATION_DIAGNOSTIC_NOT_RELEASE
+          path: DSRRL_V236_SLOT_SYNC_DIAG.addon64
+          if-no-files-found: error
