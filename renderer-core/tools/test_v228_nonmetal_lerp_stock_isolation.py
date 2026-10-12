@@ -23,10 +23,11 @@ assert patched.count("[DSRRL V228 LERP STOCK AB]")==1
 assert patched.count("if (exact_pmetal_envspec) {")==1
 assert patched.count("if (hemenvlerp_bound) {")==1
 assert "material.route_index != 345u" in patched
-assert "if (hemenvlerp_bound &&\n        exact_pmetal_envspec" in patched
-assert patched.index("generic_mr_fallback=DISALLOWED")<patched.index("if (exact_pmetal_envspec) {")
-assert patched.index("return false;\n    }\n#endif")<patched.index("if (exact_pmetal_envspec) {")
+assert "if (hemenvlerp_bound &&\n        material.route_index != 345u)" in patched
+assert patched.index("if (exact_pmetal_envspec) {")<patched.index("generic_mr_fallback=DISALLOWED")
+assert patched.index("return false;\n    }\n#endif")<patched.index("if (!g_pmetal_envspec.prepare(")
 assert patched.index("#endif")<patched.index("if (hemenvlerp_bound) {")
+assert patched.index("if (exact_pmetal_envspec) {")<patched.index("#if defined(DSRRL_V228_NONMETAL_LERP_STOCK_ISOLATION)")
 assert "pmetal=UNCHANGED stable_nonmetal=UNCHANGED" in patched
 assert "if (!g_pmetal_envspec.prepare(" in patched
 assert "V228_NOT_PTDE_PIXEL_FIX" in p.read_text()
