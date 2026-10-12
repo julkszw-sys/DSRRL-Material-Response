@@ -4,6 +4,7 @@
 #include "dsrrl/runtime/stutter_profiler.hpp"
 #include "dsrrl/runtime/resource_view_epoch.hpp"
 #include "dsrrl/runtime/companion_tls_way_selector.hpp"
+#include "dsrrl/runtime/live_sidecar_reuse_policy_v230.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
@@ -1325,11 +1326,26 @@ void on_init_resource_view(
             if (found == g_cache.end())
                 continue; // defensive against a stale non-owning index
             const auto &candidate = found->second;
-            if (candidate.device != native_device ||
-                candidate.exact_logical_name != logical_name ||
-                (spec_member && candidate.specular == nullptr) ||
-                (need_diffuse && candidate.diffuse == nullptr) ||
-                (need_normal && candidate.normal == nullptr))
+            const live_sidecar_reuse_candidate_v230
+                present{
+                    reinterpret_cast<std::uintptr_t>(
+                        candidate.device),
+                    candidate.exact_logical_name,
+                    candidate.specular != nullptr,
+                    candidate.diffuse != nullptr,
+                    candidate.normal != nullptr
+                };
+            const live_sidecar_reuse_need_v230
+                required{
+                    reinterpret_cast<std::uintptr_t>(
+                        native_device),
+                    logical_name,
+                    spec_member,
+                    need_diffuse,
+                    need_normal
+                };
+            if (!may_reuse_live_sidecar_v230(
+                    present, required))
                 continue;
 
             // COM AddRef cannot fire on_destroy_resource_view, unlike
@@ -1427,11 +1443,12 @@ void on_init_resource_view(
                 had_old = true;
             } else if (found != g_cache.end()) {
                 old = found->second;
-                found->second = set;
+                found->second = std::move(set);
                 had_old = true;
                 accepted = true;
             } else {
-                g_cache.emplace(key, set);
+                g_cache.emplace(
+                    key, std::move(set));
                 accepted = true;
                 new_record = true;
             }
