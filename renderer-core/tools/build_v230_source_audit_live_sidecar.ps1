@@ -20,7 +20,7 @@ python renderer-core/tools/test_v227_lerp_pmetal_nonmetal_parity.py
 if ($LASTEXITCODE -ne 0) { throw 'V227 source contract failed' }
 python renderer-core/tools/test_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 material/consumer contract failed' }
-python renderer-core/tools/test_v230_source_audit_live_companions.py
+python renderer-core/tools/test_v230_prebuild_protect.py
 if ($LASTEXITCODE -ne 0) { throw 'V230 protected-source contract failed' }
 
 $path = 'renderer-core/tools/configure_v203_clean_equipment.ps1'
@@ -46,6 +46,22 @@ if ($generated.Split([string[]]@($flagOld),[StringSplitOptions]::None).Count -ne
  throw 'V227 C++ flag anchor drift'
 }
 $generated = $generated.Replace($flagOld,$flagNew)
+$cmakeAnchor = 'cmake -S renderer-core/integrated -B build -A x64 @flags'
+if ($generated.Split([string[]]@($cmakeAnchor),[StringSplitOptions]::None).Count -ne 2) {
+ throw 'V230 post-V224 CMake anchor drift'
+}
+$lateOverlay = @'
+$patch = 'v230_live_companion_exact_source_delta.patch'
+git diff --no-ext-diff --unified=3 75ae33d71d6859ae21d7004b47b740f0a3cb2727 5772199e0ab41a8b88acee46b4f48447e545bda3 -- renderer-core/src/runtime/material_resource_draw_runtime.cpp | Out-File -LiteralPath $patch -Encoding utf8NoBOM
+if ($LASTEXITCODE -ne 0) { throw 'V230 exact source delta unavailable' }
+git apply --check --whitespace=nowarn $patch
+if ($LASTEXITCODE -ne 0) { throw 'V230 post-V224 input semantic drift' }
+git apply --whitespace=nowarn $patch
+if ($LASTEXITCODE -ne 0) { throw 'V230 performance delta not applied' }
+python renderer-core/tools/test_v230_postgen_optimization.py
+if ($LASTEXITCODE -ne 0) { throw 'V230 generated resource implementation invalid' }
+'@
+$generated = $generated.Replace($cmakeAnchor, $lateOverlay + [Environment]::NewLine + $cmakeAnchor)
 [IO.File]::WriteAllText((Join-Path (Get-Location) $path),$generated)
 
 ./renderer-core/tools/configure_v203_clean_equipment.ps1
@@ -54,4 +70,6 @@ python renderer-core/tools/apply_v227_lerp_pmetal_nonmetal_parity.py
 if ($LASTEXITCODE -ne 0) { throw 'V227 final native source mismatch' }
 python renderer-core/tools/apply_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 final native source mismatch' }
+python renderer-core/tools/test_v230_postgen_optimization.py
+if ($LASTEXITCODE -ne 0) { throw 'V230 exact source performance overlay missing' }
 Write-Host 'V230_ONE_ADDON_SIDECAR_LIVE_REUSE_WITH_PROTECTED_HOOKS'
