@@ -1,4 +1,4 @@
-name: V221 Exact Nonmetal Probe Context Retry
+name: V222 Exact Nonmetal Probe Rejection Frontier
 
 on:
   push:
@@ -17,6 +17,7 @@ on:
       - agent/v219-exact-nonmetal-operator-first-gate-20261011
       - agent/v220-nonmetal-source-identity-join-20261012
       - agent/v221-nonmetal-probe-context-fallback-20261012
+      - agent/v222-exact-probe-reject-frontier-20261012
   workflow_dispatch:
 
 jobs:
@@ -68,6 +69,12 @@ jobs:
           PY
       - name: Check V220 generator key identity regression
         run: python3 renderer-core/tools/test_v220_nonmetal_source_identity_join.py
+      - name: V222 read-only probe reject fault frontier regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile renderer-core/tools/apply_v222_probe_reject_frontier.py renderer-core/tools/test_v222_probe_reject_frontier.py
+          python3 renderer-core/tools/test_v222_probe_reject_frontier.py
       - name: V221 source-only exact-probe and P_Metal protected regression
         shell: bash
         run: |
@@ -166,8 +173,9 @@ jobs:
       DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
       DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
       DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
-      DSRRL_V220_NONMETAL_SOURCE_JOIN: ${{ (github.ref_name == 'agent/v220-nonmetal-source-identity-join-20261012' || github.ref_name == 'agent/v221-nonmetal-probe-context-fallback-20261012') && 'ON' || 'OFF' }}
-      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: ${{ github.ref_name == 'agent/v221-nonmetal-probe-context-fallback-20261012' && 'ON' || 'OFF' }}
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: ${{ (github.ref_name == 'agent/v220-nonmetal-source-identity-join-20261012' || github.ref_name == 'agent/v221-nonmetal-probe-context-fallback-20261012' || github.ref_name == 'agent/v222-exact-probe-reject-frontier-20261012') && 'ON' || 'OFF' }}
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: ${{ (github.ref_name == 'agent/v221-nonmetal-probe-context-fallback-20261012' || github.ref_name == 'agent/v222-exact-probe-reject-frontier-20261012') && 'ON' || 'OFF' }}
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: ${{ github.ref_name == 'agent/v222-exact-probe-reject-frontier-20261012' && 'ON' || 'OFF' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -210,11 +218,17 @@ jobs:
             if (!(Select-String -Path renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Pattern 'V221 PROBE JOIN' -Quiet)) { throw 'V221 resource observability missing' }
           }
 
+          if ($env:DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER -eq 'ON') {
+            python renderer-core/tools/apply_v222_probe_reject_frontier.py
+            if ($LASTEXITCODE -ne 0) { throw 'V222 exact probe frontier not compiled' }
+            if (!(Select-String -Path renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Pattern 'V222 PROBE REJECT FRONTIER' -Quiet)) { throw 'V222 probe diagnostic hook missing' }
+          }
+
           $head = Get-Content 'build/generated/dsrrl/runtime/generated_sidecar_spec_whitelist_20261010.hpp' -Raw
           if (!$head.Contains('1295u')) { throw "Not all sidecar entries compiled" }
           Write-Host 'V206_V204_NATIVE_CPU_SRV_PROVENANCE_COMPILED'
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.ref_name == 'agent/v221-nonmetal-probe-context-fallback-20261012' && 'DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY_ONE_ADDON' || (github.ref_name == 'agent/v220-nonmetal-source-identity-join-20261012' && 'DSRRL_V220_NONMETAL_SOURCE_JOIN_ONE_ADDON' || 'DSRRL_V219_NONMETAL_DRAW_OPERATOR_FRONTIER_DIAGNOSTIC_ONE_ADDON') }}
+          name: ${{ github.ref_name == 'agent/v222-exact-probe-reject-frontier-20261012' && 'DSRRL_V222_PROBE_REJECT_FRONTIER_ONE_ADDON' || (github.ref_name == 'agent/v221-nonmetal-probe-context-fallback-20261012' && 'DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY_ONE_ADDON' || (github.ref_name == 'agent/v220-nonmetal-source-identity-join-20261012' && 'DSRRL_V220_NONMETAL_SOURCE_JOIN_ONE_ADDON' || 'DSRRL_V219_NONMETAL_DRAW_OPERATOR_FRONTIER_DIAGNOSTIC_ONE_ADDON')) }}
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error
