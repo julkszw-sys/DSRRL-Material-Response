@@ -26,6 +26,7 @@ HEADER_ADD = """#if defined(DSRRL_V224_EXACT_NONMETAL_T12_RESOURCE_JOIN)
     // entry. A successful join requires the *underlying* resource to already
     // exist in the SHA256-authenticated native BC6H texture registry.
     struct native_resource_endpoint_v224 {
+        std::uint64_t view_key = 0u;
         std::uint64_t resource_key = 0u;
         std::uint32_t srv_dimension = 0u;
         std::uint32_t srv_format = 0u;
@@ -138,6 +139,7 @@ bool envspec_resource_runtime::prepare_exact_native_resource_join_v224(
 
         const auto view_key = static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(view));
+        observed.view_key = view_key;
         std::lock_guard<std::mutex> lock(g_mutex);
         const auto by_view = g_resource_by_view.find(view_key);
         observed.view_registered = by_view != g_resource_by_view.end();
@@ -274,7 +276,7 @@ DRAW_ADD = """#if defined(DSRRL_V224_EXACT_NONMETAL_T12_RESOURCE_JOIN)
                 static_cast<unsigned>(material.material_slot),
                 static_cast<unsigned>(env_semantics.envspc_slot),
                 static_cast<unsigned long long>(
-                    resource_diag.a.resource_key),
+                    resource_diag.a.view_key),
                 static_cast<unsigned long long>(
                     resource_diag.a.resource_key),
                 resource_diag.a.view_registered ? 1u : 0u,
