@@ -96,44 +96,7 @@ void release_cache() noexcept'''
     set.device = native_device;
     set.device->AddRef();
     set.logical_hash =
-        logical_hash;
-
-    if (spec_member) {
-        const auto loaded =
-            safe_load_sidecar(
-                native_device,
-                asset_class::specular,
-                logical_name,
-                logical_hash);
-        account_load(loaded.status);
-        set.specular = loaded.view;
-    }
-
-    if (generated::
-        diffuse_target_hash_allowed_v12(
-            logical_hash)) {
-        const auto loaded =
-            safe_load_sidecar(
-                native_device,
-                asset_class::diffuse,
-                logical_name,
-                logical_hash);
-        account_load(loaded.status);
-        set.diffuse = loaded.view;
-    }
-
-    if (generated::
-        normal_target_hash_allowed_v12(
-            logical_hash)) {
-        const auto loaded =
-            safe_load_sidecar(
-                native_device,
-                asset_class::normal,
-                logical_name,
-                logical_hash);
-        account_load(loaded.status);
-        set.normal = loaded.view;
-    }''',
+        logical_hash;''',
 '''    companion_set set{};
     set.device = native_device;
     set.device->AddRef();
@@ -142,7 +105,7 @@ void release_cache() noexcept'''
         set.exact_logical_name = logical_name;
     } catch (...) {
         release_set(set);
-        return; // fail-open; never remove the resource hook
+        return;
     }
 
     const bool need_diffuse =
@@ -160,8 +123,7 @@ void release_cache() noexcept'''
         for (auto it = span.first;
              it != span.second;
              ++it) {
-            const auto found =
-                g_cache.find(it->second);
+            const auto found = g_cache.find(it->second);
             if (found == g_cache.end())
                 continue;
             const auto &candidate = found->second;
@@ -181,8 +143,6 @@ void release_cache() noexcept'''
                         need_normal
                     }))
                 continue;
-
-            // AddRef cannot invoke destroy_resource_view, unlike Release.
             if (spec_member) {
                 set.specular = candidate.specular;
                 set.specular->AddRef();
@@ -209,41 +169,18 @@ void release_cache() noexcept'''
         if (need_normal)
             account_load(load_status::ready);
     } else {
-        // Cold DDS path, SHA attestations, formats, and RGB transport
-        // remain identical to V229. Never synthesize missing sidecars.
-        if (spec_member) {
-            const auto loaded =
-                safe_load_sidecar(
-                    native_device,
-                    asset_class::specular,
-                    logical_name,
-                    logical_hash);
-            account_load(loaded.status);
-            set.specular = loaded.view;
-        }
-        if (need_diffuse) {
-            const auto loaded =
-                safe_load_sidecar(
-                    native_device,
-                    asset_class::diffuse,
-                    logical_name,
-                    logical_hash);
-            account_load(loaded.status);
-            set.diffuse = loaded.view;
-        }
-        if (need_normal) {
-            const auto loaded =
-                safe_load_sidecar(
-                    native_device,
-                    asset_class::normal,
-                    logical_name,
-                    logical_hash);
-            account_load(loaded.status);
-            set.normal = loaded.view;
-        }
-    }'''
-),
+        // The original generated full-1295 instrumentation, SHA checks,
+        // D3D11 creation, and material routes stay byte-identical below.
+'''),
 (
+'''    const auto key =
+        static_cast<std::uint64_t>(
+            view.handle);''',
+'''    }
+
+    const auto key =
+        static_cast<std::uint64_t>(
+            view.handle);''')(
 '''    bool had_old = false;
     bool accepted = false;
 
