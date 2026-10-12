@@ -1,0 +1,57 @@
+name: V245 Exact PTDE Source Record Rearm — No QPC
+on:
+  push:
+    branches:
+      - agent/v245-lerp-exact-source-record-rearm-fix-20261012
+  workflow_dispatch:
+jobs:
+  verified-source-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify R19 shader, producer original and material/CB/resource/draw inputs are unchanged
+        run: |
+          git diff --exit-code 43549cb0123f967f47058e14c5105ff26a7aaf69 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/tests renderer-core/data
+      - name: In-memory V236 predecessor plus V245 transport-source oracle
+        run: |
+          python3 renderer-core/tools/test_v245_exact_source_record_rearm.py
+  native-negative-positive-control:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build reproducible R43-descended single addon and prove baseline-fail, repaired-pass
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v245_exact_source_record_rearm.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'V245 native dual controls failed' }
+          git diff --exit-code -- renderer-core/src/runtime/pmetal_producer_state.cpp renderer-core/tests/pmetal_producer_state_tests.cpp
+          if ($LASTEXITCODE -ne 0) { throw 'V245 source restore contract violated' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V245_EXACT_SOURCE_RECORD_REARM_DIAGNOSTIC_ONLY
+          path: DSRRL_V245_EXACT_LERP_SOURCE_RECORD_REARM_V237_NOQPC.addon64
+          if-no-files-found: error
