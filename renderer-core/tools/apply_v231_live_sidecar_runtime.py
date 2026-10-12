@@ -180,7 +180,8 @@ void release_cache() noexcept'''
 
     const auto key =
         static_cast<std::uint64_t>(
-            view.handle);''')(
+            view.handle);'''),
+(
 '''    bool had_old = false;
     bool accepted = false;
 
