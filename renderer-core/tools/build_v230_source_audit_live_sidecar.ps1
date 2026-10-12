@@ -109,5 +109,5 @@ python renderer-core/tools/apply_v227_lerp_pmetal_nonmetal_parity.py
 if ($LASTEXITCODE -ne 0) { throw 'V227 final native source mismatch' }
 python renderer-core/tools/apply_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 final native source mismatch' }
-if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'const std::filesystem::path &process_dir() noexcept' -Quiet)) { throw 'V230 safe filesystem optimization missing' }
+if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -SimpleMatch -Pattern 'const std::filesystem::path &process_dir() noexcept' -Quiet)) { throw 'V230 safe filesystem optimization missing' }
 Write-Host 'V230_ONE_ADDON_SAFE_DDS_IO_WITH_PROTECTED_HOOKS'
