@@ -909,6 +909,19 @@ if(DSRRL_V203_FULL_SIDECAR_1295)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_FULL_SIDECAR_1295>)
 endif()
 
+if(DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY)
+    if(NOT DSRRL_V203_FULL_SIDECAR_1295 OR
+       NOT DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG OR
+       NOT DSRRL_V219_EXACT_NONMETAL_GATE_TRACE OR
+       NOT DSRRL_V220_NONMETAL_SOURCE_JOIN)
+        message(FATAL_ERROR
+          "V221 exact nonmetal probe context retry requires V203/V219/V220")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY>)
+endif()
+
 if(DSRRL_V219_EXACT_NONMETAL_GATE_TRACE)
     target_compile_definitions(
         dsrrl_renderer_core_integrated PRIVATE

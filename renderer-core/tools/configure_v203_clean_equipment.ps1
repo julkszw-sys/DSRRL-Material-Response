@@ -78,6 +78,22 @@ if ($env:DSRRL_V220_NONMETAL_SOURCE_JOIN -eq "ON") {
     python renderer-core/tools/apply_v220_nonmetal_source_identity_join.py
     if ($LASTEXITCODE -ne 0) { throw "V220 source postcondition failed" }
 }
+if ($env:DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY -eq "ON") {
+    foreach ($name in @("DSRRL_V203_EQUIPMENT_ENVSPEC36",
+                       "DSRRL_V203_FULL_SIDECAR_SPECULAR",
+                       "DSRRL_V219_EXACT_NONMETAL_GATE_TRACE",
+                       "DSRRL_V220_NONMETAL_SOURCE_JOIN")) {
+        if ([Environment]::GetEnvironmentVariable($name) -ne "ON") {
+            throw "V221 requires exact V219/V220 source and EnvSpec sidecar: $name"
+        }
+    }
+    python renderer-core/tools/test_v221_probe_context_retry.py
+    if ($LASTEXITCODE -ne 0) { throw "V221 nonmetal probe regression oracle failed" }
+    python renderer-core/tools/apply_v221_exact_nonmetal_probe_context_retry.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "V221 resource transport overlay failed" }
+    python renderer-core/tools/apply_v221_exact_nonmetal_probe_context_retry.py
+    if ($LASTEXITCODE -ne 0) { throw "V221 resource transport overlay postcondition failed" }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -158,6 +174,10 @@ if ($env:DSRRL_V219_EXACT_NONMETAL_GATE_TRACE -eq "ON") {
 if ($env:DSRRL_V220_NONMETAL_SOURCE_JOIN -eq "ON") {
     $flags += "-DDSRRL_V220_NONMETAL_SOURCE_JOIN=ON"
     Write-Host "DSRRL V220: authenticated nonmetal source key transport; P_Metal R43 unchanged; pixel=OPEN"
+}
+if ($env:DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY -eq "ON") {
+    $flags += "-DDSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY=ON"
+    Write-Host "DSRRL V221: exact nonmetal probe live-context retry, preserves full SHA probe lookup and P_Metal"
 }
 if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {
