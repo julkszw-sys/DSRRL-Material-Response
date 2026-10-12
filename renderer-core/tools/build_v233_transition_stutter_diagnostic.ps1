@@ -33,8 +33,9 @@ try {
     if (!(Select-String -Path $cache -SimpleMatch -Pattern 'DSRRL_STUTTER_HITCH_TRACE:BOOL=ON' -Quiet)) {
         throw 'V233 bounded per-frame hitch trace compile opt-in missing'
     }
-    if (!(Test-Path 'DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64')) {
-        throw 'V233 single addon missing'
+    $native = @(Get-ChildItem build -Recurse -Filter *.addon64)
+    if ($native.Count -ne 1) {
+        throw "V233 expected exactly one native addon before verification; found $($native.Count)"
     }
     Write-Host 'V233_PRESENT_PROFILE_AND_HITCH_TRACE_INSTRUMENTATION_ONLY'
     Write-Host 'V233_STAGES_PRESENT_FLVER_SHA_DDS_MTD_REGISTRY_CREATE_TEXTURE2D'
