@@ -1,0 +1,106 @@
+name: V246 HemEnvLerp Effective Generated Build Bisect
+on:
+  push:
+    branches: [agent/v246-hemenvlerp-compile-identity-bisect]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-effective-compiler-input:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: known_good_v203
+            ref: 6a73033f6275f88487effeb1e34bbbdd7a6a3a88
+          - label: v245_pixel_fail
+            ref: agent/v246-hemenvlerp-compile-identity-bisect
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - name: Checkout exact renderer under comparison
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          fetch-depth: 0
+      - name: Checkout read-only forensic tool
+        uses: actions/checkout@v4
+        with:
+          ref: agent/v246-hemenvlerp-compile-identity-bisect
+          path: _v246_tools
+      - name: Checkout pinned ReShade
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build owner-working donor or failed V245
+        shell: pwsh
+        run: |
+          if ('${{ matrix.label }}' -eq 'known_good_v203') {
+            ./renderer-core/tools/configure_v202_production_zero_hybrid.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'V246 donor native build failed' }
+          } else {
+            ./renderer-core/tools/build_v245_exact_source_record_rearm.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'V246 failed-build reconstruction failed' }
+            # The V245 builder restores generated source after compile.
+            # Replay deterministic V236/V245 ONLY for faithful source snapshot.
+            python renderer-core/tools/apply_v236_slot_sync.py --apply
+            if ($LASTEXITCODE -ne 0) { throw 'V246 V236 snapshot reconstruction failed' }
+            python renderer-core/tools/apply_v245_exact_source_record_rearm.py --apply
+            if ($LASTEXITCODE -ne 0) { throw 'V246 V245 snapshot reconstruction failed' }
+          }
+          python _v246_tools/renderer-core/tools/v246_effective_build_pair.py capture --label '${{ matrix.label }}'
+          if ($LASTEXITCODE -ne 0) { throw 'V246 effective source snapshot failed' }
+          $integrated = @(Get-ChildItem -Path build -Recurse -Filter '*.addon64')
+          if ($integrated.Count -ne 1) { throw "Expected 1 integrated addon under build, got $($integrated.Count)" }
+      - name: Upload actual effective compiled sources and flags
+        uses: actions/upload-artifact@v4
+        with:
+          name: v246_effective_${{ matrix.label }}
+          path: v246_capture/${{ matrix.label }}/
+          if-no-files-found: error
+      - name: Upload exact single native addon for lineage inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: v246_native_${{ matrix.label }}
+          path: build/Release/*.addon64
+          if-no-files-found: error
+  full-generated-diff:
+    needs: native-effective-compiler-input
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: v246_effective_known_good_v203
+          path: v246_compare/known_good_v203
+      - uses: actions/download-artifact@v4
+        with:
+          name: v246_effective_v245_pixel_fail
+          path: v246_compare/v245_pixel_fail
+      - name: Compare effective physical-cut, PTDE Lerp shader, producer, resources and compile flags
+        run: python3 renderer-core/tools/v246_effective_build_pair.py compare
+      - name: Report exact source and flag differences without pixel promotion
+        run: |
+          cat v246_report/v246_summary.md >> "$GITHUB_STEP_SUMMARY"
+          cat v246_report/v246_effective_compile_diff.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V246_EFFECTIVE_CODEPATH_FIRST_DIFFERENCE_REPORT
+          path: v246_report/
+          if-no-files-found: error
