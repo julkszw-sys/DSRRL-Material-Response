@@ -65,26 +65,11 @@ if ($generated.Split([string[]]@($cmakeAnchor),[StringSplitOptions]::None).Count
 $lateOverlay = @'
 $path='renderer-core/src/runtime/material_resource_draw_runtime.cpp'
 $text=Get-Content -LiteralPath $path -Raw
-$old=@"
-std::filesystem::path process_dir()
-{
-    std::wstring buffer(32768, L'\0');
-
-    const DWORD n =
-        GetModuleFileNameW(
-            nullptr,
-            buffer.data(),
-            static_cast<DWORD>(buffer.size()));
-
-    if (n == 0u ||
-        n >= buffer.size())
-        return {};
-
-    buffer.resize(n);
-    return std::filesystem::path(
-        buffer).parent_path();
+$begin=$text.IndexOf('std::filesystem::path process_dir()')
+$end=$text.IndexOf('const wchar_t *class_dir(',$begin)
+if ($begin -lt 0 -or $end -le $begin -or $text.LastIndexOf('std::filesystem::path process_dir()') -ne $begin) {
+ throw 'V230 immutable process-dir signature missing'
 }
-"@
 $new=@"
 const std::filesystem::path &process_dir() noexcept
 {
@@ -106,11 +91,11 @@ const std::filesystem::path &process_dir() noexcept
     return root;
 }
 "@
-if ($text.Split([string[]]@($old),[StringSplitOptions]::None).Count -ne 2) { throw 'V230 immutable game-root source mismatch' }
-$text=$text.Replace($old,$new)
-$fsold="        if (!std::filesystem::is_regular_file(path))`n            return {};`n`n"
-if ($text.Split([string[]]@($fsold),[StringSplitOptions]::None).Count -ne 2) { throw 'V230 redundant DDS existence check source mismatch' }
-$text=$text.Replace($fsold,'')
+$text=$text.Substring(0,$begin)+$new+"`n"+$text.Substring($end)
+$fsPattern='(?m)^ {8}if \(!std::filesystem::is_regular_file\(path\)\)\r?\n {12}return \{\};\r?\n\r?\n'
+if ([regex]::Matches($text,$fsPattern).Count -ne 1) { throw 'V230 DDS redundant-file-existence check missing' }
+$text=[regex]::Replace($text,$fsPattern,'')
+if ($text.Split([string[]]@('    auto root = process_dir();'),[StringSplitOptions]::None).Count -ne 2) { throw 'V230 game-root single consumer mismatch' }
 $text=$text.Replace('    auto root = process_dir();','    const auto &root = process_dir();')
 [IO.File]::WriteAllText((Join-Path (Get-Location) $path),$text)
 Write-Host 'V230_POST_V224_STOCK_RESOURCE_HOOK_PRESERVED_GAME_ROOT_CACHE_AND_SINGLE_OPEN'
