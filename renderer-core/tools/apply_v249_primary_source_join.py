@@ -31,100 +31,91 @@ FLVER_NEW = """  telemetry::hot_count(g_selector_events);
   
 #ifndef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE"""
 
-SOURCE_OLD = """    if (pmetal_producer_state_latest(
-            material,
-            epoch,
-            out)) {
-        telemetry::hot_count(
-            g_consumer_ok);
-        return true;
+# The V220 generated source includes a first-choice *nonmetal* join.
+# It previously invoked the lookup even for P_Metal, so exact P_Metal
+# bypassed any V249 primary-versus-hook comparison on that fast path.
+NONMETAL_OLD = """    const bool v220_nonmetal_join =
+        pmetal_producer_state_latest("""
+NONMETAL_NEW = """    const bool v220_nonmetal_join =
+        sidecar_20261010::exact_nonmetal_material(material) &&
+        pmetal_producer_state_latest("""
+
+# Insert AFTER V223's independent nonmetal fallback, BEFORE V203's strict
+# route345 guard + original latest_hook_source(out). Do not remove either.
+SOURCE_OLD = """#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+    // Unkeyed R43 latest_hook_source may only serve original exact P_Metal."""
+SOURCE_NEW = """    // V249: exact original P_Metal only. Nonmetal V220/V223 paths above
+    // remain separate. Compare the synchronized material/epoch record with
+    // the owner-proven retail LightBank packer before preferring it.
+    if (exact_pmetal_material_selection(material)) {
+        pmetal_envspec_source main_source{};
+        const bool main_ready =
+            pmetal_producer_state_latest(
+                material, epoch, main_source);
+        pmetal_envspec_source hook_source{};
+        const bool hook_ready =
+            latest_hook_source(hook_source);
+
+        const bool source_equal =
+            main_ready && hook_ready &&
+            same_hook_source_payload(main_source, hook_source) &&
+            main_source.phn_k135 == hook_source.phn_k135 &&
+            main_source.phn_k135_valid == hook_source.phn_k135_valid;
+        // Stage 0 = both equal; 1 = mismatch; 2 = main only;
+        // 3 = hook only; 4 = neither. First 8 of each category only.
+        const unsigned stage =
+            main_ready
+                ? hook_ready ? (source_equal ? 0u : 1u) : 2u
+                : hook_ready ? 3u : 4u;
+        static std::atomic<std::uint32_t> trace_by_stage[5]{};
+        if (trace_by_stage[stage].fetch_add(
+                1u, std::memory_order_relaxed) < 8u) {
+            char detail[720]{};
+            std::snprintf(
+                detail, sizeof(detail),
+                "[DSRRL V249 PMETAL SOURCE JOIN] route=%u slot=%u "
+                "stage=%u main=%u hook=%u exact_payload=%u "
+                "main_beta=%.9g hook_beta=%.9g "
+                "main_bank=%016llx/%016llx hook_bank=%016llx/%016llx "
+                "main_row=%u/%u hook_row=%u/%u main_generation=%llu "
+                "hook_generation=%llu tid=%lu pixel=OPEN",
+                static_cast<unsigned>(material.route_index),
+                static_cast<unsigned>(material.material_slot),
+                stage,
+                main_ready ? 1u : 0u,
+                hook_ready ? 1u : 0u,
+                source_equal ? 1u : 0u,
+                static_cast<double>(main_source.beta),
+                static_cast<double>(hook_source.beta),
+                static_cast<unsigned long long>(main_source.bank_signature_a),
+                static_cast<unsigned long long>(main_source.bank_signature_b),
+                static_cast<unsigned long long>(hook_source.bank_signature_a),
+                static_cast<unsigned long long>(hook_source.bank_signature_b),
+                static_cast<unsigned>(main_source.row_id_a),
+                static_cast<unsigned>(main_source.row_id_b),
+                static_cast<unsigned>(hook_source.row_id_a),
+                static_cast<unsigned>(hook_source.row_id_b),
+                static_cast<unsigned long long>(main_source.generation),
+                static_cast<unsigned long long>(hook_source.generation),
+                static_cast<unsigned long>(GetCurrentThreadId()));
+            reshade::log::message(reshade::log::level::info, detail);
+        }
+        if (source_equal || (main_ready && !hook_ready)) {
+            out = main_source;
+            telemetry::hot_count(g_consumer_ok);
+            return true;
+        }
+        // A mismatching main record has no authority to override the
+        // proven hook signal. This is fail-open within the PTDE bridge.
+        if (hook_ready) {
+            out = hook_source;
+            telemetry::hot_count(g_consumer_ok);
+            return true;
+        }
     }
 
-    // Narrow fallback carrier recovered from the attested retail LightBank
-    // single/blend packers (V13 semantic cut). It is consumed only by an
-    // already-authenticated exact P_Metal draw. The retail packer is a state
-    // producer: retain its latest generation until the next exact source
-    // update, matching the validated V13 lifetime without exposing it to U/L.
-    if (latest_hook_source(out)) {
-        telemetry::hot_count(
-            g_consumer_ok);
-        return true;
-    }"""
-SOURCE_NEW = """    // V249 exact P_Metal producer/hook comparison. The FLVER selector
-    // publication must NEVER silently override an unmatched retail
-    // LightBank source. This is a positive-control transport repair,
-    // not an assumption that cache equality implies PTDE pixel equality.
-    pmetal_envspec_source main_source{};
-    const bool main_ready =
-        pmetal_producer_state_latest(material, epoch, main_source);
-    pmetal_envspec_source hook_source{};
-    const bool hook_ready =
-        latest_hook_source(hook_source);
-
-    const bool source_equal =
-        main_ready && hook_ready &&
-        same_hook_source_payload(main_source, hook_source) &&
-        main_source.phn_k135 == hook_source.phn_k135 &&
-        main_source.phn_k135_valid == hook_source.phn_k135_valid;
-
-    // Bounded transition observations. Only route 345 P_Metal reaches
-    // this branch. No QPC, disk IO, GPU readback, D3D mutation or per-draw
-    // string construction after the first eight samples per outcome.
-    const unsigned stage =
-        main_ready
-            ? hook_ready
-                ? source_equal ? 0u : 1u
-                : 2u
-            : hook_ready ? 3u : 4u;
-    static std::atomic<std::uint32_t> trace_by_stage[5]{};
-    if (trace_by_stage[stage].fetch_add(
-            1u, std::memory_order_relaxed) < 8u) {
-        char detail[720]{};
-        std::snprintf(
-            detail, sizeof(detail),
-            "[DSRRL V249 PMETAL SOURCE JOIN] route=%u slot=%u "
-            "stage=%u main=%u hook=%u exact_payload=%u "
-            "main_beta=%.9g hook_beta=%.9g "
-            "main_bank=%016llx/%016llx hook_bank=%016llx/%016llx "
-            "main_row=%u/%u hook_row=%u/%u main_generation=%llu "
-            "hook_generation=%llu tid=%lu pixel=OPEN",
-            static_cast<unsigned>(material.route_index),
-            static_cast<unsigned>(material.material_slot),
-            stage,
-            main_ready ? 1u : 0u,
-            hook_ready ? 1u : 0u,
-            source_equal ? 1u : 0u,
-            static_cast<double>(main_source.beta),
-            static_cast<double>(hook_source.beta),
-            static_cast<unsigned long long>(main_source.bank_signature_a),
-            static_cast<unsigned long long>(main_source.bank_signature_b),
-            static_cast<unsigned long long>(hook_source.bank_signature_a),
-            static_cast<unsigned long long>(hook_source.bank_signature_b),
-            static_cast<unsigned>(main_source.row_id_a),
-            static_cast<unsigned>(main_source.row_id_b),
-            static_cast<unsigned>(hook_source.row_id_a),
-            static_cast<unsigned>(hook_source.row_id_b),
-            static_cast<unsigned long long>(main_source.generation),
-            static_cast<unsigned long long>(hook_source.generation),
-            static_cast<unsigned long>(GetCurrentThreadId()));
-        reshade::log::message(
-            reshade::log::level::info, detail);
-    }
-
-    if (source_equal || (main_ready && !hook_ready)) {
-        out = main_source;
-        telemetry::hot_count(g_consumer_ok);
-        return true;
-    }
-
-    // The original verified P_Metal hook wins on a semantic mismatch.
-    // A mismatch is evidence, not permission to substitute guessed
-    // main-channel data for an operator that already rendered properly.
-    if (hook_ready) {
-        out = hook_source;
-        telemetry::hot_count(g_consumer_ok);
-        return true;
-    }"""
+#if defined(DSRRL_V203_EQUIPMENT_ENVSPEC36_DIAG)
+    // Unkeyed R43 latest_hook_source may only serve original exact P_Metal."""
 
 def replace_exact(src: str, old: str, new: str, name: str) -> str:
     if src.count(new) == 1 and src.count(old) == 0:
@@ -142,15 +133,22 @@ def patch_flver(src: str) -> str:
     return patched
 
 def patch_source(src: str) -> str:
-    patched = replace_exact(src, SOURCE_OLD, SOURCE_NEW, "PMetal latest source")
+    patched = replace_exact(src, NONMETAL_OLD, NONMETAL_NEW,
+                            "V220 exact nonmetal-only first choice")
+    patched = replace_exact(patched, SOURCE_OLD, SOURCE_NEW,
+                            "PMetal guarded source comparison")
+    if patched.count("if (latest_hook_source(out)) {") != 1:
+        raise RuntimeError("V249 must keep original P_Metal hook fallback")
     if patched.count("    pmetal_producer_state_clear();") < 1:
-        raise RuntimeError("V249 exact P_Metal event must still invalidate TLS")
-    if patched.count("    pmetal_producer_state_begin(") != 1:
-        raise RuntimeError("V249 material-scoped begin missing")
-    if patched.count("    pmetal_producer_state_publish(") != 2:
-        raise RuntimeError("V249 exact selector publish paths missing")
+        raise RuntimeError("V249 exact P_Metal selector must invalidate TLS")
+    if patched.count("    pmetal_producer_state_begin(") < 1:
+        raise RuntimeError("V249 exact P_Metal begin missing")
+    if patched.count("    pmetal_producer_state_publish(") < 2:
+        raise RuntimeError("V249 exact source publication paths missing")
     if patched.count("same_hook_source_payload(main_source, hook_source)") != 1:
-        raise RuntimeError("V249 semantic equality guard lost")
+        raise RuntimeError("V249 semantic equality guard missing")
+    if patched.count("if (sidecar_20261010::exact_nonmetal_material(material))") < 1:
+        raise RuntimeError("V249 must preserve nonmetal gate")
     return patched
 
 def main() -> None:
