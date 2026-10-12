@@ -10,6 +10,37 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 src = (root / mod.SOURCE).read_text(encoding="utf-8")
 test = (root / mod.TEST).read_text(encoding="utf-8")
+
+# The tracked input is intentionally V236-free. Mimic the existing V236
+# per-slot locking overlay in memory, without writing production source.
+v236_rewrites = (
+    ("""    auto &slot = sync_slot_for(key);
+
+    // Invalidate before source resolution.""",
+     """    auto &slot = sync_slot_for(key);
+    std::lock_guard<std::mutex> lock(slot.mutex);
+
+    // Invalidate before source resolution."""),
+    ("""    auto &slot = sync_slot_for(key);
+
+    // Same exact material/source/epoch:""",
+     """    auto &slot = sync_slot_for(key);
+    std::lock_guard<std::mutex> lock(slot.mutex);
+
+    // Same exact material/source/epoch:"""),
+    ("""        return;
+    }
+
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    slot.valid.store(""",
+     """        return;
+    }
+
+    slot.valid.store("""),
+)
+for old, new in v236_rewrites:
+    assert src.count(old) == 1, "V236 preimage drift"
+    src = src.replace(old, new, 1)
 # Unit test and producer must be exact, idempotent overlays.
 patched = mod.patch_source(src)
 assert mod.patch_source(patched) == patched
