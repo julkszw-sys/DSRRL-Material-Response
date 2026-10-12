@@ -11,6 +11,8 @@ from pathlib import Path
 import argparse
 
 PATH=Path("renderer-core/src/runtime/envspec_resource_runtime.cpp")
+ANCHOR_INCLUDE="#include <cstdint>\n"
+NEW_INCLUDE="#include <cstdint>\n#include <cstdio>\n"
 ANCHOR_DECL="""void on_init_device(
     device *device_ptr)
 {
@@ -68,9 +70,9 @@ INSERT_BODY="""    // V241 A/B source-verified m12 transition (130 -> 40). Do th
 
 """+ANCHOR_BODY
 def patch(source: str, apply: bool=False)->str:
-    old=(source.count(ANCHOR_DECL)==1 and source.count(ANCHOR_BODY)==1
+    old=(source.count(ANCHOR_INCLUDE)==1 and NEW_INCLUDE not in source and source.count(ANCHOR_DECL)==1 and source.count(ANCHOR_BODY)==1
          and INSERT_BODY not in source and INSERT_DECL not in source)
-    new=(source.count(INSERT_DECL)==1 and source.count(INSERT_BODY)==1)
+    new=(source.count(NEW_INCLUDE)==1 and source.count(INSERT_DECL)==1 and source.count(INSERT_BODY)==1)
     if old==new: raise ValueError("V241 source anchors mismatched")
     for token in ("bool get_ptde_cube(", "bool get_ptde_envdiffuse_cube(",
                   "g_envdiffuse_pack_ready", "g_ptde_cubes.emplace(",
@@ -78,7 +80,7 @@ def patch(source: str, apply: bool=False)->str:
                   "g_snapshot_epoch.fetch_add(", "if (!ready && needs_cube) {"):
         if token not in source: raise ValueError("V241 guard missing "+token)
     if not apply or new: return source
-    return source.replace(ANCHOR_DECL,INSERT_DECL,1).replace(ANCHOR_BODY,INSERT_BODY,1)
+    return source.replace(ANCHOR_INCLUDE,NEW_INCLUDE,1).replace(ANCHOR_DECL,INSERT_DECL,1).replace(ANCHOR_BODY,INSERT_BODY,1)
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--apply",action="store_true")
