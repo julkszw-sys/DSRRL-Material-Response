@@ -37,8 +37,8 @@ class V233ConservativeLogAudit(unittest.TestCase):
         profiler = (ROOT / "renderer-core/include/dsrrl/runtime/stutter_profiler.hpp").read_text()
         wrapper = (ROOT / "renderer-core/tools/build_v233_transition_stutter_diagnostic.ps1").read_text()
         for flag in ("DSRRL_STUTTER_PROFILE", "DSRRL_STUTTER_HITCH_TRACE"):
-            self.assertIn('" -D'+flag+'=OFF"'.replace('" ','"'), config)
-            self.assertIn('" -D'+flag+'=ON"'.replace('" ','"'), wrapper)
+            self.assertIn(f'"-D{flag}=OFF"', config)
+            self.assertIn(f'" -D{flag}=ON"', wrapper)
         for marker in ("present_previous.exchange", "hitch_top_capacity = 8u",
                        "hitch_index(stage id)", "case stage::sidecar_load"):
             self.assertIn(marker, profiler)
