@@ -160,8 +160,15 @@ void release_cache() noexcept'''
         }
     }
     if (reused) {
-        g_live_companion_reuses.fetch_add(
-            1u, std::memory_order_relaxed);
+        const auto earlier_reuses =
+            g_live_companion_reuses.fetch_add(
+                1u, std::memory_order_relaxed);
+        if (earlier_reuses == 0u)
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL V231 LIVE SIDECAR REUSE] "
+                "first_exact_device_name_complete_class_hit=1 "
+                "cold_dds_bypassed=1 pixel=OPEN");
         if (spec_member)
             account_load(load_status::ready);
         if (need_diffuse)
