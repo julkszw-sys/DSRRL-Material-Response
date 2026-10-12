@@ -455,7 +455,7 @@ void release_cache_for_device(
                 erase_live_companion_index(
                     it->first,
                     it->second.logical_hash);
-                dead.push_back(it->second);
+                dead.push_back(std::move(it->second));
                 it = g_cache.erase(it);
                 changed = true;
             } else {
@@ -1434,7 +1434,7 @@ void on_init_resource_view(
                  found->second.exact_logical_name != logical_name)) {
                 // Same live native handle with a different exact name:
                 // quarantine regardless of FNV collisions.
-                old = found->second;
+                old = std::move(found->second);
                 erase_live_companion_index(
                     key, old.logical_hash);
                 g_cache.erase(found);
@@ -1442,7 +1442,7 @@ void on_init_resource_view(
                     key, native_device);
                 had_old = true;
             } else if (found != g_cache.end()) {
-                old = found->second;
+                old = std::move(found->second);
                 found->second = std::move(set);
                 had_old = true;
                 accepted = true;
@@ -1504,7 +1504,7 @@ void on_destroy_resource_view(
             g_cache.find(key);
 
         if (it != g_cache.end()) {
-            dead = it->second;
+            dead = std::move(it->second);
             erase_live_companion_index(
                 key, dead.logical_hash);
             g_cache.erase(it);
