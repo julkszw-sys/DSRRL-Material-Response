@@ -413,54 +413,39 @@ void release_cache_for_device(
     if (device == nullptr)
         return;
 
-    // Detach at most 64 COM-owned companions under the mutex, then Release
-    // outside it. A heap-allocated vector here can throw through noexcept
-    // during device teardown and terminate the host process.
-    constexpr std::size_t k_release_batch = 64u;
-    for (;;) {
-        std::array<companion_set, k_release_batch> dead{};
-        std::size_t count = 0u;
+    std::vector<companion_set> dead;
+
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+
         bool changed = false;
-
-        {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            for (auto it = g_cache.begin();
-                 it != g_cache.end() && count < dead.size();) {
-                if (it->second.device == device) {
-                    dead[count++] = it->second;
-                    it = g_cache.erase(it);
-                    changed = true;
-                } else {
-                    ++it;
-                }
+        for (auto it = g_cache.begin();
+             it != g_cache.end();) {
+            if (it->second.device == device) {
+                dead.push_back(it->second);
+                it = g_cache.erase(it);
+                changed = true;
+            } else {
+                ++it;
             }
-
-            if (count == 0u) {
-                // The final batch also removes lifetime quarantine records.
-                for (auto it = g_ambiguous_view_device.begin();
-                     it != g_ambiguous_view_device.end();) {
-                    if (it->second == device) {
-                        it = g_ambiguous_view_device.erase(it);
-                        changed = true;
-                    } else {
-                        ++it;
-                    }
-                }
-            }
-
-            // Invalidate before releasing any native SRV. TLS may retain an
-            // owned AddRef until its next lookup, never an unowned pointer.
-            if (changed)
-                invalidate_all_companion_epochs();
         }
 
-        // COM Release may re-enter resource-view callbacks.
-        for (std::size_t n = 0u; n < count; ++n)
-            release_set(dead[n]);
+        for (auto it = g_ambiguous_view_device.begin();
+             it != g_ambiguous_view_device.end();) {
+            if (it->second == device) {
+                it = g_ambiguous_view_device.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
 
-        if (count == 0u)
-            break;
+        if (changed)
+            invalidate_all_companion_epochs();
     }
+
+    for (auto &set : dead)
+        release_set(set);
 }
 
 std::filesystem::path process_dir()
@@ -1321,7 +1306,7 @@ void on_init_resource_view(
     bool had_old = false;
     bool accepted = false;
 
-    try {
+    {
         std::lock_guard<std::mutex> lock(
             g_mutex);
 
@@ -1332,14 +1317,16 @@ void on_init_resource_view(
 
             if (found != g_cache.end() &&
                 found->second.logical_hash != logical_hash) {
-                // A conflicting live native SRV must never acquire a new
-                // texture identity. Quarantine it through the destroy hook.
+                // The native handle is still live but now claims a different
+                // exact logical identity. Neither association is safe. Remove
+                // the previous record and quarantine this handle until its
+                // destroy_resource_view callback.
                 old = found->second;
                 g_cache.erase(found);
-                had_old = true;
                 g_ambiguous_view_device.emplace(
                     key,
                     native_device);
+                had_old = true;
             } else if (found != g_cache.end()) {
                 old = found->second;
                 found->second = set;
@@ -1354,19 +1341,6 @@ void on_init_resource_view(
 
             invalidate_companion_epoch(key);
         }
-    } catch (...) {
-        // unordered_map::emplace can allocate and throw after a previous
-        // record was detached. The callback must not unwind into ReShade,
-        // leak COM references, or expose a stale TLS identity after failure.
-        // An uncertain cache state is globally fail-open to stock DSR.
-        g_quarantined.store(
-            true, std::memory_order_release);
-        invalidate_all_companion_epochs();
-        if (had_old)
-            release_set(old);
-        release_set(set);
-        ++g_fail_open;
-        return;
     }
 
     if (accepted)
