@@ -1,0 +1,77 @@
+name: V227 Lerp Pmetal Nonmetal Readonly Parity
+
+on:
+  push:
+    branches:
+      - agent/v227-lerp-pmetal-nonmetal-parity-20261012
+  workflow_dispatch:
+
+jobs:
+  source-and-negative-oracles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: V227 read-only bounded Lerp parity and P_Metal source intact
+        run: |
+          python3 -m py_compile renderer-core/tools/apply_v227_lerp_pmetal_nonmetal_parity.py renderer-core/tools/test_v227_lerp_pmetal_nonmetal_parity.py
+          python3 renderer-core/tools/test_v227_lerp_pmetal_nonmetal_parity.py
+          python3 renderer-core/tools/test_v220_nonmetal_source_identity_join.py
+          python3 renderer-core/tools/test_v223_shared_lightbank_fallback.py
+          python3 renderer-core/tools/test_v224_native_probe_resource_join.py
+      - name: Protect old P_Metal draw and original asset manifests
+        run: |
+          git merge-base --is-ancestor c1f81671fd710185e8699ad7a2b565c6b0dc8906 HEAD
+          test ! -e renderer-core/data/spc25_v205/texture_identity_transport.cpp
+
+  addon-windows-native:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Verify retail MTD and material sidecar provenance
+        shell: pwsh
+        run: |
+          python renderer-core/tools/verify_retail_diffuse_mtd_provenance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Vanilla DSR raw MTD drift' }
+      - name: Build one addon with V227 bounded parity observation
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v227_lerp_parity.ps1
+      - name: Five native tests and source materialization integrity
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/verify_v203_clean_equipment.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native addon verification failed' }
+          python renderer-core/tools/apply_v227_lerp_pmetal_nonmetal_parity.py
+          if ($LASTEXITCODE -ne 0) { throw 'V227 compiled source not generated' }
+          if (!(Select-String -Path renderer-core/src/runtime/pmetal_env_source_runtime.cpp -Pattern 'bool latest_hook_source' -Quiet)) { throw 'Original LightBank source must remain' }
+          if (!(Select-String -Path renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Pattern 'V227 LERP PARITY' -Quiet)) { throw 'Missing bounded post-resource parity logger' }
+          if (!(Test-Path 'DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64')) { throw 'One addon missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V227_LERP_PMETAL_NONMETAL_PARITY_ONE_ADDON
+          path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
+          if-no-files-found: error
