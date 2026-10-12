@@ -122,6 +122,25 @@ if ($env:DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER -eq "ON") {
     python renderer-core/tools/apply_v222_probe_reject_frontier.py
     if ($LASTEXITCODE -ne 0) { throw "V222 exact probe frontier verification failed" }
 }
+if ($env:DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN -eq "ON") {
+    foreach ($name in @("DSRRL_V203_EQUIPMENT_ENVSPEC36",
+                       "DSRRL_V203_FULL_SIDECAR_SPECULAR",
+                       "DSRRL_V219_EXACT_NONMETAL_GATE_TRACE",
+                       "DSRRL_V220_NONMETAL_SOURCE_JOIN",
+                       "DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY",
+                       "DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER",
+                       "DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK")) {
+        if ([Environment]::GetEnvironmentVariable($name) -ne "ON") {
+            throw "V224 exact-native-resource join requires V223 lineage: $name"
+        }
+    }
+    python renderer-core/tools/test_v224_native_probe_resource_join.py
+    if ($LASTEXITCODE -ne 0) { throw "V224 exact-native-resource SHA oracle failed" }
+    python renderer-core/tools/apply_v224_native_probe_resource_join.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "V224 resource/header/draw overlay failed" }
+    python renderer-core/tools/apply_v224_native_probe_resource_join.py
+    if ($LASTEXITCODE -ne 0) { throw "V224 generated-resource postcondition failed" }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -214,6 +233,10 @@ if ($env:DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER -eq "ON") {
 if ($env:DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK -eq "ON") {
     $flags += "-DDSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK=ON"
     Write-Host "DSRRL V223: owner-requested exact nonmetal native LightBank fallback experiment; P_Metal untouched; pixel=OPEN"
+}
+if ($env:DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN -eq "ON") {
+    $flags += "-DDSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN=ON"
+    Write-Host "DSRRL V224: exact nonmetal t12 SHA-registered resource provenance and optional real PTDE PackedGI probe; unknowns fail-open"
 }
 if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {
