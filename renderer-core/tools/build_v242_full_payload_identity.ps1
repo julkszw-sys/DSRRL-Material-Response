@@ -19,8 +19,10 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'V242 V236 mutex patch failed' }
   python renderer-core/tools/apply_v242_full_payload_identity.py --apply
   if ($LASTEXITCODE -ne 0) { throw 'V242 payload patch failed' }
+  if (!([IO.File]::ReadAllText($prod)).Contains('a.envdiffuse_a == b.envdiffuse_a')) { throw 'V242 overlay absent before native build' }
   cmake --build build --config Release --target dsrrl_renderer_core_integrated
   if ($LASTEXITCODE -ne 0) { throw 'V242 integrated build failed' }
+  if (!([IO.File]::ReadAllText($prod)).Contains('a.envdiffuse_a == b.envdiffuse_a')) { throw 'V242 overlay overwritten by integrated native build' }
   cmake --build build/renderer-core-lib --config Release --target dsrrl_pmetal_producer_state_tests
   if ($LASTEXITCODE -ne 0) { throw 'V242 repaired test build failed' }
   & 'build/renderer-core-lib/Release/dsrrl_pmetal_producer_state_tests.exe'
