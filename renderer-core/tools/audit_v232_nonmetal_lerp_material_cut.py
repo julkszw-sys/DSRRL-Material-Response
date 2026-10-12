@@ -39,8 +39,15 @@ def parse_router(text: str, name: str) -> dict:
     lines = text.splitlines()
     matches = [i for i, line in enumerate(lines)
                if re.search(r'^\s*"' + re.escape(name) + r'",', line)]
-    if len(matches) != 1:
-        raise AssertionError(f"{name}: expected 1 exact raw-MTD row, got {len(matches)}")
+    if not matches:
+        raise AssertionError(f"{name}: raw-MTD entry missing")
+    # Multiple exact raw-MTD SHA variants may share the MTD name.
+    # Every variant must nevertheless carry identical material semantics.
+    first = lines[matches[0]+1:matches[0]+3]
+    for other in matches[1:]:
+        later = lines[other+1:other+3]
+        if len(later) != 2 or "}}, envspec_router_state::" not in later[0] or later[0].split("}},", 1)[-1] != first[0].split("}},", 1)[-1] or later[1].strip() != first[1].strip():
+            raise AssertionError(f"{name}: conflicting exact raw-MTD variant")
     i = matches[0]
     if i + 2 >= len(lines):
         raise AssertionError(f"{name}: truncated raw-MTD record")
@@ -62,6 +69,7 @@ def parse_router(text: str, name: str) -> dict:
         "c101_rgb": c101,
         "c102": float_bits(constants.group(4)),
         "c100_rgb": c100,
+        "raw_mtd_variants": len(matches),
     }
 
 def parse_manifest(text: str) -> list:
