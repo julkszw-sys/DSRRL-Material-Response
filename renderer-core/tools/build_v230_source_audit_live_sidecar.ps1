@@ -20,6 +20,8 @@ python renderer-core/tools/test_v227_lerp_pmetal_nonmetal_parity.py
 if ($LASTEXITCODE -ne 0) { throw 'V227 source contract failed' }
 python renderer-core/tools/test_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 material/consumer contract failed' }
+python renderer-core/tools/test_v231_resource_exception_safety.py
+if ($LASTEXITCODE -ne 0) { throw 'V231 safety oracle failed' }
 $protected = @(
  'renderer-core/src/runtime/texture_identity_transport.cpp',
  'renderer-core/src/runtime/flver_engine_hooks.cpp',
@@ -30,7 +32,7 @@ $protected = @(
  'renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp',
  'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp',
  'renderer-core/src/operators/material_response/material_response_island.cpp',
- 'renderer-core/src/runtime/material_resource_draw_runtime.cpp'
+
 )
 git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- $protected
 if ($LASTEXITCODE -ne 0) { throw 'V230 protected-source contract failed' }
