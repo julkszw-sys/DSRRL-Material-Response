@@ -6,17 +6,16 @@ material routing, R19 shader, state transaction or any release mode switch.
 from pathlib import Path
 import argparse
 PATH=Path("renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp")
-OLD="""#if defined(DSRRL_RELEASE_CLEANUP)
-    (void)bit;
-    (void)stage;
-    (void)material;
-    (void)decision;
-    (void)family;
-#else"""
-NEW="""#if defined(DSRRL_RELEASE_CLEANUP)
-    // V250: preserve full release cleanup except for the verified P_Metal
-    // LERP receiver draw that the owner observed as stock DSR. One record
-    // per actual prepare rejection stage; no effect on gate outcome.
+# The ACTUALLY materialized V249 runtime contains V219's nonmetal
+# logging guard. The outer release block is bypassed with V219 enabled;
+# the P_Metal return is inside this guard. Insert the exact witness
+# immediately before that return, leaving its nonmetal policy unchanged.
+OLD="""#if defined(DSRRL_V219_EXACT_NONMETAL_GATE_TRACE)
+    // Keep original P_Metal clean and do not spam world/unknown receivers."""
+NEW="""#if defined(DSRRL_V219_EXACT_NONMETAL_GATE_TRACE)
+    // V250: isolated, bounded owner-authorized P_Metal LERP stage witness.
+    // V219's own route345 logger exclusion stays intact below. No gate
+    // decision, shader/material identity or state mutation is introduced.
     if ((decision.receiver_id == 33u || decision.receiver_id == 34u) &&
         decision.route_index == 345u &&
         material.valid && material.owner_tuple_exact &&
@@ -44,10 +43,11 @@ NEW="""#if defined(DSRRL_RELEASE_CLEANUP)
                 reshade::log::level::info, line);
         }
     }
-#else"""
+    // Keep original P_Metal clean and do not spam world/unknown receivers."""
+
 def patch(src:str)->str:
     if src.count(NEW)==1:return src
-    if src.count(OLD)!=1:raise RuntimeError("V250 release source preimage changed")
+    if src.count(OLD)!=1:raise RuntimeError("V250 V219 generated logger source preimage changed")
     if src.count("void log_prepare_stage_once(")!=1:
         raise RuntimeError("V250 logger target changed")
     updated=src.replace(OLD,NEW,1)
