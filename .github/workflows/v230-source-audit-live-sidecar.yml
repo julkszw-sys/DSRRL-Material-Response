@@ -84,7 +84,7 @@ jobs:
           if (!(Select-String -Path renderer-core/src/runtime/pmetal_env_source_runtime.cpp -Pattern 'bool latest_hook_source' -Quiet)) { throw 'Original LightBank source must remain' }
           if (!(Select-String -Path renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Pattern 'V227 LERP PARITY' -Quiet)) { throw 'Missing bounded post-resource parity logger' }
           if (!(Select-String -Path renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Pattern 'V229 GLOSS CUT' -Quiet)) { throw 'V229 material/consumer witness absent' }
-          if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'may_reuse_live_sidecar_v230' -Quiet)) { throw 'V230 source optimization absent' }
+          if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'process_dir() noexcept' -Quiet)) { throw 'V230 cached game root optimization absent' }
           if (!(Test-Path 'DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64')) { throw 'One addon missing' }
       - uses: actions/upload-artifact@v4
         if: always()
