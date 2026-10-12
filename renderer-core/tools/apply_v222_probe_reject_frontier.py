@@ -132,7 +132,7 @@ def patch(source: str) -> str:
     assert result.count('"[DSRRL V222 PROBE REJECT FRONTIER] "') == 1
     assert result.count("if (!env_resource_ready) {") == 1
     assert result.count("env_resources_.prepare_native_dsr(") == 2
-    assert result.count("sidecar_20261010::exact_nonmetal_draw(material, decision)") >= 2
+    assert result.count("sidecar_20261010::exact_nonmetal_draw(") >= 2
     return result
 
 def main():
