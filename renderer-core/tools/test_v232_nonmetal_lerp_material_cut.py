@@ -18,6 +18,9 @@ class LerpMaterialDomainContract(unittest.TestCase):
             self.assertEqual(domains[family]["c101_rgb"], [expected["c101"]]*3)
             self.assertEqual(domains[family]["c102"], expected["c102"])
             self.assertEqual(domains[family]["exact_owner_rows"], 12)
+        self.assertEqual(domains["P_DullLeather[DSB].mtd"]["raw_mtd_variants"], 2)
+        self.assertEqual(domains["P_Leather[DSB].mtd"]["raw_mtd_variants"], 1)
+        self.assertEqual(domains["P_Metal[DSB].mtd"]["raw_mtd_variants"], 1)
         self.assertEqual(len({(x["slot"],tuple(x["c101_rgb"]),x["c102"])
                               for x in domains.values()}), 3)
         self.assertEqual(result["PTDE_material_consumer_equivalence"], "OPEN")
@@ -38,9 +41,9 @@ class LerpMaterialDomainContract(unittest.TestCase):
             "envspec_router_state::present, 0u, false,",
             "envspec_router_state::present, 2u, false,", 1)
         self.assertNotEqual(row, row_mutated)
-        out = v232.parse_router(raw[:index]+row_mutated+raw[end:],
+        with self.assertRaises(AssertionError):
+            v232.parse_router(raw[:index]+row_mutated+raw[end:],
                                 "P_DullLeather[DSB].mtd")
-        self.assertNotEqual(out["slot"], v232.EXPECTED["P_DullLeather[DSB].mtd"]["slot"])
 
     def test_missing_or_duplicated_mtd_rejected(self):
         raw = v232.read(v232.ROUTER)
