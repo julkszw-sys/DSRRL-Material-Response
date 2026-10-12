@@ -87,6 +87,12 @@ jobs:
           if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'may_reuse_live_sidecar_v230' -Quiet)) { throw 'V230 source optimization absent' }
           if (!(Test-Path 'DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64')) { throw 'One addon missing' }
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: V230_POST_GENERATOR_SOURCE_FORENSIC
+          path: renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_V230_AUDITED_SIDECAR_LIVE_REUSE_ONE_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
