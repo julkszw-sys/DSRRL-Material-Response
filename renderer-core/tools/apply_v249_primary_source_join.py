@@ -118,7 +118,7 @@ SOURCE_NEW = """    // V249: exact original P_Metal only. Nonmetal V220/V223 pat
     // Unkeyed R43 latest_hook_source may only serve original exact P_Metal."""
 
 def replace_exact(src: str, old: str, new: str, name: str) -> str:
-    if src.count(new) == 1 and src.count(old) == 0:
+    if src.count(new) == 1:
         return src
     if src.count(old) != 1 or src.count(new) != 0:
         raise RuntimeError(f"V249 {name}: expected exactly one unpatched anchor")
