@@ -64,11 +64,11 @@ if ($generated.Split([string[]]@($cmakeAnchor),[StringSplitOptions]::None).Count
 }
 $lateOverlay = @'
 $patch = 'v230_live_companion_exact_source_delta.patch'
-git diff --no-ext-diff --unified=3 75ae33d71d6859ae21d7004b47b740f0a3cb2727 5772199e0ab41a8b88acee46b4f48447e545bda3 -- renderer-core/src/runtime/material_resource_draw_runtime.cpp | Out-File -LiteralPath $patch -Encoding utf8NoBOM
+git diff --no-ext-diff --unified=0 75ae33d71d6859ae21d7004b47b740f0a3cb2727 5772199e0ab41a8b88acee46b4f48447e545bda3 -- renderer-core/src/runtime/material_resource_draw_runtime.cpp | Out-File -LiteralPath $patch -Encoding utf8NoBOM
 if ($LASTEXITCODE -ne 0) { throw 'V230 exact source delta unavailable' }
-git apply --check --whitespace=nowarn $patch
+git apply --check --unidiff-zero --whitespace=nowarn $patch
 if ($LASTEXITCODE -ne 0) { throw 'V230 post-V224 input semantic drift' }
-git apply --whitespace=nowarn $patch
+git apply --unidiff-zero --whitespace=nowarn $patch
 if ($LASTEXITCODE -ne 0) { throw 'V230 performance delta not applied' }
 if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'may_reuse_live_sidecar_v230' -Quiet)) { throw 'V230 reused-SRV overlay missing' }
 if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'g_live_by_logical_hash' -Quiet)) { throw 'V230 live-only cache missing' }
