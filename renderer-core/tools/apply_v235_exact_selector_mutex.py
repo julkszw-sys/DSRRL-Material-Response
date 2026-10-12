@@ -77,6 +77,10 @@ def audit(text: str, apply: bool) -> str:
     is_old = OLD_SIGNATURE in text and OLD_CONSUMER in text
     if is_old == is_new:
         raise ValueError("V235 source anchor mismatch: must be exactly one of stock/V235")
+    if (text.count(NEW_CONSUMER) if is_new else text.count(OLD_CONSUMER)) != 1:
+        raise ValueError("V235 exact selector single consumer routing must remain unique")
+    if (text.count(NEW_SIGNATURE) if is_new else text.count(OLD_SIGNATURE)) != 1:
+        raise ValueError("V235 helper body not unique")
     if text.count("bool hook_producer_cache_lookup(") != 1:
         raise ValueError("V235 producer helper signature no longer unique")
     if text.count("void hook_producer_cache_publish_exact(") != 1:
