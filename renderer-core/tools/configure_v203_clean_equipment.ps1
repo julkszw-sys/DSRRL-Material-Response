@@ -94,6 +94,17 @@ if ($env:DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY -eq "ON") {
     python renderer-core/tools/apply_v221_exact_nonmetal_probe_context_retry.py
     if ($LASTEXITCODE -ne 0) { throw "V221 resource transport overlay postcondition failed" }
 }
+if ($env:DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER -eq "ON") {
+    if ($env:DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY -ne "ON") {
+        throw "V222 read-only frontier requires materialized exact V221"
+    }
+    python renderer-core/tools/test_v222_probe_reject_frontier.py
+    if ($LASTEXITCODE -ne 0) { throw "V222 exact probe frontier replay oracle failed" }
+    python renderer-core/tools/apply_v222_probe_reject_frontier.py --apply
+    if ($LASTEXITCODE -ne 0) { throw "V222 exact probe frontier apply failed" }
+    python renderer-core/tools/apply_v222_probe_reject_frontier.py
+    if ($LASTEXITCODE -ne 0) { throw "V222 exact probe frontier verification failed" }
+}
 $flags = @(
 "-DRESHADE_INCLUDE_DIR=$pwd/_reshade/include",
 "-DDSRRL_SOURCE_COMMIT=$commit",
@@ -178,6 +189,10 @@ if ($env:DSRRL_V220_NONMETAL_SOURCE_JOIN -eq "ON") {
 if ($env:DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY -eq "ON") {
     $flags += "-DDSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY=ON"
     Write-Host "DSRRL V221: exact nonmetal probe live-context retry, preserves full SHA probe lookup and P_Metal"
+}
+if ($env:DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER -eq "ON") {
+    $flags += "-DDSRRL_V222_EXACT_PROBE_REJECT_FRONTIER=ON"
+    Write-Host "DSRRL V222: read-only exact probe failure diagnostic; P_Metal untouched; pixel=OPEN"
 }
 if ($env:DSRRL_V206_NATIVE_T1_ADAPTER -eq "ON") {
     if ($env:DSRRL_V203_FULL_SIDECAR_SPECULAR -ne "ON") {
