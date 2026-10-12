@@ -1336,10 +1336,10 @@ void on_init_resource_view(
                 // texture identity. Quarantine it through the destroy hook.
                 old = found->second;
                 g_cache.erase(found);
+                had_old = true;
                 g_ambiguous_view_device.emplace(
                     key,
                     native_device);
-                had_old = true;
             } else if (found != g_cache.end()) {
                 old = found->second;
                 found->second = set;
