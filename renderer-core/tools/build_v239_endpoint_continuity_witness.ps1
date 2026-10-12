@@ -21,7 +21,7 @@ try {
       throw "V239 R43 QPC unexpectedly enabled: $flag"
     }
   }
-  $base = 'DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64'
+  $base = 'build/Release/DSRRL_Restored_Lighting_v2_0_2.addon64'
   if (!(Test-Path $base)) { throw 'V239 single addon missing' }
   $raw = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($base))
   if (!$raw.Contains('[DSRRL V239 ENDPOINT]')) { throw 'V239 endpoint witness missing in binary' }
