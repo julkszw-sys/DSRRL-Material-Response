@@ -126,7 +126,7 @@ def patch_flver(src: str) -> str:
     patched = replace_exact(src, FLVER_OLD, FLVER_NEW, "FLVER selector-entry")
     if patched.count("pmetal_env_source_selector_clear();") != 1:
         raise RuntimeError("V249 requires teardown clear to remain")
-    if patched.count("pmetal_env_source_selector_event(") != 1:
+    if patched.count("        pmetal_env_source_selector_event(") != 1:
         raise RuntimeError("V249 requires authentic exact P_Metal event")
     return patched
 
