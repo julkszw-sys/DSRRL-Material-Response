@@ -213,8 +213,14 @@ jobs:
           }
 
           if ($env:DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY -eq 'ON') {
-            python renderer-core/tools/apply_v221_exact_nonmetal_probe_context_retry.py
-            if ($LASTEXITCODE -ne 0) { throw 'V221 exact nonmetal probe retry not present in compiled generated source' }
+            # V222 inserts its failure-stage diagnostic inside V221's
+            # trailing fail-open block. Replaying V221's text replacement
+            # after V222 is no longer a valid postcondition; verify V221
+            # before V222 in configure_v203_clean_equipment.ps1 instead.
+            if ($env:DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER -ne 'ON') {
+              python renderer-core/tools/apply_v221_exact_nonmetal_probe_context_retry.py
+              if ($LASTEXITCODE -ne 0) { throw 'V221 exact nonmetal probe retry not present in compiled generated source' }
+            }
             if (!(Select-String -Path renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp -Pattern 'V221 PROBE JOIN' -Quiet)) { throw 'V221 resource observability missing' }
           }
 
