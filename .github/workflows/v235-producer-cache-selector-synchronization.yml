@@ -1,0 +1,67 @@
+name: V235 Exact Selector Cache Contention Isolation
+on:
+  push:
+    branches:
+      - agent/v235-producer-cache-selector-synchronization-20261012
+  workflow_dispatch:
+
+jobs:
+  exact-source-and-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Exact one-site selector-only source patch or fail closed
+        run: |
+          python3 -m py_compile renderer-core/tools/apply_v235_exact_selector_mutex.py renderer-core/tools/test_v235_exact_selector_mutex.py
+          python3 renderer-core/tools/test_v235_exact_selector_mutex.py
+      - name: Protected PTDE/DSR operators and production recipe remain unchanged
+        run: |
+          git diff --exit-code cfc200b8106369ef65c4070a22580a230e9e343a HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/data renderer-core/tools/configure_v203_clean_equipment.ps1 renderer-core/tools/build_v230_source_audit_live_sidecar.ps1 renderer-core/tools/build_v233_transition_stutter_diagnostic.ps1
+  native-instrumented-selector:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Test fail-closed exact source replacement contract
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v235_exact_selector_mutex.py
+          if ($LASTEXITCODE -ne 0) { throw 'V235 exact-source test failed' }
+      - name: Build and native-test isolated selector mutex scheduling variant
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v235_exact_selector_mutex.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'V235 native selector experiment failed' }
+          if (!(Test-Path DSRRL_V235_EXACT_SELECTOR_MUTEX_DIAGNOSTIC.addon64)) {
+            throw 'V235 addon not materialized'
+          }
+          git diff --exit-code -- renderer-core/tools/configure_v203_clean_equipment.ps1 renderer-core/tools/build_v233_transition_stutter_diagnostic.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Build recipe did not restore' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V235_EXACT_SELECTOR_CACHE_SYNCHRONIZATION_AB_NOT_RELEASE
+          path: DSRRL_V235_EXACT_SELECTOR_MUTEX_DIAGNOSTIC.addon64
+          if-no-files-found: error
