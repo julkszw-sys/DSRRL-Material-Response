@@ -1,9 +1,9 @@
-name: V230 Source Audit Exact Live Sidecar Reuse
+name: V231 Exception Safe Resource Teardown
 
 on:
   push:
     branches:
-      - agent/v230-source-audit-live-sidecar-dedupe-20261012
+      - agent/v231-exception-safe-resource-teardown-20261012
   workflow_dispatch:
 
 jobs:
@@ -24,7 +24,9 @@ jobs:
           python3 renderer-core/tools/test_v224_native_probe_resource_join.py
       - name: Protected resource-hook, shader, sidecar and lifetime source oracle
         run: |
-          git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- renderer-core/src/runtime/material_resource_draw_runtime.cpp renderer-core/src/runtime/texture_identity_transport.cpp renderer-core/src/runtime/flver_engine_hooks.cpp renderer-core/src/runtime/envspec_resource_runtime.cpp renderer-core/src/runtime/pmetal_env_source_runtime.cpp renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp renderer-core/integrated/integrated_addon.cpp renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp renderer-core/src/operators/material_response/material_response_island.cpp
+          git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- renderer-core/src/runtime/texture_identity_transport.cpp renderer-core/src/runtime/flver_engine_hooks.cpp renderer-core/src/runtime/envspec_resource_runtime.cpp renderer-core/src/runtime/pmetal_env_source_runtime.cpp renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp renderer-core/integrated/integrated_addon.cpp renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp renderer-core/src/operators/material_response/material_response_island.cpp
+      - name: V231 strict source scope and exception guards
+        run: python3 renderer-core/tools/test_v231_resource_exception_safety.py
       - name: Native exact sharing policy (device, full name, complete classes)
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -I renderer-core/include renderer-core/tests/live_sidecar_reuse_policy_v230_test.cpp -o /tmp/dsrrl_v230_live_companion_test
@@ -63,7 +65,7 @@ jobs:
       - name: Protected resource-hook and shader source integrity before build
         shell: pwsh
         run: |
-          git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- renderer-core/src/runtime/material_resource_draw_runtime.cpp renderer-core/src/runtime/texture_identity_transport.cpp renderer-core/src/runtime/flver_engine_hooks.cpp renderer-core/src/runtime/envspec_resource_runtime.cpp renderer-core/src/runtime/pmetal_env_source_runtime.cpp renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp renderer-core/integrated/integrated_addon.cpp renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp renderer-core/src/operators/material_response/material_response_island.cpp
+          git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- renderer-core/src/runtime/texture_identity_transport.cpp renderer-core/src/runtime/flver_engine_hooks.cpp renderer-core/src/runtime/envspec_resource_runtime.cpp renderer-core/src/runtime/pmetal_env_source_runtime.cpp renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp renderer-core/integrated/integrated_addon.cpp renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp renderer-core/src/operators/material_response/material_response_island.cpp
           if ($LASTEXITCODE -ne 0) { throw 'V230 protected source changed' }
       - name: Verify retail MTD and material sidecar provenance
         shell: pwsh
@@ -94,6 +96,6 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V230_AUDITED_SIDECAR_LIVE_REUSE_ONE_ADDON
+          name: DSRRL_V231_EXCEPTION_SAFE_RESOURCE_ONE_ADDON
           path: DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64
           if-no-files-found: error
