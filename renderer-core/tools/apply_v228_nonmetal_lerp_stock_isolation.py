@@ -16,12 +16,12 @@ ROOT=Path(__file__).resolve().parents[2]
 SOURCE=ROOT/"renderer-core/integrated/integrated_addon.cpp"
 ANCHOR="""    if (exact_pmetal_envspec) {
         if (!g_pmetal_envspec.prepare("""
-REPLACEMENT="""#if defined(DSRRL_V228_NONMETAL_LERP_STOCK_ISOLATION)
+REPLACEMENT="""    if (exact_pmetal_envspec) {
+#if defined(DSRRL_V228_NONMETAL_LERP_STOCK_ISOLATION)
     // A/B intervention: V227=unchanged full operator, V228=stock only for
     // exactly whitelisted *nonmetal* HemEnvLerp. P_Metal route345 is never
     // eligible. Return before generic MR branch to avoid partial hybrids.
     if (hemenvlerp_bound &&
-        exact_pmetal_envspec &&
         material.route_index != 345u) {
         static std::atomic<std::uint32_t> logged{0u};
         if (logged.fetch_add(1u, std::memory_order_relaxed) < 16u) {
@@ -43,8 +43,7 @@ REPLACEMENT="""#if defined(DSRRL_V228_NONMETAL_LERP_STOCK_ISOLATION)
         return false;
     }
 #endif
-
-""" + ANCHOR
+        if (!g_pmetal_envspec.prepare("""
 
 def patch(src: str) -> str:
     if src.count(REPLACEMENT) == 1:
@@ -55,7 +54,7 @@ def patch(src: str) -> str:
         raise RuntimeError("V228 exact material authority missing")
     if src.count("if (hemenvlerp_bound) {") < 1:
         raise RuntimeError("V228 independent generic MR branch drift")
-    if src.index(ANCHOR) > src.index("if (hemenvlerp_bound) {",src.index(ANCHOR)):
+    if src.index(ANCHOR) > src.index("    if (hemenvlerp_bound) {",src.index(ANCHOR)):
         raise RuntimeError("V228 must intervene before generic Lerp MR")
     return src.replace(ANCHOR,REPLACEMENT,1)
 
