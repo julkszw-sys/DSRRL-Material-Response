@@ -23,7 +23,7 @@ assert '#include "dsrrl/runtime/live_sidecar_reuse_policy_v230.hpp"' in after
 assert "may_reuse_live_sidecar_v230(" in after
 assert "g_live_by_logical_hash.clear()" in after
 assert "erase_live_companion_index(" in after
-assert "candidate.exact_logical_name" not in after  # in pure policy
+assert "candidate.exact_logical_name" in after  # passed to pure policy
 assert "if (reused)" in after
 assert "g_live_companion_reuses.fetch_add(" in after
 assert "safe_load_sidecar(" in after
