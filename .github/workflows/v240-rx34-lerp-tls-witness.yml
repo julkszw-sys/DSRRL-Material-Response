@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - run: |
           python3 renderer-core/tools/test_v240_rx34_tls_witness.py
           git diff --exit-code 643119b8b9c5c471fa395a7466c1c450923e2ea2 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/data
