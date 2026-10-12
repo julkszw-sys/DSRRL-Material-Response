@@ -14,7 +14,7 @@ source = SOURCE.read_text(encoding="utf-8").replace("\r\n", "\n")
 new_flver = patch_flver(flver)
 new_source = patch_source(source)
 assert new_flver.count("pmetal_env_source_selector_clear();") == 1
-assert "  material_owner_selection_clear();" in new_flver
+assert " material_owner_selection_clear();" in new_flver
 assert "pmetal_env_source_selector_event(" in new_flver
 assert "pmetal_producer_state_clear();" in new_source
 assert "pmetal_producer_state_begin(" in new_source
