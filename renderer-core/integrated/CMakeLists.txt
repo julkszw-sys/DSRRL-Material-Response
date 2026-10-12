@@ -909,6 +909,22 @@ if(DSRRL_V203_FULL_SIDECAR_1295)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V203_FULL_SIDECAR_1295>)
 endif()
 
+option(
+    DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK
+    "EXPERIMENTAL: P_Metal-equivalent native retail LightBank source fallback only for authenticated nonmetal materials after exact keyed miss"
+    OFF)
+if(DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK)
+    if(NOT DSRRL_V203_FULL_SIDECAR_1295 OR
+       NOT DSRRL_V220_NONMETAL_SOURCE_JOIN OR
+       NOT DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY OR
+       NOT DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER)
+        message(FATAL_ERROR "V223 shared LightBank requires exact V203/V220/V221/V222 experimental lineage")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK>)
+endif()
+
 if(DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER)
     if(NOT DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY OR
        NOT DSRRL_V220_NONMETAL_SOURCE_JOIN OR
