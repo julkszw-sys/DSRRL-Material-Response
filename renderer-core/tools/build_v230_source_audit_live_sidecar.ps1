@@ -31,7 +31,7 @@ $protected = @(
  'renderer-core/integrated/integrated_addon.cpp',
  'renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp',
  'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp',
- 'renderer-core/src/operators/material_response/material_response_island.cpp',
+ 'renderer-core/src/operators/material_response/material_response_island.cpp'
 
 )
 git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- $protected
