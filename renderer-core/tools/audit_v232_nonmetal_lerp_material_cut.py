@@ -97,6 +97,8 @@ def assert_operator_cut(lerp: str, draw: str, gate: str) -> None:
         "words[diffuse_weight_mul_word + 3u] = 0x00004001u",
         "words[workflow_mad_word + 3u] = 0x00004001u",
         "postmerge_gate_hits != 1u",
+        "words[post_coeff_word] = 0x00004001u",
+        "words[post_coeff_word + 1u] = 0x3f800000u",
     ]
     for marker in needles:
         if marker not in cut:
@@ -143,6 +145,8 @@ def census() -> dict:
         "material_domains": domains,
         "shared_R19_DXBC_materialworkflow_rewrite": True,
         "PTDE_material_consumer_equivalence": "OPEN",
+        "R19_postmerge_stock_SpecTex_alpha_gate": "FORCED_TO_ONE_IN_SHARED_SHADER",
+        "nonmetal_SpecTex_alpha_semantic_equivalence": "OPEN",
         "nonmetal_stable_pixel": "FAIL_OWNER_REPORTED_OVERGLOSS",
         "nonmetal_lerp_pixel": "FAIL_OWNER_REPORTED_LAMINATE",
         "P_Metal_lerp_control": "OWNER_REPORTED_PASS",
