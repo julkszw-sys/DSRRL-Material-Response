@@ -68,7 +68,7 @@ $text=Get-Content -LiteralPath $path -Raw
 $old=@"
 std::filesystem::path process_dir()
 {
-    std::wstring buffer(32768, L'\\0');
+    std::wstring buffer(32768, L'\0');
 
     const DWORD n =
         GetModuleFileNameW(
@@ -90,7 +90,7 @@ const std::filesystem::path &process_dir() noexcept
 {
     static const std::filesystem::path root = []() noexcept {
         try {
-            std::wstring buffer(32768, L'\\0');
+            std::wstring buffer(32768, L'\0');
             const DWORD n = GetModuleFileNameW(
                 nullptr, buffer.data(),
                 static_cast<DWORD>(buffer.size()));
@@ -125,4 +125,4 @@ if ($LASTEXITCODE -ne 0) { throw 'V227 final native source mismatch' }
 python renderer-core/tools/apply_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 final native source mismatch' }
 if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'const std::filesystem::path &process_dir() noexcept' -Quiet)) { throw 'V230 safe filesystem optimization missing' }
-Write-Host 'V230_ONE_ADDON_SIDECAR_LIVE_REUSE_WITH_PROTECTED_HOOKS'
+Write-Host 'V230_ONE_ADDON_SAFE_DDS_IO_WITH_PROTECTED_HOOKS'
