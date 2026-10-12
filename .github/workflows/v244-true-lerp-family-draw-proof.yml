@@ -1,0 +1,66 @@
+name: V244 True Bound HemEnvLerp Draw No-QPC
+on:
+  push:
+    branches:
+      - agent/v244-true-lerp-family-draw-proof-20261012
+  workflow_dispatch:
+jobs:
+  source-only-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify V243 source and feature selection are unchanged
+        run: |
+          git diff --exit-code 43549cb0123f967f47058e14c5105ff26a7aaf69 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/data renderer-core/tools/apply_v243_rx34_draw_proof.py renderer-core/tools/build_v237_v236_no_profiler.ps1 renderer-core/tools/build_v236_slot_sync.ps1
+      - name: Validate actual bound Lerp observer, 2 callbacks, and QPC-off invariant
+        run: |
+          python3 renderer-core/tools/test_v243_rx34_draw_proof.py
+          python3 renderer-core/tools/test_v244_true_lerp_draw_proof.py
+  native-single-addon-no-qpc:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Verify immutable v2.0.3/R43 operator path and read-only observer
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v244_true_lerp_draw_proof.py
+          if ($LASTEXITCODE -ne 0) { throw 'V244 source oracle failed' }
+      - name: Build V237 no-QPC and V244 real HemEnvLerp stage observer
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v244_true_lerp_draw_proof.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'V244 native build failed' }
+          if (!(Test-Path 'DSRRL_V244_TRUE_LERP_FAMILY_PROOF_V237_NOQPC.addon64')) {
+            throw 'V244 single addon missing'
+          }
+          git diff --exit-code -- renderer-core/integrated/integrated_addon.cpp renderer-core/tools/build_v233_transition_stutter_diagnostic.ps1 renderer-core/tools/build_v236_slot_sync.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'V244 source not restored' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V244_TRUE_LERP_NOQPC_NOT_RELEASE
+          path: DSRRL_V244_TRUE_LERP_FAMILY_PROOF_V237_NOQPC.addon64
+          if-no-files-found: error
