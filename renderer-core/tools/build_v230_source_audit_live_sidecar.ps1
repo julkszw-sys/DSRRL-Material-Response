@@ -63,15 +63,57 @@ if ($generated.Split([string[]]@($cmakeAnchor),[StringSplitOptions]::None).Count
  throw 'V230 post-V224 CMake anchor drift'
 }
 $lateOverlay = @'
-$patch = 'v230_live_companion_exact_source_delta.patch'
-git diff --no-ext-diff --unified=0 75ae33d71d6859ae21d7004b47b740f0a3cb2727 5772199e0ab41a8b88acee46b4f48447e545bda3 -- renderer-core/src/runtime/material_resource_draw_runtime.cpp | Out-File -LiteralPath $patch -Encoding utf8NoBOM
-if ($LASTEXITCODE -ne 0) { throw 'V230 exact source delta unavailable' }
-git apply --check --unidiff-zero --whitespace=nowarn $patch
-if ($LASTEXITCODE -ne 0) { throw 'V230 post-V224 input semantic drift' }
-git apply --unidiff-zero --whitespace=nowarn $patch
-if ($LASTEXITCODE -ne 0) { throw 'V230 performance delta not applied' }
-if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'may_reuse_live_sidecar_v230' -Quiet)) { throw 'V230 reused-SRV overlay missing' }
-if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'g_live_by_logical_hash' -Quiet)) { throw 'V230 live-only cache missing' }
+$path='renderer-core/src/runtime/material_resource_draw_runtime.cpp'
+$text=Get-Content -LiteralPath $path -Raw
+$old=@"
+std::filesystem::path process_dir()
+{
+    std::wstring buffer(32768, L'\\0');
+
+    const DWORD n =
+        GetModuleFileNameW(
+            nullptr,
+            buffer.data(),
+            static_cast<DWORD>(buffer.size()));
+
+    if (n == 0u ||
+        n >= buffer.size())
+        return {};
+
+    buffer.resize(n);
+    return std::filesystem::path(
+        buffer).parent_path();
+}
+"@
+$new=@"
+const std::filesystem::path &process_dir() noexcept
+{
+    static const std::filesystem::path root = []() noexcept {
+        try {
+            std::wstring buffer(32768, L'\\0');
+            const DWORD n = GetModuleFileNameW(
+                nullptr, buffer.data(),
+                static_cast<DWORD>(buffer.size()));
+            if (n == 0u || n >= buffer.size())
+                return std::filesystem::path{};
+            buffer.resize(n);
+            return std::filesystem::path(
+                buffer).parent_path();
+        } catch (...) {
+            return std::filesystem::path{};
+        }
+    }();
+    return root;
+}
+"@
+if ($text.Split([string[]]@($old),[StringSplitOptions]::None).Count -ne 2) { throw 'V230 immutable game-root source mismatch' }
+$text=$text.Replace($old,$new)
+$fsold="        if (!std::filesystem::is_regular_file(path))`n            return {};`n`n"
+if ($text.Split([string[]]@($fsold),[StringSplitOptions]::None).Count -ne 2) { throw 'V230 redundant DDS existence check source mismatch' }
+$text=$text.Replace($fsold,'')
+$text=$text.Replace('    auto root = process_dir();','    const auto &root = process_dir();')
+[IO.File]::WriteAllText((Join-Path (Get-Location) $path),$text)
+Write-Host 'V230_POST_V224_STOCK_RESOURCE_HOOK_PRESERVED_GAME_ROOT_CACHE_AND_SINGLE_OPEN'
 '@
 $generated = $generated.Replace($cmakeAnchor, $lateOverlay + [Environment]::NewLine + $cmakeAnchor)
 [IO.File]::WriteAllText((Join-Path (Get-Location) $path),$generated)
@@ -82,5 +124,5 @@ python renderer-core/tools/apply_v227_lerp_pmetal_nonmetal_parity.py
 if ($LASTEXITCODE -ne 0) { throw 'V227 final native source mismatch' }
 python renderer-core/tools/apply_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 final native source mismatch' }
-if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'may_reuse_live_sidecar_v230' -Quiet)) { throw 'V230 exact source performance overlay missing' }
+if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'const std::filesystem::path &process_dir() noexcept' -Quiet)) { throw 'V230 safe filesystem optimization missing' }
 Write-Host 'V230_ONE_ADDON_SIDECAR_LIVE_REUSE_WITH_PROTECTED_HOOKS'
