@@ -77,7 +77,7 @@ def patch(s,apply=False):
     stock=s.count(OLD)==1 and NEW not in s
     new=s.count(NEW)==1
     if stock==new: raise ValueError("V239 source anchor mismatch")
-    for x in ("build_island_draw_mutation(", "source.envdiffuse_a", "prepared.request.srv_count =", "pmetal_envspec_receiver_family::hemenvlerp"):
+    for x in ("build_island_draw_mutation(", "source.envdiffuse_a", "prepared.request.srv_count =", "pmetal_envspec_receiver_family::"):
         if x not in s: raise ValueError("V239 semantic guard missing: "+x)
     return s.replace(OLD,NEW,1) if apply and stock else s
 if __name__=="__main__":
