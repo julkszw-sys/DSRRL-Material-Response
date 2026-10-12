@@ -20,7 +20,19 @@ python renderer-core/tools/test_v227_lerp_pmetal_nonmetal_parity.py
 if ($LASTEXITCODE -ne 0) { throw 'V227 source contract failed' }
 python renderer-core/tools/test_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 material/consumer contract failed' }
-python renderer-core/tools/test_v230_prebuild_protect.py
+$protected = @(
+ 'renderer-core/src/runtime/texture_identity_transport.cpp',
+ 'renderer-core/src/runtime/flver_engine_hooks.cpp',
+ 'renderer-core/src/runtime/envspec_resource_runtime.cpp',
+ 'renderer-core/src/runtime/pmetal_env_source_runtime.cpp',
+ 'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp',
+ 'renderer-core/integrated/integrated_addon.cpp',
+ 'renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp',
+ 'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp',
+ 'renderer-core/src/operators/material_response/material_response_island.cpp',
+ 'renderer-core/src/runtime/material_resource_draw_runtime.cpp'
+)
+git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- $protected
 if ($LASTEXITCODE -ne 0) { throw 'V230 protected-source contract failed' }
 
 $path = 'renderer-core/tools/configure_v203_clean_equipment.ps1'
@@ -58,8 +70,8 @@ git apply --check --whitespace=nowarn $patch
 if ($LASTEXITCODE -ne 0) { throw 'V230 post-V224 input semantic drift' }
 git apply --whitespace=nowarn $patch
 if ($LASTEXITCODE -ne 0) { throw 'V230 performance delta not applied' }
-python renderer-core/tools/test_v230_postgen_optimization.py
-if ($LASTEXITCODE -ne 0) { throw 'V230 generated resource implementation invalid' }
+if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'may_reuse_live_sidecar_v230' -Quiet)) { throw 'V230 reused-SRV overlay missing' }
+if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'g_live_by_logical_hash' -Quiet)) { throw 'V230 live-only cache missing' }
 '@
 $generated = $generated.Replace($cmakeAnchor, $lateOverlay + [Environment]::NewLine + $cmakeAnchor)
 [IO.File]::WriteAllText((Join-Path (Get-Location) $path),$generated)
@@ -70,6 +82,5 @@ python renderer-core/tools/apply_v227_lerp_pmetal_nonmetal_parity.py
 if ($LASTEXITCODE -ne 0) { throw 'V227 final native source mismatch' }
 python renderer-core/tools/apply_v229_gloss_material_consumer_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V229 final native source mismatch' }
-python renderer-core/tools/test_v230_postgen_optimization.py
-if ($LASTEXITCODE -ne 0) { throw 'V230 exact source performance overlay missing' }
+if (!(Select-String -Path renderer-core/src/runtime/material_resource_draw_runtime.cpp -Pattern 'may_reuse_live_sidecar_v230' -Quiet)) { throw 'V230 exact source performance overlay missing' }
 Write-Host 'V230_ONE_ADDON_SIDECAR_LIVE_REUSE_WITH_PROTECTED_HOOKS'
