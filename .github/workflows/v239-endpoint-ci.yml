@@ -1,0 +1,11 @@
+name: V239 Endpoint Witness
+on:
+  workflow_dispatch:
+  push:
+    branches: [agent/v239-hemenv-lerp-continuity-audit]
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 renderer-core/tools/test_v239_endpoint_witness.py
