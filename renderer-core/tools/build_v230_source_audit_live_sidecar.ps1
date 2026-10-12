@@ -31,7 +31,8 @@ $protected = @(
  'renderer-core/integrated/integrated_addon.cpp',
  'renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp',
  'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp',
- 'renderer-core/src/operators/material_response/material_response_island.cpp'
+ 'renderer-core/src/operators/material_response/material_response_island.cpp',
+ 'renderer-core/src/runtime/material_resource_draw_runtime.cpp'
 
 )
 git diff --exit-code 75ae33d71d6859ae21d7004b47b740f0a3cb2727 HEAD -- $protected
@@ -101,6 +102,11 @@ if ($text.Split([string[]]@('    auto root = process_dir();'),[StringSplitOption
 $text=$text.Replace('    auto root = process_dir();','    const auto &root = process_dir();')
 [IO.File]::WriteAllText((Join-Path (Get-Location) $path),$text)
 Write-Host 'V230_POST_V224_STOCK_RESOURCE_HOOK_PRESERVED_GAME_ROOT_CACHE_AND_SINGLE_OPEN'
+python renderer-core/tools/apply_v231_resource_exception_safety.py --apply
+if ($LASTEXITCODE -ne 0) { throw 'V231 resource exception-safety materialization failed' }
+python renderer-core/tools/apply_v231_resource_exception_safety.py
+if ($LASTEXITCODE -ne 0) { throw 'V231 generated source verification failed' }
+Write-Host 'V231_EXCEPTION_SAFE_D3D11_SRV_CACHE_WITH_V230_IO_AND_V229_PIXEL_OPERATOR'
 '@
 $generated = $generated.Replace($cmakeAnchor, $lateOverlay + [Environment]::NewLine + $cmakeAnchor)
 [IO.File]::WriteAllText((Join-Path (Get-Location) $path),$generated)
