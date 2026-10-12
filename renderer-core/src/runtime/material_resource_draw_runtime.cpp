@@ -58,6 +58,9 @@ enum class load_status : std::uint8_t {
 struct companion_set {
     ID3D11Device *device = nullptr;
     std::uint64_t logical_hash = 0;
+    // Exact name is required before reusing a live PTDE DDS. FNV64 alone is
+    // a routing hint, not proof that two logical resource names are equal.
+    std::wstring exact_logical_name{};
     ID3D11ShaderResourceView *specular = nullptr;
     ID3D11ShaderResourceView *diffuse = nullptr;
     ID3D11ShaderResourceView *normal = nullptr;
@@ -122,6 +125,12 @@ constexpr std::uint32_t k_caps2_cubemap = 0x200u;
 core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
+// Non-owning index into g_cache. Reuses an already-live PTDE companion only
+// when native device, exact logical name and all required class views agree.
+// No texture survives past the last owning stock SRV; no extra VRAM residency.
+std::unordered_multimap<std::uint64_t,std::uint64_t>
+    g_live_by_logical_hash;
+std::atomic<std::uint64_t> g_live_companion_reuses{0u};
 // A live native SRV handle observed under more than one exact logical texture
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
@@ -388,6 +397,25 @@ void release_set(companion_set &set) noexcept
     }
 
     set.logical_hash = 0u;
+    set.exact_logical_name.clear();
+}
+
+// Caller holds g_mutex. Only the owning stock view controls a live-index
+// entry; a recycled native handle can never recover a stale companion.
+void erase_live_companion_index(
+    std::uint64_t stock_key,
+    std::uint64_t logical_hash) noexcept
+{
+    auto span =
+        g_live_by_logical_hash.equal_range(
+            logical_hash);
+    for (auto it = span.first;
+         it != span.second;) {
+        if (it->second == stock_key)
+            it = g_live_by_logical_hash.erase(it);
+        else
+            ++it;
+    }
 }
 
 void release_cache() noexcept
@@ -400,6 +428,7 @@ void release_cache() noexcept
         std::lock_guard<std::mutex> lock(g_mutex);
         invalidate_all_companion_epochs();
         dead.swap(g_cache);
+        g_live_by_logical_hash.clear();
         g_ambiguous_view_device.clear();
     }
 
@@ -422,6 +451,9 @@ void release_cache_for_device(
         for (auto it = g_cache.begin();
              it != g_cache.end();) {
             if (it->second.device == device) {
+                erase_live_companion_index(
+                    it->first,
+                    it->second.logical_hash);
                 dead.push_back(it->second);
                 it = g_cache.erase(it);
                 changed = true;
@@ -448,23 +480,27 @@ void release_cache_for_device(
         release_set(set);
 }
 
-std::filesystem::path process_dir()
+const std::filesystem::path &process_dir() noexcept
 {
-    std::wstring buffer(32768, L'\0');
-
-    const DWORD n =
-        GetModuleFileNameW(
-            nullptr,
-            buffer.data(),
-            static_cast<DWORD>(buffer.size()));
-
-    if (n == 0u ||
-        n >= buffer.size())
-        return {};
-
-    buffer.resize(n);
-    return std::filesystem::path(
-        buffer).parent_path();
+    // The executable path is immutable while the DSR process is running.
+    // Resolve it once, not for every Specular/Diffuse/Normal DDS.
+    static const std::filesystem::path root = []() noexcept {
+        try {
+            std::wstring buffer(32768, L'\0');
+            const DWORD n = GetModuleFileNameW(
+                nullptr,
+                buffer.data(),
+                static_cast<DWORD>(buffer.size()));
+            if (n == 0u || n >= buffer.size())
+                return std::filesystem::path{};
+            buffer.resize(n);
+            return std::filesystem::path(
+                buffer).parent_path();
+        } catch (...) {
+            return std::filesystem::path{};
+        }
+    }();
+    return root;
 }
 
 const wchar_t *class_dir(
@@ -486,7 +522,7 @@ std::filesystem::path sidecar_path(
     asset_class cls,
     const std::wstring &logical_name)
 {
-    auto root = process_dir();
+    const auto &root = process_dir();
     if (root.empty() ||
         logical_name.empty())
         return {};
@@ -538,9 +574,8 @@ load_result load_dds(
         return {};
 
     try {
-        if (!std::filesystem::is_regular_file(path))
-            return {};
-
+        // Opening the file already validates it. Avoid a redundant metadata
+        // probe in the texture streaming callback (especially on cold disks).
         std::ifstream stream(
             path,
             std::ios::binary);
@@ -1258,44 +1293,106 @@ void on_init_resource_view(
     companion_set set{};
     set.device = native_device;
     set.device->AddRef();
-    set.logical_hash =
-        logical_hash;
-
-    if (spec_member) {
-        const auto loaded =
-            safe_load_sidecar(
-                native_device,
-                asset_class::specular,
-                logical_name,
-                logical_hash);
-        account_load(loaded.status);
-        set.specular = loaded.view;
+    set.logical_hash = logical_hash;
+    try {
+        set.exact_logical_name = logical_name;
+    } catch (...) {
+        release_set(set);
+        return; // native resource hook stays installed; fail open
     }
 
-    if (generated::
-        diffuse_target_hash_allowed_v12(
-            logical_hash)) {
-        const auto loaded =
-            safe_load_sidecar(
-                native_device,
-                asset_class::diffuse,
-                logical_name,
+    const bool need_diffuse =
+        generated::diffuse_target_hash_allowed_v12(
+            logical_hash);
+    const bool need_normal =
+        generated::normal_target_hash_allowed_v12(
+            logical_hash);
+
+    // Hot reuse of a strictly identical PTDE DDS already owned by another
+    // LIVE stock view. The registry retains no extra SRV; this cannot cause
+    // persistent VRAM residency when moving between locations.
+    bool reused = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const auto span =
+            g_live_by_logical_hash.equal_range(
                 logical_hash);
-        account_load(loaded.status);
-        set.diffuse = loaded.view;
+        for (auto it = span.first;
+             it != span.second;
+             ++it) {
+            const auto found =
+                g_cache.find(it->second);
+            if (found == g_cache.end())
+                continue; // defensive against a stale non-owning index
+            const auto &candidate = found->second;
+            if (candidate.device != native_device ||
+                candidate.exact_logical_name != logical_name ||
+                (spec_member && candidate.specular == nullptr) ||
+                (need_diffuse && candidate.diffuse == nullptr) ||
+                (need_normal && candidate.normal == nullptr))
+                continue;
+
+            // COM AddRef cannot fire on_destroy_resource_view, unlike
+            // Release. References remain valid after the mutex unlocks.
+            if (spec_member) {
+                set.specular = candidate.specular;
+                set.specular->AddRef();
+            }
+            if (need_diffuse) {
+                set.diffuse = candidate.diffuse;
+                set.diffuse->AddRef();
+            }
+            if (need_normal) {
+                set.normal = candidate.normal;
+                set.normal->AddRef();
+            }
+            reused = true;
+            break;
+        }
     }
 
-    if (generated::
-        normal_target_hash_allowed_v12(
-            logical_hash)) {
-        const auto loaded =
-            safe_load_sidecar(
-                native_device,
-                asset_class::normal,
-                logical_name,
-                logical_hash);
-        account_load(loaded.status);
-        set.normal = loaded.view;
+    if (reused) {
+        g_live_companion_reuses.fetch_add(
+            1u, std::memory_order_relaxed);
+        if (spec_member)
+            account_load(load_status::ready);
+        if (need_diffuse)
+            account_load(load_status::ready);
+        if (need_normal)
+            account_load(load_status::ready);
+    } else {
+        // Cold path remains the byte-identical trusted loader with SHA
+        // attestations, format checks and fail-open on missing sidecars.
+        if (spec_member) {
+            const auto loaded =
+                safe_load_sidecar(
+                    native_device,
+                    asset_class::specular,
+                    logical_name,
+                    logical_hash);
+            account_load(loaded.status);
+            set.specular = loaded.view;
+        }
+        if (need_diffuse) {
+            const auto loaded =
+                safe_load_sidecar(
+                    native_device,
+                    asset_class::diffuse,
+                    logical_name,
+                    logical_hash);
+            account_load(loaded.status);
+            set.diffuse = loaded.view;
+        }
+        if (need_normal) {
+            const auto loaded =
+                safe_load_sidecar(
+                    native_device,
+                    asset_class::normal,
+                    logical_name,
+                    logical_hash);
+            account_load(loaded.status);
+            set.normal = loaded.view;
+        }
     }
 
     const auto key =
@@ -1305,6 +1402,7 @@ void on_init_resource_view(
     companion_set old{};
     bool had_old = false;
     bool accepted = false;
+    bool new_record = false;
 
     {
         std::lock_guard<std::mutex> lock(
@@ -1316,16 +1414,16 @@ void on_init_resource_view(
                 g_cache.find(key);
 
             if (found != g_cache.end() &&
-                found->second.logical_hash != logical_hash) {
-                // The native handle is still live but now claims a different
-                // exact logical identity. Neither association is safe. Remove
-                // the previous record and quarantine this handle until its
-                // destroy_resource_view callback.
+                (found->second.logical_hash != logical_hash ||
+                 found->second.exact_logical_name != logical_name)) {
+                // Same live native handle with a different exact name:
+                // quarantine regardless of FNV collisions.
                 old = found->second;
+                erase_live_companion_index(
+                    key, old.logical_hash);
                 g_cache.erase(found);
                 g_ambiguous_view_device.emplace(
-                    key,
-                    native_device);
+                    key, native_device);
                 had_old = true;
             } else if (found != g_cache.end()) {
                 old = found->second;
@@ -1333,12 +1431,21 @@ void on_init_resource_view(
                 had_old = true;
                 accepted = true;
             } else {
-                g_cache.emplace(
-                    key,
-                    set);
+                g_cache.emplace(key, set);
                 accepted = true;
+                new_record = true;
             }
 
+            // The secondary index is strictly optional. If it cannot grow,
+            // g_cache and the original cold loader still work identically.
+            if (new_record) {
+                try {
+                    g_live_by_logical_hash.emplace(
+                        logical_hash, key);
+                } catch (...) {
+                    // Cache acceleration fails open, never resource identity.
+                }
+            }
             invalidate_companion_epoch(key);
         }
     }
@@ -1381,6 +1488,8 @@ void on_destroy_resource_view(
 
         if (it != g_cache.end()) {
             dead = it->second;
+            erase_live_companion_index(
+                key, dead.logical_hash);
             g_cache.erase(it);
             found = true;
             changed = true;
@@ -2782,6 +2891,7 @@ reset() noexcept
     release_cache();
 
     g_named_views.store(0u);
+    g_live_companion_reuses.store(0u);
     g_sidecar_ready.store(0u);
     g_sidecar_missing.store(0u);
     g_sidecar_unsupported.store(0u);
