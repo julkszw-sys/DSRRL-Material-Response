@@ -91,6 +91,11 @@ jobs:
           python renderer-core/tools/apply_v231_live_sidecar_runtime.py
           if ($LASTEXITCODE -ne 0) { throw 'V231 source postcondition failed' }
           if (!(Test-Path 'DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64')) { throw 'One addon missing' }
+          $binary = [IO.File]::ReadAllBytes('DSRRL_v203_CLEAN_EQUIPMENT_SPEC_EXPERIMENT.addon64')
+          $binaryStrings = [Text.Encoding]::ASCII.GetString($binary)
+          if (!$binaryStrings.Contains('[DSRRL V231 LIVE SIDECAR REUSE]')) { throw 'V231 binary does not include live SRV reuse telemetry; policy-only build forbidden' }
+          if (!$binaryStrings.Contains('first_exact_device_name_complete_class_hit=1')) { throw 'V231 exact active hit telemetry was optimized out' }
+          Write-Host 'V231_BINARY_PROOF_LIVE_SRV_REUSE_CODE_COMPILED'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
