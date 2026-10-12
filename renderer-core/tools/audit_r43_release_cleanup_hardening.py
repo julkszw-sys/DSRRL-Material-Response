@@ -4,6 +4,7 @@
 Static checks supplement, not replace, native MSVC compilation and runtime tests.
 """
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,7 +33,13 @@ require(
     "DDS bounded before full-file allocation",
 )
 require(
-    resources.count("safe_load_sidecar(\n                native_device,") == 3
+    len(re.findall(
+        r"safe_load_sidecar\(\s*native_device,\s*asset_class::(specular|diffuse|normal),",
+        resources)) == 3
+    and all(re.search(
+        r"safe_load_sidecar\(\s*native_device,\s*asset_class::" + cls + r",",
+        resources) is not None
+        for cls in ("specular", "diffuse", "normal"))
     and "catch (...) {\n        return {nullptr, load_status::unsupported};\n    }" in resources,
     "three asset classes use noexcept sidecar-path loading",
 )
