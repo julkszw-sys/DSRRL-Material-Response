@@ -26,7 +26,20 @@ try {
   if($LASTEXITCODE -ne 0){throw 'V242 native integrated link failed'}
   cmake --build build/renderer-core-lib --config Release --target dsrrl_pmetal_producer_state_tests
   if($LASTEXITCODE -ne 0){throw 'V242 fixed regression build failed'}
-  ctest --test-dir build/renderer-core-lib -C Release -R '^dsrrl_pmetal_producer_state_tests$' --output-on-failure
+  & 'build/renderer-core-lib/Release/dsrrl_pmetal_producer_state_tests.exe'
+  Write-Host "V242_POSITIVE_NATIVE_EXIT_CODE=$LASTEXITCODE"
+  ctest --test-dir build/renderer-core-lib -C Release -R '^dsrrl_pmetal_producer_state_tests
+
+  $fresh='build/Release/DSRRL_Restored_Lighting_v2_0_2.addon64'
+  if(!(Test-Path $fresh)){throw 'V242 no integrated addon'}
+  $out='DSRRL_V242_PMETAL_FULL_PAYLOAD_IDENTITY_V237_NOQPC.addon64'
+  Copy-Item $fresh $out -Force
+  Write-Host 'V242_NEGATIVE_FAIL_POSITIVE_PASS_SINGLE_ADDON'
+} finally {
+  [IO.File]::WriteAllText($prod,$savedProd)
+  [IO.File]::WriteAllText($tests,$savedTests)
+}
+ --output-on-failure
   if($LASTEXITCODE -ne 0){throw 'V242 complete EnvDiffuse/PHN payload regression failed'}
 
   $fresh='build/Release/DSRRL_Restored_Lighting_v2_0_2.addon64'
