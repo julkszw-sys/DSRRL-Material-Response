@@ -25,7 +25,7 @@ SOURCES = (
     "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp",
     "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp",
     "renderer-core/integrated/integrated_addon.cpp",
-    "build/generated/integrated_addon_physical_cut.cpp",
+    "build/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp",
 )
 MUST_MATCH_EXACT = (
     "renderer-core/src/runtime/draw_state_transaction.cpp",
@@ -127,7 +127,7 @@ def compare() -> None:
         env = (source / SOURCES[0]).read_text()
         if "latest_hook_source(out)" not in env:
             raise RuntimeError(f"{label}: historical P_Metal packer fallback missing")
-        integrated = (source / "build/generated/integrated_addon_physical_cut.cpp").read_text()
+        integrated = (source / "build/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp").read_text()
         if "dsrrl::runtime::pmetal_env_source_runtime" not in integrated:
             raise RuntimeError(f"{label}: physical cut deleted P_Metal source")
     report["native_compile_status"] = "WIN64_JOBS_SUCCEEDED"
@@ -144,9 +144,9 @@ def compare() -> None:
         "## V246 effective native compiled-source comparison\n\n"
         "Owner-reference v2.0.3 vs visual-failed V245, not just tracked blobs.\n\n"
         + "\n".join(f"- **{'IDENTICAL' if m['equal'] else 'DIFFERENT'}** "
-                    f"\`{name}\`" for name, m in report["files"].items())
+                    f"`{name}`" for name, m in report["files"].items())
         + "\n\nBuild flag differences:\n\n"
-        + "\n".join(f"- \`{key}\`: \`{vals[0]}\` → \`{vals[1]}\`"
+        + "\n".join(f"- `{key}`: `{vals[0]}` → `{vals[1]}`"
                     for key, vals in report["build_option_differences"].items())
         + "\n\nRuntime pixel FAIL in V245, root cause still OPEN. "
           "Only native construction comparison is proved.\n",
