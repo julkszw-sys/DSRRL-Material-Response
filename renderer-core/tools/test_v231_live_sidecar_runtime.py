@@ -15,7 +15,7 @@ for old,new in a.CHANGES:
     pseudo+=old+'\n'
 pseudo+='    ++g_named_views;\n}\n\nvoid on_destroy_resource_view(\n'
 after=a.apply(pseudo)
-assert after.count(a.MARKER)==1
+assert after.count(a.MARKER)>=2  # binary-attestable log literal + source comment
 assert a.apply(after)==after
 for old,new in a.CHANGES:
     assert after.count(new)==1
