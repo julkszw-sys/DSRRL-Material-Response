@@ -8,6 +8,14 @@ $saved = [IO.File]::ReadAllText($src)
 try {
   python renderer-core/tools/apply_v243_rx34_draw_proof.py --apply
   if ($LASTEXITCODE -ne 0) { throw 'patch failed' }
+  # Physical-cut builds compile build/generated/integrated_addon_physical_cut.cpp,
+  # NOT the source-controlled integrated_addon.cpp itself. Reconfigure while
+  # the temporary source overlay is installed so the generated C++ gets it.
+  cmake -S renderer-core/integrated -B build -A x64
+  if ($LASTEXITCODE -ne 0) { throw 'physical-cut regeneration failed' }
+  $generated = @(Get-ChildItem 'build/generated' -Recurse -Filter 'integrated_addon_physical_cut.cpp')
+  if ($generated.Count -ne 1) { throw 'V243 exact generated cut source not located' }
+  if (!([IO.File]::ReadAllText($generated[0].FullName)).Contains('[DSRRL V243 RX DRAW PROOF]')) { throw 'V243 absent in compiled physical-cut source' }
   cmake --build build --config Release --target dsrrl_renderer_core_integrated
   if ($LASTEXITCODE -ne 0) { throw 'native failed' }
   $fresh = 'build/Release/DSRRL_Restored_Lighting_v2_0_2.addon64'
