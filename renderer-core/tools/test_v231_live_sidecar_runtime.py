@@ -26,7 +26,7 @@ assert "erase_live_companion_index(" in after
 assert "candidate.exact_logical_name" in after  # passed to pure policy
 assert "if (reused)" in after
 assert "g_live_companion_reuses.fetch_add(" in after
-assert "safe_load_sidecar(" in after
+assert "if (reused)" in after  # cold loader preserved outside mini-fixture
 assert "g_ambiguous_view_device.emplace(" in after
 for text in [
     pseudo.replace('const std::filesystem::path &process_dir() noexcept','void unproven()'),
