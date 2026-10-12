@@ -16,7 +16,9 @@ foreach ($name in $required) {
  }
 }
 python renderer-core/tools/test_v227_lerp_pmetal_nonmetal_parity.py
-if ($LASTEXITCODE -ne 0) { throw 'V228 source contract failed' }
+if ($LASTEXITCODE -ne 0) { throw 'V227 baseline source contract failed' }
+python renderer-core/tools/test_v228_nonmetal_lerp_stock_isolation.py
+if ($LASTEXITCODE -ne 0) { throw 'V228 nonmetal Lerp full-stock A/B source contract failed' }
 
 $path = 'renderer-core/tools/configure_v203_clean_equipment.ps1'
 $original = Get-Content -LiteralPath $path -Raw
