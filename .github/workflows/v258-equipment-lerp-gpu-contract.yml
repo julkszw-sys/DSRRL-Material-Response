@@ -63,6 +63,13 @@ jobs:
           ./v268-gpu-source-contract.exe
           if($LASTEXITCODE -ne 0){throw 'V268 native independent c84/c85 and fail-open tests failed'}
           Write-Host 'V268_NATIVE_GPU_CB_128B_PTDE_PRODUCER_GATE_PASS'
+      - name: V275 production native exact synthetic selector policy oracle
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core\\include renderer-core\\tools\\v258\\test_v275_synthetic_selector_policy.cpp /Fe:v275-native-selector.exe
+          if($LASTEXITCODE -ne 0){throw 'V275 native policy test compiler failure'}
+          ./v275-native-selector.exe
+          if($LASTEXITCODE -ne 0){throw 'V275 exact-policy negative regression'}
       - name: Intersect pinned 1295 sidecar names and 748 equipment source routes
         shell: pwsh
         run: |
@@ -104,10 +111,11 @@ jobs:
         run: |
           & ./renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1
           if($LASTEXITCODE -ne 0){throw 'V258 physical-cut one-addon build failed'}
-          $name='DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64'
+          $name='DSRRL_V275_EQUIPMENT_PTDE_SYNTHETIC_SOURCE_GUARD.addon64'
           if(!(Test-Path $name)){throw 'V258 final native addon absent'}
           $ascii=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($name))
-          foreach($mark in @('[DSRRL V272 INTERIOR LERP B12 ROUTE]',
+          foreach($mark in @('[DSRRL V275 SYNTHETIC ZERO SELECTOR NONPUBLISH]',
+                             '[DSRRL V272 INTERIOR LERP B12 ROUTE]',
                              '[DSRRL V258 PTDE GPU ISLAND DORMANT]',
                              '[DSRRL V255 PHN CARRIER CUT]',
                              '[DSRRL V253 PTDE ENVSPEC RGBM]')){
@@ -126,10 +134,13 @@ jobs:
           git diff --exit-code -- renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
           if($LASTEXITCODE -ne 0){throw 'V272 original draw runtime source restore mismatch'}
           Write-Host 'V272_ORIGINAL_TRACKED_DRAW_RUNTIME_RESTORED_PASS'
+          git diff --exit-code -- renderer-core/src/runtime/pmetal_env_source_runtime.cpp
+          if($LASTEXITCODE -ne 0){throw 'V275 original selector runtime source not restored'}
+          Write-Host 'V275_ORIGINAL_TRACKED_SELECTOR_RUNTIME_RESTORED_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING_ONE_ADDON
-          path: DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64
+          name: DSRRL_V275_EQUIPMENT_PTDE_SYNTHETIC_SOURCE_GUARD_ONE_ADDON
+          path: DSRRL_V275_EQUIPMENT_PTDE_SYNTHETIC_SOURCE_GUARD.addon64
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
