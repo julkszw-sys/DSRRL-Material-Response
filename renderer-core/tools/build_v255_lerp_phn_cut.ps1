@@ -11,7 +11,7 @@ if($s.Split([string[]]@($needle),[StringSplitOptions]::None).Count -ne 2) {
   throw 'V254 builder insertion anchor ambiguous'
 }
 $insertion=@'
-$replacement += "`n python renderer-core/tools/apply_v255_lerp_phn_cut_diag.py --apply`n if($LASTEXITCODE -ne 0){throw 'V255 PHN cut overlay failed'}`n python renderer-core/tools/apply_v255_lerp_phn_cut_diag.py`n if($LASTEXITCODE -ne 0){throw 'V255 PHN source oracle failed'}"
+$replacement += "`n python renderer-core/tools/apply_v255_lerp_phn_cut_diag.py --apply`n if(`$LASTEXITCODE -ne 0){throw 'V255 PHN cut overlay failed'}`n python renderer-core/tools/apply_v255_lerp_phn_cut_diag.py`n if(`$LASTEXITCODE -ne 0){throw 'V255 PHN source oracle failed'}"
 '@
 $s=$s.Replace($needle,$insertion+"`n"+$needle)
 if(!$s.Contains('DSRRL_V254_LERP_MULTIEVENT_V253_SAFE.addon64')) {throw 'V254 addon output missing'}
@@ -25,7 +25,7 @@ $s=$s.Replace('V254_SINGLE_ADDON_SHA256=','V255_SINGLE_ADDON_SHA256=')
 [IO.File]::WriteAllText($tmp,$s,[Text.UTF8Encoding]::new($false))
 try {
   & $tmp
-  if($LASTEXITCODE -ne 0){throw 'V255 Windows native build failed'}
+  if(`$LASTEXITCODE -ne 0){throw 'V255 Windows native build failed'}
 } finally {
   Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 }
