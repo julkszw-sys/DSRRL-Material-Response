@@ -103,10 +103,11 @@ struct v267_semantic {
   const char *name;
   UINT index, reg, mask, component_type;
 };
-static void native_abi_fixture(const char *entry, bool shadow) {
+static void native_abi_fixture(const char *entry, bool shadow, bool ptde = false) {
   ID3DBlob *blob=nullptr,*errors=nullptr;
   const HRESULT h=D3DCompileFromFile(
-    L"renderer-core/tools/v258/v267_rx_abi_fixture.hlsl",nullptr,
+    ptde ? L"renderer-core/tools/v258/v268_native_ptde_rx_environment_fixture.hlsl" :
+           L"renderer-core/tools/v258/v267_rx_abi_fixture.hlsl",nullptr,
     D3D_COMPILE_STANDARD_FILE_INCLUDE,entry,"ps_5_0",
     D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_WARNINGS_ARE_ERRORS|
     D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&blob,&errors);
@@ -159,6 +160,25 @@ static void native_abi_fixture(const char *entry, bool shadow) {
           d.SemanticIndex==i && d.Register==i && d.Mask==15u,
           "V267 dual target signature not retail DSR equivalent");
   }
+  if (ptde) {
+    // Real GPU sampling of the native RX interpolants through shared
+    // PTDE EnvLocal, but synthetic RT1 makes this a NON-LIVE fixture.
+    binding(reflection,"V268_PTDE_EnvLocal",12,D3D_SIT_CBUFFER);
+    D3D11_SHADER_BUFFER_DESC cb_desc{};
+    auto *cb=reflection->GetConstantBufferByName("V268_PTDE_EnvLocal");
+    check(cb&&SUCCEEDED(cb->GetDesc(&cb_desc))&&cb_desc.Size==8u*16u,
+          "V268 native PTDE fixture b12 ABI mismatch");
+    struct v268_slot { const char *name; UINT slot; };
+    const v268_slot textures[]={
+      {"ptdeDiffuseTex",0u},{"ptdeSpecTex",10u},
+      {"ptdeEnvDiffuseA",11u},{"ptdeEnvSpecA",12u},
+      {"ptdeEnvDiffuseB",13u},{"ptdeEnvSpecB",14u}
+    };
+    for (const auto &t:textures)
+      binding(reflection,t.name,t.slot,D3D_SIT_TEXTURE);
+    binding(reflection,"ptdeSampler",0u,D3D_SIT_SAMPLER);
+    std::printf("V268_%s_NATIVE_PTDE_ENVLOCAL_COMPILED_NOT_BOUND_PASS\\n",entry);
+  }
   reflection->Release();
   blob->Release();
   std::printf("V267_%s_NATIVE_INPUT_DUAL_TARGET_SIGNATURE_PASS\n",entry);
@@ -175,6 +195,9 @@ int main() {
     native_abi_fixture("rx33",false);
     native_abi_fixture("rx34",true);
     native_abi_fixture("rx35",false);
+    native_abi_fixture("rx33_v268",false,true);
+    native_abi_fixture("rx34_v268",true,true);
+    native_abi_fixture("rx35_v268",false,true);
     save(env,"v258_ptde_env_local_subcut.dxbc");
     save(term,"v258_ptde_phn_terminal_subcut.dxbc");
     std::puts("V267_NATIVE_RX33_34_35_SIGNATURE_AND_V258_GPU_ISLAND_CONSTRUCTION_PASS");
