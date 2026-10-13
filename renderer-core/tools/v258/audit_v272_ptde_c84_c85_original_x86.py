@@ -62,6 +62,24 @@ def audit(path):
   off=va_to_offset(exe,va)
   if exe[off:off+len(expected)]!=expected:
    raise ValueError("wrong PS constant F D3D9 upload dispatcher")
+ # PTDE authored producer inputs are independently compared/copied by
+ # two entity setters. Exact call sequence also shows distinct .w source
+ # stack slots in the blended update path, before D3D9 upload.
+ setter_and_copy_patterns={
+  0x424d3d:"660fd68730010000", # c84 setter -> entity+0x130
+  0x424e4d:"660fd68740010000", # c85 setter -> entity+0x140
+  0xf941f7:"f30f7e8730010000", # c84 emitter reads entity+0x130
+  0xf94205:"8d8e80050000",     # c84 emitter writes c84 at +0x580
+  0xf941b7:"f30f7e8740010000", # c85 emitter reads entity+0x140
+  0xf941c5:"8d8e90050000",     # c85 emitter writes c85 at +0x590
+  0xf95165:"f30f1044245c",     # c84.w from independently computed stack+0x5C
+  0xf951dc:"f30f1044246c",     # c85.w from independently computed stack+0x6C
+ }
+ for va,expected_hex in setter_and_copy_patterns.items():
+  expected=bytes.fromhex(expected_hex)
+  off=va_to_offset(exe,va)
+  if exe[off:off+len(expected)]!=expected:
+   raise ValueError("PTDE separate c84/c85 producer path changed")
  # Original flush loops across 8 DWORD dirty bitsets, 32 registers each,
  # gathering 16-byte float4 registers from a stage +0x40 cache.
  start=va_to_offset(exe,PS_FLUSH_VA)
@@ -86,6 +104,15 @@ def audit(path):
   "device_vtbl_offset":hex(PS_VTBL_OFFSET),
   "flush_va":hex(PS_FLUSH_VA),
   "direct_dispatch_vas":[hex(x) for x in PS_FLUSH_DIRECT_DISPATCH],
+  "producer_entity_c84_setter_va":"0x424c60",
+  "producer_entity_c85_setter_va":"0x424d70",
+  "emitter_entity_c84_va":"0xf941e0",
+  "emitter_entity_c85_va":"0xf941a0",
+  "entity_c84_float4_offset":"0x130",
+  "entity_c85_float4_offset":"0x140",
+  "interpolation_source_w_slots":["[esp+0x5c]","[esp+0x6c]"],
+  "separate_entity_update_paths_verified":True,
+  "separate_runtime_values_verified":False,
   "dirty_mask_words":8,"bits_per_mask":32,
   "staging_float4_stride":16,
   "c84":slot(84),"c85":slot(85),"c110":slot(110),
