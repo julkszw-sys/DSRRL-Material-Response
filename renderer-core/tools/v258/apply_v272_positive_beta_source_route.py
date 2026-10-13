@@ -34,7 +34,26 @@ B=r'''    prepared.request.constant_buffer_count =
         const std::uint32_t bit = 1u << band;
         if (!(v272_seen_interior.fetch_or(
                   bit,std::memory_order_relaxed) & bit)) {
-            char evidence[840]{};
+            // The local beta sensitivity is d(A+beta*(B-A))/dbeta =
+            // B-A. These are SOURCE DOMAIN derivative magnitudes, not
+            // unexplained multipliers or final pixel-error estimates.
+            const double spec_span_linf = std::fmax(
+                std::fmax(
+                    std::fabs(source.b[0] - source.a[0]),
+                    std::fabs(source.b[1] - source.a[1])),
+                std::fabs(source.b[2] - source.a[2]));
+            const double diffuse_span_linf =
+                source.envdiffuse_linear_valid
+                    ? std::fmax(
+                        std::fmax(
+                            std::fabs(source.envdiffuse_b[0] -
+                                      source.envdiffuse_a[0]),
+                            std::fabs(source.envdiffuse_b[1] -
+                                      source.envdiffuse_a[1])),
+                        std::fabs(source.envdiffuse_b[2] -
+                                  source.envdiffuse_a[2]))
+                    : -1.0;
+            char evidence[1024]{};
             std::snprintf(
                 evidence,sizeof(evidence),
                 "[DSRRL V272 INTERIOR LERP B12 ROUTE] "
@@ -43,7 +62,9 @@ B=r'''    prepared.request.constant_buffer_count =
                 "dsr_source_beta=%.9g b12_spec_w3=%.9g b12_diffuse_w5=%.9g "
                 "source_serial=%llu source_generation=%llu "
                 "bank_a=%016llx row_a=%u bank_b=%016llx row_b=%u "
-                "envdiffuse_valid=%u ptde_c84w=UNOBSERVED "
+                "envdiffuse_valid=%u spec_dRGB_dBeta_Linf=%.9g "
+                "diffuse_dRGB_dBeta_Linf=%.9g "
+                "ptde_c84w=UNOBSERVED "
                 "ptde_c85w=UNOBSERVED b12_resource_match=1 "
                 "gpu_cb_readback=NOT_CAPTURED pixel=OPEN",
                 static_cast<unsigned>(decision.receiver_id),
@@ -61,7 +82,9 @@ B=r'''    prepared.request.constant_buffer_count =
                 static_cast<unsigned>(source.row_id_a),
                 static_cast<unsigned long long>(source.bank_signature_b),
                 static_cast<unsigned>(source.row_id_b),
-                source.envdiffuse_linear_valid ? 1u : 0u);
+                source.envdiffuse_linear_valid ? 1u : 0u,
+                spec_span_linf,
+                diffuse_span_linf);
             reshade::log::message(reshade::log::level::info,evidence);
         }
 #endif
