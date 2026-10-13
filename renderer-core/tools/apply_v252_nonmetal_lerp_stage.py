@@ -106,25 +106,20 @@ ARM_NEW = '''        v252_nonmetal_lerp_stage(
             prepared);
         // Return false so ReShade'''
 
-DISPATCH_OLD = '''    account_effect_dispatch(
-        effect_prepared,
-        dispatch.transaction,
-        receiver_id,
-        decision.route_index);
-
-    if (clustered_in_batch)'''
-DISPATCH_NEW = '''    account_effect_dispatch(
-        effect_prepared,
-        dispatch.transaction,
-        receiver_id,
-        decision.route_index);
-
-    v252_nonmetal_lerp_stage(
+DISPATCH_OLD = '''    v250_pmetal_lerp_draw_proof(
+        receiver_id, decision.route_index, decision.active,
+        hemenvlerp_bound,
+        dsrrl::runtime::draw_tx_issued(dispatch.transaction) ? 2u : 3u,
+        (effect_prepared &
+         effect_probe_bit(effect_probe_id::pmetal_envspec)) != 0u,
+        mr_in_batch,
+        static_cast<unsigned>(dispatch.transaction));
+'''
+DISPATCH_NEW = DISPATCH_OLD + '''    v252_nonmetal_lerp_stage(
         hemenvlerp_bound, receiver_id, material, decision,
         dsrrl::runtime::draw_tx_issued(dispatch.transaction) ? 3u : 4u,
         static_cast<unsigned>(dispatch.transaction));
-
-    if (clustered_in_batch)'''
+'''
 
 def change(text, old, new, count, label):
     if text.count(new) == count:
