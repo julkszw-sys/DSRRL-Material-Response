@@ -27,8 +27,9 @@ B=r'''    prepared.request.constant_buffer_count =
         prepared.request.constant_buffers[0].slot == 12u &&
         prepared.request.constant_buffers[0].buffer == b12) {
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        const unsigned band = std::min(
-            7u,static_cast<unsigned>(source.beta*8.0f));
+        const unsigned raw_band =
+            static_cast<unsigned>(source.beta * 8.0f);
+        const unsigned band = raw_band < 8u ? raw_band : 7u;
         static std::atomic<std::uint32_t> v272_seen_interior{0u};
         const std::uint32_t bit = 1u << band;
         if (!(v272_seen_interior.fetch_or(
