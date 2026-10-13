@@ -1,9 +1,9 @@
-name: V253 Exact PTDE EnvSpec RGB and Multiplier per LightBank Row
+name: V254 Multi-Event LERP Diagnostic - V253 lineage
 
 on:
   push:
     branches:
-      - agent/v253-exact-ptde-envspec-rgbm-per-lightbank
+      - agent/v254-lerp-multievent-observer-20261013
   workflow_dispatch:
 
 permissions:
@@ -26,7 +26,8 @@ jobs:
           python3 -m py_compile \
             renderer-core/tools/apply_v253_ptde_envspec_rgbm.py \
             renderer-core/tools/generate_v253_ptde_envspec_rgbm.py
-          echo V253_V252_OPERATOR_SOURCE_UNCHANGED
+          python3 renderer-core/tools/test_v254_overlay.py
+          echo V254_V253_OPERATOR_SOURCE_UNCHANGED
   native-integrated-addon:
     needs: precise-source-scope
     runs-on: windows-latest
@@ -54,13 +55,13 @@ jobs:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
-      - name: Rebuild V252 plus exact authored PTDE EnvSpec RGBM for 20 authenticated LightBanks
+      - name: Build V254 sampled multi-event LERP diagnostic on exact V253 donor
         shell: pwsh
         run: |
-          ./renderer-core/tools/build_v253_ptde_envspec_rgbm.ps1
-          if ($LASTEXITCODE -ne 0) { throw 'V253 exact PTDE EnvSpec RGBM source injection FAIL' }
+          ./renderer-core/tools/build_v254_lerp_multievent.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'V254 LERP native diagnostic build FAIL' }
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V253_EXACT_PTDE_ENVSPEC_RGBM_SINGLE_ADDON
-          path: DSRRL_V253_EXACT_PTDE_ENVSPEC_RGBM_V252_SAFE.addon64
+          name: DSRRL_V254_LERP_MULTIEVENT_SINGLE_ADDON
+          path: DSRRL_V254_LERP_MULTIEVENT_V253_SAFE.addon64
           if-no-files-found: error

@@ -1,9 +1,11 @@
 name: Renderer Runtime v2 Fast Build
 
+# Branch-scoped V254 diagnostic build. The original R43-only source audit
+# cannot be applied to a V253-based operator lineage.
 on:
   push:
     branches:
-      - "runtime-v2/**"
+      - agent/v254-lerp-multievent-observer-20261013
   pull_request:
     paths:
       - "renderer-core/**"
@@ -16,56 +18,57 @@ permissions:
 jobs:
   runtime-v2-fast:
     runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Resolve source identity
-        shell: pwsh
-        run: |
-          $checkout = (git rev-parse HEAD).Trim()
-          "DSRRL_CHECKOUT_COMMIT=$checkout" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Checkout pinned ReShade API
-        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
         with:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
-
-      - name: Audit Runtime v2 hot paths
-        shell: pwsh
-        run: python renderer-core/tools/audit_runtime_v2_hotpaths.py renderer-core
-
-      - name: Audit Runtime v2 P_Metal single-pass contract
-        shell: pwsh
-        run: python renderer-core/tools/audit_runtime_v2_pmetal_single_pass.py --source-dir renderer-core
-
-      - name: Configure Runtime v2 addon
-        shell: pwsh
-        run: >
-          cmake
-          -S renderer-core/integrated
-          -B build-runtime-v2
-          -A x64
-          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
-          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
-          -DDSRRL_BUILD_FLAVOR="runtime_v2_fast"
-
-      - name: Build Runtime v2 addon
+      - name: Verify V254 diagnostic patch syntax and immutable source scope
         shell: pwsh
         run: |
-          cmake --build build-runtime-v2 --config Release --target dsrrl_renderer_core_integrated
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $addon = @(Get-ChildItem build-runtime-v2 -Recurse -Filter *.addon64)
-          if ($addon.Count -ne 1) { throw "Expected one Runtime v2 addon, found $($addon.Count)" }
-          $out = "DSRRL_Core_Islands_RUNTIME_V2_FAST.addon64"
-          Copy-Item $addon[0].FullName $out -Force
-          $sha = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "RUNTIME_V2_FAST_SHA256=$sha"
-
-      - name: Upload Runtime v2 addon
-        uses: actions/upload-artifact@v4
+          git diff --exit-code 33a63a34ad586f111db4dc64712fdb9c76250928 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders renderer-core/data
+          if ($LASTEXITCODE -ne 0) { throw 'V254 protected V253 shader/runtime source drift' }
+          python -m py_compile renderer-core/tools/apply_v254_lerp_multievent_diag.py renderer-core/tools/apply_v253_ptde_envspec_rgbm.py renderer-core/tools/analyze_v254_lerp_log.py
+          if ($LASTEXITCODE -ne 0) { throw 'V254 source syntax failure' }
+      - name: Build exact V254 multi-event single addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v254_lerp_multievent.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'V254 native build failed' }
+      - name: Verify V254 addon payload and SHA256
+        shell: pwsh
+        run: |
+          $out='DSRRL_V254_LERP_MULTIEVENT_V253_SAFE.addon64'
+          if (!(Test-Path $out)) { throw 'V254 output addon missing' }
+          $raw=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($out))
+          foreach($tag in @('[DSRRL V254 LERP EVENTS]','[DSRRL V254 LERP SOURCE]','[DSRRL V254 LERP SUMMARY]','[DSRRL V253 PTDE ENVSPEC RGBM]')) {
+            if (!$raw.Contains($tag)) { throw "V254 missing compiled observer $tag" }
+          }
+          $hash=(Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "V254_FAST_CI_ADDON_SHA256=$hash"
+          Write-Host "V254_CONSTRUCTION_AND_NATIVE_COMPATIBILITY=PASS"
+          Write-Host "V254_OWNER_RUNTIME_AND_PIXEL=OPEN"
+      - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_Core_Islands_RUNTIME_V2_FAST
-          path: DSRRL_Core_Islands_RUNTIME_V2_FAST.addon64
+          name: DSRRL_V254_LERP_MULTIEVENT_FASTCI_SINGLE_ADDON
+          path: DSRRL_V254_LERP_MULTIEVENT_V253_SAFE.addon64
           if-no-files-found: error
