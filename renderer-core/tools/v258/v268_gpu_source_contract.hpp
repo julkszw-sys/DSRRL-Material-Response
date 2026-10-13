@@ -25,6 +25,13 @@ struct source {
   bool ptde_material_producer_verified=false;
   bool native_rx_signature_verified=false;
   bool ptde_env_probe_a_b_verified=false;
+  // V269: DSR local normal map may be used only when the actual receiver
+  // consumes a SINGLE native t2 normal map with s2 and normal-scale source.
+  // Multiple/blended normals and PTDE-rebaked assets remain fail-open.
+  bool dsr_t2_normal_resource_verified=false;
+  bool dsr_s2_sampler_verified=false;
+  bool single_normal_material_operator_verified=false;
+  bool dsr_normal_scale_producer_verified=false;
 
   // float4 values from actual producer, in PTDE representation/domain.
   float4 c84{},c85{},c86{},c87{},c100{},c101{},c156{},upper_lower{};
@@ -46,7 +53,11 @@ inline bool build_cb12(const source &s,gpu_cb12 &dst) noexcept {
       !s.ptde_upper_lower_producer_verified ||
       !s.ptde_material_producer_verified ||
       !s.native_rx_signature_verified ||
-      !s.ptde_env_probe_a_b_verified)
+      !s.ptde_env_probe_a_b_verified ||
+      !s.dsr_t2_normal_resource_verified ||
+      !s.dsr_s2_sampler_verified ||
+      !s.single_normal_material_operator_verified ||
+      !s.dsr_normal_scale_producer_verified)
     return false;
   const gpu_cb12 candidate{{{
       s.c84,s.c85,s.c86,s.c87,
