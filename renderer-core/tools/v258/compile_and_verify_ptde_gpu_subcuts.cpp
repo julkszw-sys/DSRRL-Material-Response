@@ -188,6 +188,18 @@ static void native_abi_fixture(const char *entry, bool shadow, bool ptde = false
     check(norm_cb&&SUCCEEDED(norm_cb->GetDesc(&norm_desc))&&
           norm_desc.Size==16u,"V269 host normal-scale CB ABI mismatch");
 
+    // Keep compiled native RX shader bytecode INSIDE the same dormant addon
+    // in V270. It remains forbidden to bind this synthetic RT1 fixture.
+    const unsigned char *bytes=static_cast<const unsigned char*>(
+        blob->GetBufferPointer());
+    check(blob->GetBufferSize()>=128u && std::memcmp(bytes,"DXBC",4)==0,
+          "V270 compiled native RX DXBC missing");
+    result native{};
+    native.bytes.assign(bytes,bytes+blob->GetBufferSize());
+    const std::string path=std::string("v270_")+entry+".dxbc";
+    save(native,path.c_str());
+    std::printf("V270_%s_NATIVE_RX_DXBC_SAVED_DORMANT bytes=%zu\\n",
+                entry,native.bytes.size());
     std::printf("V269_%s_DSR_T2_NORMAL_AWARE_PTDE_ENVLOCAL_COMPILED_NOT_BOUND_PASS\n",entry);
   }
   reflection->Release();
