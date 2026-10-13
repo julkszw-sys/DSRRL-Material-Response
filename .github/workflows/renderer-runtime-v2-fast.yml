@@ -19,6 +19,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Exact DXBC opcode rewrite and synthetic falsification
         shell: bash
         run: |
@@ -31,5 +33,5 @@ jobs:
       - name: Confirm production renderer sources unchanged since V259
         shell: bash
         run: |
-          git diff --exit-code 6957110bd3d4cf7e20af463a0b8cf083fff1e550 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          git diff --exit-code 092d0fe7b088b045c63249c2b3225f23e4751db8 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
           echo V262_PROTECTED_RENDERER_SOURCE_UNCHANGED
