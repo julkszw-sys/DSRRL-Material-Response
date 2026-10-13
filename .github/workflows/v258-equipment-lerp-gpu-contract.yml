@@ -55,6 +55,14 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V257 CPU oracle failure'}
           python renderer-core/tools/v257/test_inventory.py
           if($LASTEXITCODE -ne 0){throw 'V258 sidecar inventory contract failure'}
+      - name: V268 native independent PTDE c84/c85 CB transport atomic fail-open
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core\\tools\\v258 renderer-core\\tools\\v258\\test_v268_gpu_source_contract.cpp /Fe:v268-gpu-source-contract.exe
+          if($LASTEXITCODE -ne 0){throw 'V268 native CB source contract compilation failed'}
+          ./v268-gpu-source-contract.exe
+          if($LASTEXITCODE -ne 0){throw 'V268 native independent c84/c85 and fail-open tests failed'}
+          Write-Host 'V268_NATIVE_GPU_CB_128B_PTDE_PRODUCER_GATE_PASS'
       - name: Intersect pinned 1295 sidecar names and 748 equipment source routes
         shell: pwsh
         run: |
