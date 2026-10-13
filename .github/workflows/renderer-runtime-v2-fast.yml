@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - agent/v257-equipment-ptde-lerp-clean-kernel-20261013
+  pull_request:
+    paths:
+      - 'renderer-core/tools/v257/**'
+      - '.github/workflows/renderer-runtime-v2-fast.yml'
   workflow_dispatch:
 permissions:
   contents: read
