@@ -10,6 +10,8 @@ import argparse
 import difflib
 import hashlib
 import json
+import importlib.util
+import re
 import pathlib
 import subprocess
 import tempfile
@@ -95,6 +97,55 @@ def overlay_v236_v245(base):
             raise RuntimeError("V245 idempotence failed: "+second.stderr)
         return output
 
+def overlay_v230_v231_resource(base):
+    """Exact V230 PowerShell source edit then checked-in V231 Python transform.
+
+    This branch's script executes only pure string transformations. No native
+    COM callbacks, renderer operations, or external game runtime.
+    """
+    before = "std::filesystem::path process_dir()"
+    after = "const wchar_t *class_dir("
+    if base.count(before)!=1 or base.count(after)!=1:
+        raise RuntimeError("V230 process_dir baseline changed")
+    begin,end=base.index(before),base.index(after)
+    upgraded=r"""const std::filesystem::path &process_dir() noexcept
+{
+    static const std::filesystem::path root = []() noexcept {
+        try {
+            std::wstring buffer(32768, L'\0');
+            const DWORD n = GetModuleFileNameW(
+                nullptr, buffer.data(),
+                static_cast<DWORD>(buffer.size()));
+            if (n == 0u || n >= buffer.size())
+                return std::filesystem::path{};
+            buffer.resize(n);
+            return std::filesystem::path(
+                buffer).parent_path();
+        } catch (...) {
+            return std::filesystem::path{};
+        }
+    }();
+    return root;
+}
+"""
+    s=base[:begin]+upgraded+"\n"+base[end:]
+    pattern=r"(?m)^ {8}if \(!std::filesystem::is_regular_file\(path\)\)\r?\n {12}return \{\};\r?\n\r?\n"
+    s,count=re.subn(pattern,"",s)
+    if count!=1 or s.count("    auto root = process_dir();")!=1:
+        raise RuntimeError("V230 IO preimage differs from upstream")
+    s=s.replace("    auto root = process_dir();",
+                "    const auto &root = process_dir();",1)
+
+    target=ROOT/"renderer-core/tools/apply_v231_resource_exception_safety.py"
+    spec=importlib.util.spec_from_file_location("v231_safety",target)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    after=module.transform(s)
+    if module.transform(after)!=after:
+        raise RuntimeError("V231 late source overlay not idempotent")
+    return after
+
+
 def inspect_reference_guards():
     base = ROOT/"renderer-core"/"tools"
     v216 = (base/"apply_v216_bound_t1_native_alias.py").read_text(encoding="utf8")
@@ -164,6 +215,19 @@ def main():
     combined.append(diff(pold,pnew,
         "v203/pmetal_producer_state.cpp",
         "v255_effective/V236_V245_pmetal_producer_state.cpp"))
+    rold=git_show(V203,FILES["material_resources"])
+    rnew=overlay_v230_v231_resource(rold)
+    report["source_overlays"]["v230_then_v231_resources"]={
+        "unpatched_sha256":sha(rold),"patched_sha256":sha(rnew),
+        "hunks":changes(rold,rnew),
+        "affected_units":["process_dir","DDS file existence fast path",
+                          "release_cache_for_device","on_init_resource_view admission"],
+        "does_not_rewrite":"R19 shader, b12 constant buffer ABI, LightBank beta equations",
+        "caveat":"global resource callback effects not proven pixel-neutral"
+    }
+    combined.append(diff(rold,rnew,
+        "v203/material_resource_draw_runtime.cpp",
+        "v255_effective/V230_V231_material_resource_draw_runtime.cpp"))
     (dest/"source_hunks.json").write_text(
         json.dumps(report,indent=2,ensure_ascii=False),encoding="utf8")
     (dest/"line_by_line.diff").write_text(
@@ -186,6 +250,8 @@ def main():
         "P_Metal draw/FLVER tracked differences have only V203 exact nonmetal gates.",
         "V236/V245 generated overlay modifies *producer state caching/synchronization*;",
         "it does not alter R19 bytecode or b12 register ABI.",
+        "V230/V231 modify global material-resource cache IO, teardown and admission;",
+        "their changes are fully listed in the generated-source appendix.",
         "V216 and V224 have exact nonmetal guards; their global resource registry",
         "lifetime and side effects are not proven equivalent here.",
         "",
