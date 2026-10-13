@@ -1,0 +1,42 @@
+name: V257 PTDE Equipment HemEnvLerp Core Fast CI
+on:
+  push:
+    branches:
+      - agent/v257-equipment-ptde-lerp-clean-kernel-20261013
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-reference-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure no production renderer changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code 4ea4e623bed1900c8470b0e6304d48ae3f09dfc8 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+      - name: C++17 portable PTDE subcut tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I renderer-core/tools/v257 renderer-core/tools/v257/test_ptde_equipment_hemenvlerp_core.cpp -o /tmp/v257-oracle
+          /tmp/v257-oracle
+          echo V257_CONSTRUCTION_REFERENCE_KERNEL_PASS
+          echo V257_D3D11_REPLACEMENT_NOT_YET_IMPLEMENTED_PIXEL_OPEN
+  exact-reference-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build and run exact portable kernel under MSVC
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core\tools\v257 renderer-core\tools\v257\test_ptde_equipment_hemenvlerp_core.cpp /Fe:v257-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V257 MSVC native compile failed'}
+          ./v257-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V257 MSVC PTDE operator tests failed'}
+          Write-Host 'V257_NATIVE_WINDOWS_REFERENCE_KERNEL_PASS'
+          Write-Host 'V257_ADDON_ACTIVATION_AND_PIXEL=OPEN'
