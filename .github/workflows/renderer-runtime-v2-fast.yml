@@ -1,37 +1,44 @@
-name: Renderer Runtime v2 Fast Build — V262 PTDE Diffuse Subcut
+name: Renderer Runtime v2 Fast Build — V263 Diffuse Double-Patch Falsification
 on:
   push:
     branches:
-      - agent/v262-equipment-diffuse-lane-20261013
+      - agent/v263-r19-diffuse-doublepatch-falsification-20261013
   pull_request:
     paths:
-      - 'renderer-core/tools/v262/**'
+      - 'renderer-core/tools/v263/**'
       - '.github/workflows/renderer-runtime-v2-fast.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  operator-dxbc-oracle:
+  r19-source-abi:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Exact DXBC opcode rewrite and synthetic falsification
+      - name: Confirm R19 existing c100 first diffuse equation and reject V262 duplicate
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile renderer-core/tools/v262/ptde_diffuse_first_lane_dxbc_candidate.py renderer-core/tools/v262/test_ptde_diffuse_lane.py
-          python renderer-core/tools/v262/test_ptde_diffuse_lane.py
-          echo V262_NEW_MATERIAL_LANE_SHADER_CANDIDATE_PASS
-          echo V262_LIVE_RECEIVER_SIDE_CAR_AUTHORIZATION_OPEN
-          echo V262_GAME_RUNTIME_AND_PIXEL_OPEN
-      - name: Confirm production renderer sources unchanged since V259
-        shell: bash
-        run: |
-          git diff --exit-code 092d0fe7b088b045c63249c2b3225f23e4751db8 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
-          echo V262_PROTECTED_RENDERER_SOURCE_UNCHANGED
+          python3 renderer-core/tools/v263/audit_r19_material_diffuse_v262_inapplicability.py --root . --out v263_r19_inapplicability.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('v263_r19_inapplicability.json'))
+          assert d['plan_contract']['total_receivers']==48
+          assert d['plan_contract']['lerp_receivers']==24
+          assert d['source_contract']['first_lerp_diffuse_exponent']==1.0
+          assert 'NOT applicable' in d['conclusion'] or 'NOT applicable'.upper() in d['conclusion'].upper()
+          print('V263_R19_PREVIOUS_DIFFUSE_WORK_CONFIRMED',d['plan_contract']['specific_verified_rx'])
+          PY
+          git diff --exit-code 009b8115e8a809d443e8b476b37f2ecd759c01db HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          echo V263_PRODUCTION_RENDERER_AND_STOCK_FOG_UNCHANGED
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V263_R19_FIRST_DIFFUSE_ALREADY_PORTED_AUDIT
+          path: v263_r19_inapplicability.json
+          if-no-files-found: error
