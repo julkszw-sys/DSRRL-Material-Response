@@ -20,12 +20,12 @@ def globals_rdef(rdef):
     for i in range(count):
         p=off+i*24
         name_pos,nvars,var_pos,size,_,_=struct.unpack_from("<6I",rdef,p)
-        name=rdef[name_pos:rdef.index(b"\\x00",name_pos)].decode("ascii")
+        name=rdef[name_pos:rdef.index(bytes((0,)),name_pos)].decode("ascii")
         if name != "$Globals":continue
         for j in range(nvars):
             v=var_pos+j*40
             name_pos,byte_offset,nbytes,_,_,_=struct.unpack_from("<6I",rdef,v)
-            key=rdef[name_pos:rdef.index(b"\\x00",name_pos)].decode("ascii")
+            key=rdef[name_pos:rdef.index(bytes((0,)),name_pos)].decode("ascii")
             records[key]={"byte_offset":byte_offset,"register":byte_offset//16,"bytes":nbytes}
     for key,reg in (("gFC_MaterialWorkflow",85),
                     ("gFC_DifMapMulCol",9),
