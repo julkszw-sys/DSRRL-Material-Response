@@ -1,0 +1,37 @@
+name: V256 v2.0.3 P-Metal Static Regression Audit
+on:
+  push:
+    branches:
+      - agent/v256-v203-lerp-lineage-static-audit-20261013
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v203-to-v255-exact-static-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: No operator source modifications relative to V255
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code 4ea4e623bed1900c8470b0e6304d48ae3f09dfc8 HEAD -- \
+            renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          echo V256_NO_RENDERER_SOURCE_MODIFICATION
+      - name: Static line-level reproduction of V203 versus V255
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 renderer-core/tools/audit_v256_v203_pmetal_static_regression.py
+          test -s audit-output/v256/line_by_line.diff
+          test -s audit-output/v256/source_hunks.json
+          echo V256_REPRODUCIBLE_STATIC_DIFF_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V256_V203_V255_LINE_LEVEL_STATIC_AUDIT
+          path: audit-output/v256/
+          if-no-files-found: error
