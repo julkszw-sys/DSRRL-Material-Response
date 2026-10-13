@@ -21,16 +21,15 @@ NEW=(
         static std::atomic_bool v258_once{false};
         if (!v258_once.exchange(true,std::memory_order_relaxed)) {
             std::uint32_t witness = 2166136261u;
-            for (const auto *raw : {
-                    &v258_dxbc::k_env_local_subcut_ps,
-                    &v258_dxbc::k_terminal_subcut_ps
-                 }) {
-                // Never conflate readiness with binding: purposefully
-                // evaluate bytes to prove both DXBC blobs are linked.
-                const volatile std::uint8_t *bytes = raw->data();
-                for (std::size_t i=0u;i<raw->size();++i)
+            const auto check_blob = [&witness](const auto &raw) {
+                // Read volatile bytes to prove both distinct-sized DXBC
+                // blobs are truly linked, not optimized to a fixed scalar.
+                const volatile std::uint8_t *bytes = raw.data();
+                for (std::size_t i=0u;i<raw.size();++i)
                     witness = (witness ^ bytes[i])*16777619u;
-            }
+            };
+            check_blob(v258_dxbc::k_env_local_subcut_ps);
+            check_blob(v258_dxbc::k_terminal_subcut_ps);
             char info[320]{};
             std::snprintf(info,sizeof(info),
                 "[DSRRL V258 PTDE GPU ISLAND DORMANT] "
