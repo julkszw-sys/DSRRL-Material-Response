@@ -1,0 +1,65 @@
+name: V258 Equipment PTDE LERP DXBC Fast CI
+on:
+  push:
+    branches:
+      - agent/v258-equipment-lerp-gpu-contract-20261013
+  pull_request:
+    paths:
+      - 'renderer-core/tools/v257/**'
+      - 'renderer-core/tools/v258/**'
+      - '.github/workflows/v258-equipment-lerp-gpu-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v258-native-dxbc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify no production renderer source changed
+        shell: pwsh
+        run: |
+          git diff --exit-code 4ea4e623bed1900c8470b0e6304d48ae3f09dfc8 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          if($LASTEXITCODE -ne 0){throw 'V258 modified production renderer'}
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Native PTDE CPU oracle and sidecar inventory tests
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core\tools\v257 renderer-core\tools\v257\test_ptde_equipment_hemenvlerp_core.cpp /Fe:v258-cpu-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V257 CPU oracle build failure'}
+          ./v258-cpu-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V257 CPU oracle failure'}
+          python renderer-core/tools/v257/test_inventory.py
+          if($LASTEXITCODE -ne 0){throw 'V258 sidecar inventory contract failure'}
+      - name: Native D3DCompiler real PS5 DXBC operator compilation and ABI assertions
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX renderer-core\tools\v258\compile_and_verify_ptde_gpu_subcuts.cpp /Fe:v258-dxbc-oracle.exe /link d3dcompiler.lib
+          if($LASTEXITCODE -ne 0){throw 'V258 DXBC verifier compilation failure'}
+          ./v258-dxbc-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V258 real DXBC generation / reflection ABI FAIL'}
+          $a=[IO.File]::ReadAllBytes('v258_ptde_env_local_subcut.dxbc')
+          $b=[IO.File]::ReadAllBytes('v258_ptde_phn_terminal_subcut.dxbc')
+          if([Text.Encoding]::ASCII.GetString($a,0,4) -ne 'DXBC' -or
+             [Text.Encoding]::ASCII.GetString($b,0,4) -ne 'DXBC'){
+              throw 'V258 output not DXBC'}
+          Write-Host 'V258_COMPILED_TWO_REAL_DXBC_SHADER_SUBCUTS_PASS'
+          Write-Host "V258_ENV_DXBC_SHA256=$((Get-FileHash v258_ptde_env_local_subcut.dxbc -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "V258_TERM_DXBC_SHA256=$((Get-FileHash v258_ptde_phn_terminal_subcut.dxbc -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host 'V258_LIVE_RECEIVER_BIND=OFF_FAIL_OPEN_PENDING_CONSUMER_ABI_AND_SIDECAR'
+          Write-Host 'V258_RUNTIME_PIXEL=OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V258_PTDE_EQUIPMENT_HEMENVLERP_DXBC_OPERATOR_ISLANDS
+          path: |
+            v258_ptde_env_local_subcut.dxbc
+            v258_ptde_phn_terminal_subcut.dxbc
+            renderer-core/tools/v258/*.hlsl
+            renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp
+            renderer-core/tools/v257/ptde_equipment_hemenvlerp_core.hpp
+            renderer-core/tools/v257/inventory_dsrll_sidecars.py
+          if-no-files-found: error
