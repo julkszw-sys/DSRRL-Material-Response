@@ -6,6 +6,8 @@ $termDxbc='v258_ptde_phn_terminal_subcut.dxbc'
 $hdr='renderer-core/include/dsrrl/runtime/generated_v258_equipment_lerp_dxbc.hpp'
 $src='renderer-core/tools/build_v253_ptde_envspec_rgbm.ps1'
 $tmp='renderer-core/tools/_v258_generated_native_build.ps1'
+$v271Mat='renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp'
+$v271MatOriginal=[IO.File]::ReadAllText($v271Mat)
 if(Test-Path $hdr){throw 'Existing V258 generated header, refusing overwrite'}
 if(Test-Path $tmp){throw 'Existing V258 temporary native builder, refusing overwrite'}
 try{
@@ -34,6 +36,10 @@ try{
  if($LASTEXITCODE -ne 0){throw 'V258 prior V255 overlay failure'}
  python renderer-core/tools/apply_v255_lerp_phn_cut_diag.py
  if($LASTEXITCODE -ne 0){throw 'V258 V255 oracle failure'}
+ python renderer-core/tools/v258/apply_v271_stock_atmos_glow_guard.py --apply
+ if($LASTEXITCODE -ne 0){throw 'V271 original DSR Fog/LS/Glow postcondition patch failure'}
+ python renderer-core/tools/v258/apply_v271_stock_atmos_glow_guard.py
+ if($LASTEXITCODE -ne 0){throw 'V271 original DSR Fog/LS/Glow postcondition oracle failure'}
  python renderer-core/tools/v258/apply_v258_dormant_dx11_island.py --apply
  if($LASTEXITCODE -ne 0){throw 'V258 dormant integrated DXBC overlay failure'}
  python renderer-core/tools/v258/apply_v258_dormant_dx11_island.py
@@ -81,6 +87,12 @@ try{
     Write-Host 'V270_NATIVE_RX_DRAW_BINDING=INACTIVE'
     Write-Host 'V258_PTDE_PIXEL_BEHAVIOR=OPEN'
 } finally {
+    if(Test-Path $v271Mat){
+       [IO.File]::WriteAllText($v271Mat,$v271MatOriginal)
+       if([IO.File]::ReadAllText($v271Mat) -cne $v271MatOriginal){
+          throw 'V271 original R19 materializer restore mismatch'
+       }
+    }
     if(Test-Path $tmp){Remove-Item $tmp -Force}
     if(Test-Path $hdr){Remove-Item $hdr -Force}
 }
