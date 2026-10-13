@@ -26,6 +26,7 @@ jobs:
           python3 -m py_compile \
             renderer-core/tools/apply_v254_lerp_multievent_diag.py \
             renderer-core/tools/apply_v253_ptde_envspec_rgbm.py
+          python3 renderer-core/tools/test_v254_overlay.py
           echo V254_NO_RENDERER_SOURCE_DRIFT
   native-integrated-addon:
     needs: precise-source-scope
