@@ -115,6 +115,12 @@ jobs:
           Write-Host "V258_ONE_ADDON_SHA256=$((Get-FileHash $name -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host 'V258_SINGLE_ADDON_CONSTRUCTION_AND_DXBC_EMBED_PASS'
           Write-Host 'V258_NEW_GPU_OPERATOR_ACTIVE=0 PTDE_PIXEL=OPEN'
+      - name: V271 verify original tracked materializer restored
+        shell: pwsh
+        run: |
+          git diff --exit-code -- renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp
+          if($LASTEXITCODE -ne 0){throw 'V271 materializer restore mismatch'}
+          Write-Host 'V271_ORIGINAL_TRACKED_MATERIALIZER_RESTORED_PASS'
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_V271_EQUIPMENT_PTDE_RX_NATIVE_GUARDED_ONE_ADDON
