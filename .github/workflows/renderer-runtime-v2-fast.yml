@@ -1,11 +1,11 @@
 name: Renderer Runtime v2 Fast Build
 
-# Branch-scoped V254 diagnostic build. The original R43-only source audit
+# Branch-scoped V255 PHN carrier-cut diagnostic build. The original R43-only source audit
 # cannot be applied to a V253-based operator lineage.
 on:
   push:
     branches:
-      - agent/v254-lerp-multievent-observer-20261013
+      - agent/v255-lerp-phn-consumer-cut-diag-20261013
   pull_request:
     paths:
       - "renderer-core/**"
@@ -42,33 +42,33 @@ jobs:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
-      - name: Verify V254 diagnostic patch syntax and immutable source scope
+      - name: Verify V255 PHN carrier-cut diagnostic patch syntax and immutable source scope
         shell: pwsh
         run: |
           git diff --exit-code 33a63a34ad586f111db4dc64712fdb9c76250928 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders renderer-core/data
           if ($LASTEXITCODE -ne 0) { throw 'V254 protected V253 shader/runtime source drift' }
-          python -m py_compile renderer-core/tools/apply_v254_lerp_multievent_diag.py renderer-core/tools/apply_v253_ptde_envspec_rgbm.py renderer-core/tools/analyze_v254_lerp_log.py
+          python -m py_compile renderer-core/tools/apply_v254_lerp_multievent_diag.py renderer-core/tools/apply_v255_lerp_phn_cut_diag.py renderer-core/tools/apply_v253_ptde_envspec_rgbm.py renderer-core/tools/analyze_v254_lerp_log.py
           if ($LASTEXITCODE -ne 0) { throw 'V254 source syntax failure' }
-      - name: Build exact V254 multi-event single addon
+      - name: Build exact V255 PHN carrier-cut single addon
         shell: pwsh
         run: |
-          ./renderer-core/tools/build_v254_lerp_multievent.ps1
+          ./renderer-core/tools/build_v255_lerp_phn_cut.ps1
           if ($LASTEXITCODE -ne 0) { throw 'V254 native build failed' }
       - name: Verify V254 addon payload and SHA256
         shell: pwsh
         run: |
-          $out='DSRRL_V254_LERP_MULTIEVENT_V253_SAFE.addon64'
-          if (!(Test-Path $out)) { throw 'V254 output addon missing' }
+          $out='DSRRL_V255_LERP_PHN_CUT_V254_SAFE.addon64'
+          if (!(Test-Path $out)) { throw 'V255 output addon missing' }
           $raw=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($out))
-          foreach($tag in @('[DSRRL V254 LERP EVENTS]','[DSRRL V254 LERP SOURCE]','[DSRRL V254 LERP SUMMARY]','[DSRRL V253 PTDE ENVSPEC RGBM]')) {
-            if (!$raw.Contains($tag)) { throw "V254 missing compiled observer $tag" }
+          foreach($tag in @('[DSRRL V254 LERP EVENTS]','[DSRRL V254 LERP SOURCE]','[DSRRL V254 LERP SUMMARY]','[DSRRL V255 PHN CARRIER CUT]','[DSRRL V253 PTDE ENVSPEC RGBM]')) {
+            if (!$raw.Contains($tag)) { throw "V255 missing compiled observer $tag" }
           }
           $hash=(Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "V254_FAST_CI_ADDON_SHA256=$hash"
-          Write-Host "V254_CONSTRUCTION_AND_NATIVE_COMPATIBILITY=PASS"
-          Write-Host "V254_OWNER_RUNTIME_AND_PIXEL=OPEN"
+          Write-Host "V255_FAST_CI_ADDON_SHA256=$hash"
+          Write-Host "V255_CONSTRUCTION_AND_NATIVE_COMPATIBILITY=PASS"
+          Write-Host "V255_OWNER_RUNTIME_AND_PIXEL=OPEN"
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V254_LERP_MULTIEVENT_FASTCI_SINGLE_ADDON
-          path: DSRRL_V254_LERP_MULTIEVENT_V253_SAFE.addon64
+          name: DSRRL_V255_LERP_PHN_CUT_FASTCI_SINGLE_ADDON
+          path: DSRRL_V255_LERP_PHN_CUT_V254_SAFE.addon64
           if-no-files-found: error
