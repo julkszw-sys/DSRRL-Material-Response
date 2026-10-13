@@ -162,11 +162,13 @@ CUT_ADD=r'''    // V255 strictly operator-local CPU transport witness. The value
 
 def one(src,old,new,label,n=1):
     # Distinguish a pristine/mixed state. Do not silently reapply half patch.
+    # New body may contain the old anchor as its suffix/prefix.
+    # Therefore check the fully patched preimage FIRST (V254 contract).
+    if src.count(new)==n:
+        return src
     count=src.count(old)
     if count==n:
         return src.replace(old,new,n)
-    if src.count(new)==n:
-        return src
     raise RuntimeError(f'V255 {label}: unexpected preimage={count}, output={src.count(new)}')
 
 def patch_integrated(src):
