@@ -107,6 +107,29 @@ def audit(rx,blob):
     # it matches MUL length7/dest .yzw, or MAD length9/dest .yzw.
     if len(pos[cfg["late1"]][2])!=10 or len(pos[cfg["late2"]][2])!=9 or pos[cfg["late2"]][2][1]!=0x00100072:
         raise ValueError("late MAD shape overlaps R19 material patch")
+    # Exact DSR material Fresnel-like affine endpoint operation.
+    # MAD r3.xyz, -r1.xxxx, rGamma.xyz, r1.xxxx
+    # MAD rOut.xyz, r3.xyz, rK.component, rGamma.xyz
+    # => rOut = M + (1-M) * (r1.x * rK.component)
+    # The numeric interpretation of K as angular Fresnel is NOT proven.
+    k_token,k_register,k_component={
+       33:(0x00100556,7,"y"),
+       34:(0x00100ff6,8,"w"),
+       35:(0x00100ff6,7,"w"),
+    }[rx]
+    first_mad=pos[cfg["late1"]][2]
+    next_mad=pos[cfg["late2"]][2]
+    expected_first=[0x0a000032,0x00100072,3,
+        0x80100006,0x41,1,
+        0x00100246,cfg["gamma"],
+        0x00100006,1]
+    expected_second=[0x09000032,0x00100072,
+        cfg["gamma"]+1,
+        0x00100246,3,
+        k_token,k_register,
+        0x00100246,cfg["gamma"]]
+    if first_mad!=expected_first or next_mad!=expected_second:
+        raise ValueError("postmerge Fresnel-like affine operands differ from exact retail DSR")
     if not unique_retained_window(words):
         raise ValueError("native DSR Fog/LS subsequence not unique")
     return {
@@ -114,6 +137,10 @@ def audit(rx,blob):
        "second_gamma_exp_word":cfg["exp"],"second_gamma_register":"r%d.xyz"%cfg["gamma"],
        "conditional_debug_override_words":cfg["debug"],"first_reader":cfg["early"],
        "post_envdiffuse_reader_MAD":cfg["late1"],"next_post_envdiffuse_MAD":cfg["late2"],
+       "exact_DSR_affine_math":"M + (1-M)*K",
+       "M":"pow(saturate(SpecTex.rgb*cb0[10].rgb),2.2)",
+       "K":"r1.x * r%d.%s"%(k_register,k_component),
+       "Fresnel_angular_semantic":"HYPOTHESIS; affine response proved, K source not fully proved",
        "intermediate_live_out":"r3.xyz","intervening_r3_xyz_writes":0,
        "exact_R19_rewrite_overlap_with_these_MADs":False,
        "stock_fog_start":cfg["fog"],"stock_fog_sha256":FOG_SHA,
