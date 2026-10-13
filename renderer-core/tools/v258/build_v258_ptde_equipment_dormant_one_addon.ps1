@@ -18,11 +18,13 @@ try{
     python renderer-core/tools/v258/embed_v258_dx11_candidate.py --env $envDxbc --terminal $termDxbc --out $hdr
     if($LASTEXITCODE -ne 0){throw 'V258 DXBC header embedding failure'}
     $s=[IO.File]::ReadAllText($src).Replace([string][char]13+[char]10,[string][char]10)
-    $anchor=@'
- python renderer-core/tools/apply_v253_ptde_envspec_rgbm.py
- if($LASTEXITCODE -ne 0){throw 'V253 PTDE EnvSpec exact source oracle fail'}
-'@
-    $anchor=$anchor.TrimEnd()
+    # Anchor by the unique semantic oracle label, not PowerShell here-string
+    # whitespace (which may be normalized by the Windows runner).
+    $unique='V253 PTDE EnvSpec exact source oracle fail'
+    $at=$s.IndexOf($unique)
+    if($at -lt 0 -or $s.IndexOf($unique,$at+1) -ge 0){
+      throw 'V258 V253 oracle label missing or ambiguous'
+    }
     $injection=@'
  python renderer-core/tools/apply_v254_lerp_multievent_diag.py --apply
  if($LASTEXITCODE -ne 0){throw 'V258 prior V254 overlay failure'}
@@ -38,10 +40,9 @@ try{
  if($LASTEXITCODE -ne 0){throw 'V258 dormant integrated DXBC source oracle failure'}
 '@
     $injection=$injection.TrimEnd()
-    if($s.Split([string[]]@($anchor),[StringSplitOptions]::None).Count -ne 2){
-      throw 'V258 expected V253 source oracle anchor count differs from 1'
-    }
-    $s=$s.Replace($anchor,$anchor+[char]10+$injection)
+    $eol=$s.IndexOf([char]10,$at)
+    if($eol -lt 0){throw 'V258 expected newline after source oracle'}
+    $s=$s.Insert($eol+1,$injection+[char]10)
     $old="DSRRL_V253_EXACT_PTDE_ENVSPEC_RGBM_V252_SAFE.addon64"
     $new="DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64"
     if(!$s.Contains($old)){throw 'V258 addon output name anchor missing'}
