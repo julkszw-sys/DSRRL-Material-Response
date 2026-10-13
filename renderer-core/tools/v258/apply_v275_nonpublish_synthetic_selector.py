@@ -34,9 +34,17 @@ REPLACEMENT = ANCHOR + r'''
 def run(apply):
     s=P.read_text(encoding='utf8').replace('\r\n','\n')
     if MARKER in s:
-        if (s.count(MARKER)!=1 or s.count('v275_synthetic_logged')!=2 or
-            s.count('pmetal_selector_policy::is_synthetic_zero_descriptor(')!=1):
-            raise RuntimeError('V275 duplicated or incomplete source')
+        # The full generated renderer can already use this production
+        # predicate in other overlays; count ONLY our unique insertion.
+        expected = 'static std::atomic_bool v275_synthetic_logged{false};'
+        call = 'if (pmetal_selector_policy::is_synthetic_zero_descriptor('
+        if (s.count(MARKER)!=1 or s.count(expected)!=1 or
+            s.count('v275_synthetic_logged.exchange(')!=1 or
+            call not in s):
+            raise RuntimeError(
+                'V275 incomplete source: marker={} decl={} call={} log={}'.format(
+                    s.count(MARKER),s.count(expected),
+                    s.count(call),s.count('v275_synthetic_logged.exchange(')))
         print('V275_SYNTHETIC_ZERO_SELECTOR_NONPUBLISH_SOURCE_ORACLE_PASS');return
     if s.count(ANCHOR)!=1 or 'pmetal_selector_policy.hpp' not in s:
         raise RuntimeError('V275 exact original selector preimage mismatch')
