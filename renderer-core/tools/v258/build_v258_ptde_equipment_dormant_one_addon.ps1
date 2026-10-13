@@ -44,7 +44,7 @@ try{
     if($eol -lt 0){throw 'V258 expected newline after source oracle'}
     $s=$s.Insert($eol+1,$injection+[char]10)
     $old="DSRRL_V253_EXACT_PTDE_ENVSPEC_RGBM_V252_SAFE.addon64"
-    $new="DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64"
+    $new="DSRRL_V270_EQUIPMENT_PTDE_RX_NATIVE_DORMANT_V255_SAFE.addon64"
     if(!$s.Contains($old)){throw 'V258 addon output name anchor missing'}
     $s=$s.Replace($old,$new)
     $tag="'[DSRRL V253 PTDE ENVSPEC RGBM]',"
