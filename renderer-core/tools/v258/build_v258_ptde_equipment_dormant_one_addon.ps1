@@ -44,13 +44,17 @@ try{
  if($LASTEXITCODE -ne 0){throw 'V258 dormant integrated DXBC overlay failure'}
  python renderer-core/tools/v258/apply_v258_dormant_dx11_island.py
  if($LASTEXITCODE -ne 0){throw 'V258 dormant integrated DXBC source oracle failure'}
+ python renderer-core/tools/v258/apply_v272_positive_beta_source_route.py --apply
+ if($LASTEXITCODE -ne 0){throw 'V272 interior Lerp b12 source route apply failed'}
+ python renderer-core/tools/v258/apply_v272_positive_beta_source_route.py
+ if($LASTEXITCODE -ne 0){throw 'V272 interior Lerp b12 source route oracle failed'}
 '@
     $injection=$injection.TrimEnd()
     $eol=$s.IndexOf([char]10,$at)
     if($eol -lt 0){throw 'V258 expected newline after source oracle'}
     $s=$s.Insert($eol+1,$injection+[char]10)
     $old="DSRRL_V253_EXACT_PTDE_ENVSPEC_RGBM_V252_SAFE.addon64"
-    $new="DSRRL_V271_EQUIPMENT_PTDE_RX_NATIVE_FOG_GLOW_GUARDED.addon64"
+    $new="DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64"
     if(!$s.Contains($old)){throw 'V258 addon output name anchor missing'}
     $s=$s.Replace($old,$new)
     $tag="'[DSRRL V253 PTDE ENVSPEC RGBM]',"
@@ -62,6 +66,7 @@ try{
   '[DSRRL V255 PHN CARRIER CUT]',
   '[DSRRL V258 PTDE GPU ISLAND DORMANT]',
   '[DSRRL V270 NATIVE RX GPU SHADERS DORMANT]',
+  '[DSRRL V272 INTERIOR LERP B12 ROUTE]',
 '@
     $s=$s.Replace($tag,$tag+[char]10+$added.TrimEnd())
     $s=$s.Replace('V253_EXACT_PTDE_LIGHTBANK_ENVSPEC_RGBM_CONSTRUCTION_PASS',
@@ -77,6 +82,7 @@ try{
     $ascii=[Text.Encoding]::ASCII.GetString($bytes)
     foreach($marker in @('[DSRRL V258 PTDE GPU ISLAND DORMANT]',
                            '[DSRRL V270 NATIVE RX GPU SHADERS DORMANT]',
+                           '[DSRRL V272 INTERIOR LERP B12 ROUTE]',
                            '[DSRRL V255 PHN CARRIER CUT]',
                            '[DSRRL V254 LERP EVENTS]',
                            '[DSRRL V253 PTDE ENVSPEC RGBM]')){
@@ -85,6 +91,7 @@ try{
     Write-Host "V258_NATIVE_INTEGRATED_SINGLE_ADDON_SHA256=$((Get-FileHash $new -Algorithm SHA256).Hash.ToLowerInvariant())"
     Write-Host 'V270_FIVE_DXBC_IN_ONE_ADDON_DORMANT_EMBED_PASS'
     Write-Host 'V270_NATIVE_RX_DRAW_BINDING=INACTIVE'
+    Write-Host 'V272_INTERIOR_LERP_B12_ROUTING_TELEMETRY_COMPILED'
     Write-Host 'V258_PTDE_PIXEL_BEHAVIOR=OPEN'
 } finally {
     if(Test-Path $v271Mat){
