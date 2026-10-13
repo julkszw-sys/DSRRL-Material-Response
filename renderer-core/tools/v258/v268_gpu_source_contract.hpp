@@ -18,7 +18,13 @@ struct source {
   // FLVER/MTD/shader/texture/sidecar ownership, receiver and material slot.
   dsrrl::v257::admission exact_owner{};
 
-  // Distinct PTDE semantic producers. A common DSR source.beta is NOT proof.
+  // V273 original PTDE source: c84/c85 have independent CPU setters and
+  // constant registers, BUT one exact valid dual-source interior blend
+  // producer feeds BOTH .w from the same selector t. Distinct destination
+  // paths do not imply distinct numeric beta values. These guards require
+  // verified PTDE-derived value *provenance* for each destination, which
+  // may legitimately resolve to the same t. A generic DSR source.beta
+  // is still NOT sufficient until its selector/time semantics match PTDE.
   bool ptde_c84_producer_verified=false;
   bool ptde_c85_producer_verified=false;
   bool ptde_upper_lower_producer_verified=false;
