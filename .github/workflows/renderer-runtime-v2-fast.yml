@@ -32,6 +32,8 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V257 Windows compile failed'}
           ./v257-oracle.exe
           if($LASTEXITCODE -ne 0){throw 'V257 reference math or authority checks failed'}
+          python renderer-core/tools/v257/test_inventory.py
+          if($LASTEXITCODE -ne 0){throw 'V257 sidecar non-authority inventory test failed'}
           Write-Host 'V257_CLEAN_PTDE_EQUIPMENT_OPERATOR_REFERENCE_PASS'
           Write-Host 'V257_RENDERER_REPLACEMENT=NOT_IMPLEMENTED'
           Write-Host 'V257_PIXEL_BEHAVIOR=OPEN'
