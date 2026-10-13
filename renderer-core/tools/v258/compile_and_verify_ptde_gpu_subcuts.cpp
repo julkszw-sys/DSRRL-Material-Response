@@ -1,6 +1,7 @@
 // V258: standalone DXBC GPU shader generation and exact ABI census.
 // Construction only: deliberately no DSR bind, no pixel-pass claim.
 #include <Windows.h>
+#include <initguid.h>
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
 #include <array>
