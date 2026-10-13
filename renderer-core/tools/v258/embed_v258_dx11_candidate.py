@@ -37,7 +37,7 @@ def run():
        +embed("k_env_local_subcut_ps",env)
        +embed("k_terminal_subcut_ps",term)
        + "".join(
-            f'inline constexpr char k_sha256_native_rx{rx}[] = "{hashlib.sha256(native[rx]).hexdigest()}";\\n'
+            f'inline constexpr char k_sha256_native_rx{rx}[] = "{hashlib.sha256(native[rx]).hexdigest()}";\n'
             +embed(f"k_native_rx{rx}_normal_ptde_dormant_ps",native[rx])
             for rx in (33,34,35))
        +"} // namespace dsrrl::runtime::v258_dxbc\n")
