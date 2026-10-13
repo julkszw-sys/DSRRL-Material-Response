@@ -15,7 +15,7 @@ try{
     if($LASTEXITCODE -ne 0){throw 'V258 two DXBC builder compile failure'}
     & ./v258-dxbc-oracle.exe
     if($LASTEXITCODE -ne 0){throw 'V258 DXBC reflection ABI failure'}
-    python renderer-core/tools/v258/embed_v258_dx11_candidate.py --env $envDxbc --terminal $termDxbc --out $hdr
+    python renderer-core/tools/v258/embed_v258_dx11_candidate.py --env $envDxbc --terminal $termDxbc --rx33 v270_rx33_v268.dxbc --rx34 v270_rx34_v268.dxbc --rx35 v270_rx35_v268.dxbc --out $hdr
     if($LASTEXITCODE -ne 0){throw 'V258 DXBC header embedding failure'}
     $s=[IO.File]::ReadAllText($src).Replace([string][char]13+[char]10,[string][char]10)
     # Anchor by the unique semantic oracle label, not PowerShell here-string
@@ -55,6 +55,7 @@ try{
   '[DSRRL V254 LERP EVENTS]',
   '[DSRRL V255 PHN CARRIER CUT]',
   '[DSRRL V258 PTDE GPU ISLAND DORMANT]',
+  '[DSRRL V270 NATIVE RX GPU SHADERS DORMANT]',
 '@
     $s=$s.Replace($tag,$tag+[char]10+$added.TrimEnd())
     $s=$s.Replace('V253_EXACT_PTDE_LIGHTBANK_ENVSPEC_RGBM_CONSTRUCTION_PASS',
@@ -69,14 +70,15 @@ try{
     $bytes=[IO.File]::ReadAllBytes($new)
     $ascii=[Text.Encoding]::ASCII.GetString($bytes)
     foreach($marker in @('[DSRRL V258 PTDE GPU ISLAND DORMANT]',
+                           '[DSRRL V270 NATIVE RX GPU SHADERS DORMANT]',
                            '[DSRRL V255 PHN CARRIER CUT]',
                            '[DSRRL V254 LERP EVENTS]',
                            '[DSRRL V253 PTDE ENVSPEC RGBM]')){
        if(!$ascii.Contains($marker)){throw "V258 final binary missing $marker"}
     }
     Write-Host "V258_NATIVE_INTEGRATED_SINGLE_ADDON_SHA256=$((Get-FileHash $new -Algorithm SHA256).Hash.ToLowerInvariant())"
-    Write-Host 'V258_NATIVE_SINGLE_ADDON_BINARIES_EMBEDDED_PASS'
-    Write-Host 'V258_NEW_SHADER_DRAW_BINDING=INACTIVE'
+    Write-Host 'V270_FIVE_DXBC_IN_ONE_ADDON_DORMANT_EMBED_PASS'
+    Write-Host 'V270_NATIVE_RX_DRAW_BINDING=INACTIVE'
     Write-Host 'V258_PTDE_PIXEL_BEHAVIOR=OPEN'
 } finally {
     if(Test-Path $tmp){Remove-Item $tmp -Force}
