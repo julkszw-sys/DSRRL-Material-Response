@@ -94,7 +94,9 @@ def main():
  p=argparse.ArgumentParser();p.add_argument('--apply',action='store_true');a=p.parse_args()
  s=P.read_text(encoding="utf8").replace("\r\n","\n")
  if M in s:
-  if s.count(M)!=1 or s.count('v272_seen_interior')!=1:
+  if (s.count(M)!=1 or
+      s.count('static std::atomic<std::uint32_t> v272_seen_interior{0u};')!=1 or
+      s.count('v272_seen_interior.fetch_or(')!=1):
    raise RuntimeError("V272 partially applied")
   print("V272_POSITIVE_BETA_DRAW_REQUEST_ROUTING_ORACLE_PASS");return
  if s.count(A)!=1:
