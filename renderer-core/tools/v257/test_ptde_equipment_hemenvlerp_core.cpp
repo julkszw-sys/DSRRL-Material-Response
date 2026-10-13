@@ -24,5 +24,28 @@ int main(){
  t.c110_w=1;assert(compose_terminal(t,s)&&eq(s,{5,10,15}));
  t.c110_w=0.25f;assert(compose_terminal(t,s)&&eq(s,{2,4,6}));
  t.c135_y=0;assert(!compose_terminal(t,s));
+ admission g{};assert(!accepts(g));
+ auto &a=g.expected,&b=g.observed;
+ a.receiver=b.receiver=33;a.slot=b.slot=4;
+ a.flver_fingerprint=b.flver_fingerprint=1;
+ a.mtd_fingerprint=b.mtd_fingerprint=2;
+ a.shader_fingerprint=b.shader_fingerprint=3;
+ a.logical_tex_hash=b.logical_tex_hash=4;
+ for(unsigned i=0;i<32;++i){
+   a.flver[i]=b.flver[i]=static_cast<unsigned char>(i+1);
+   a.mtd[i]=b.mtd[i]=static_cast<unsigned char>(i+2);
+   a.shader[i]=b.shader[i]=static_cast<unsigned char>(i+3);
+   a.texture[i]=b.texture[i]=static_cast<unsigned char>(i+4);
+   a.sidecar[i]=b.sidecar[i]=static_cast<unsigned char>(i+5);
+ }
+ g.equipment_owner_verified=g.slot_verified=true;
+ g.sidecar_loaded_and_hashed=g.consumer_family_proven=true;
+ g.full_material_port_proven=g.exact_post_material_inputs_proven=true;
+ assert(accepts(g));
+ b.sidecar[17]^=1;assert(!accepts(g));b.sidecar[17]^=1;
+ b.receiver=37;assert(!accepts(g));b.receiver=33;
+ g.equipment_owner_verified=false;assert(!accepts(g));
+ g.equipment_owner_verified=true;
+ g.exact_post_material_inputs_proven=false;assert(!accepts(g));
  std::puts("V257_PTDE_EQUIPMENT_HEMENVLERP_CLEAN_KERNEL_PASS");
 }
