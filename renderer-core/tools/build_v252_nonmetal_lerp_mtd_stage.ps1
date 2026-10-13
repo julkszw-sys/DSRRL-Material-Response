@@ -43,11 +43,11 @@ try{
  $generated=@(Get-ChildItem build/generated -Recurse -Filter integrated_addon_physical_cut.cpp)
  if($generated.Count -ne 1){throw "V252 cut count mismatch $($generated.Count)"}
  $cut=[IO.File]::ReadAllText($generated[0].FullName)
- foreach($tag in @('v252_lerp_witness','[DSRRL V250 PMETAL LERP DRAW]')){
+ foreach($tag in @('v251_lerp_witness','[DSRRL V250 PMETAL LERP DRAW]')){
    if(!$cut.Contains($tag)){throw "V252 physical cut marker missing $tag"}
  }
  $tx=[IO.File]::ReadAllText('renderer-core/src/runtime/draw_state_transaction.cpp')
- if(!$tx.Contains('[DSRRL V252 LERP NATIVE]')){
+ if(!$tx.Contains('[DSRRL V251 LERP NATIVE]')){
      throw 'V252 native bind stage missing in actual compiled source'}
  cmake --build build --config Release --target dsrrl_renderer_core_integrated
  if($LASTEXITCODE -ne 0){throw 'V252 native addon compile failed'}
@@ -72,7 +72,7 @@ try{
  Copy-Item $base $out -Force
  $bytes=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($out))
  foreach($tag in @(
-  '[DSRRL V252 LERP NATIVE]',
+  '[DSRRL V251 LERP NATIVE]',
   '[DSRRL V250 PMETAL LERP DRAW]',
   '[DSRRL V250 PMETAL LERP PREPARE]',
   '[DSRRL V249 PMETAL SOURCE JOIN]',
