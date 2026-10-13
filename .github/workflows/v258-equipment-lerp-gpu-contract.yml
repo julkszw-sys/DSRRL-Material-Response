@@ -35,6 +35,17 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V257 CPU oracle failure'}
           python renderer-core/tools/v257/test_inventory.py
           if($LASTEXITCODE -ne 0){throw 'V258 sidecar inventory contract failure'}
+      - name: Intersect pinned 1295 sidecar names and 748 equipment source routes
+        shell: pwsh
+        run: |
+          python renderer-core/tools/v258/census_equipment_sidecar_name_authority.py
+          if($LASTEXITCODE -ne 0){throw 'V258 checksum-pinned equipment name census failed'}
+          $c=Get-Content v258_sidecar_candidate_census.json -Raw | ConvertFrom-Json
+          if($c.total_pinned_sidecar_names -ne 1295 -or
+             $c.total_pinned_equipment_route_names -ne 748){
+            throw 'V258 donor corpus count mismatch'}
+          if(@($c.records | Where-Object {$_.runtime_allow -ne $false}).Count -ne 0){
+            throw 'V258 unauthorized material in candidate census'}
       - name: Native D3DCompiler real PS5 DXBC operator compilation and ABI assertions
         shell: pwsh
         run: |
@@ -60,6 +71,7 @@ jobs:
             v258_ptde_phn_terminal_subcut.dxbc
             renderer-core/tools/v258/*.hlsl
             renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp
+            v258_sidecar_candidate_census.json
             renderer-core/tools/v257/ptde_equipment_hemenvlerp_core.hpp
             renderer-core/tools/v257/inventory_dsrll_sidecars.py
           if-no-files-found: error
