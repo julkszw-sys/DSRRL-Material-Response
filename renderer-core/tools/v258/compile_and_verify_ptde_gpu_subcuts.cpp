@@ -177,7 +177,18 @@ static void native_abi_fixture(const char *entry, bool shadow, bool ptde = false
     for (const auto &t:textures)
       binding(reflection,t.name,t.slot,D3D_SIT_TEXTURE);
     binding(reflection,"ptdeSampler",0u,D3D_SIT_SAMPLER);
-    std::printf("V268_%s_NATIVE_PTDE_ENVLOCAL_COMPILED_NOT_BOUND_PASS\\n",entry);
+    // V269: original retail RX normal map is stock resource t2 with its
+    // own s2 sampler. Host normal-strength producer remains UNVERIFIED.
+    binding(reflection,"stockNormalTex",2u,D3D_SIT_TEXTURE);
+    binding(reflection,"stockNormalSampler",2u,D3D_SIT_SAMPLER);
+    binding(reflection,"V269_UNVERIFIED_StockNormalScale",13u,D3D_SIT_CBUFFER);
+    D3D11_SHADER_BUFFER_DESC norm_desc{};
+    auto *norm_cb=reflection->GetConstantBufferByName(
+        "V269_UNVERIFIED_StockNormalScale");
+    check(norm_cb&&SUCCEEDED(norm_cb->GetDesc(&norm_desc))&&
+          norm_desc.Size==16u,"V269 host normal-scale CB ABI mismatch");
+
+    std::printf("V269_%s_DSR_T2_NORMAL_AWARE_PTDE_ENVLOCAL_COMPILED_NOT_BOUND_PASS\n",entry);
   }
   reflection->Release();
   blob->Release();
