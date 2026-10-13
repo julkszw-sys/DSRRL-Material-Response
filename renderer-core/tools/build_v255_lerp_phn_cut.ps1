@@ -25,7 +25,7 @@ $s=$s.Replace('V254_SINGLE_ADDON_SHA256=','V255_SINGLE_ADDON_SHA256=')
 [IO.File]::WriteAllText($tmp,$s,[Text.UTF8Encoding]::new($false))
 try {
   & $tmp
-  if(`$LASTEXITCODE -ne 0){throw 'V255 Windows native build failed'}
+  if($LASTEXITCODE -ne 0){throw 'V255 Windows native build failed'}
 } finally {
   Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 }
