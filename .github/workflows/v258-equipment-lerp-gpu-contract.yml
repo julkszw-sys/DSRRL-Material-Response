@@ -63,6 +63,27 @@ jobs:
           Write-Host "V258_TERM_DXBC_SHA256=$((Get-FileHash v258_ptde_phn_terminal_subcut.dxbc -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host 'V258_LIVE_RECEIVER_BIND=OFF_FAIL_OPEN_PENDING_CONSUMER_ABI_AND_SIDECAR'
           Write-Host 'V258_RUNTIME_PIXEL=OPEN'
+      - name: Build integrated V258 single native ReShade addon with fail-open DXBC island
+        shell: pwsh
+        run: |
+          & ./renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1
+          if($LASTEXITCODE -ne 0){throw 'V258 physical-cut one-addon build failed'}
+          $name='DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64'
+          if(!(Test-Path $name)){throw 'V258 final native addon absent'}
+          $ascii=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($name))
+          foreach($mark in @('[DSRRL V258 PTDE GPU ISLAND DORMANT]',
+                             '[DSRRL V255 PHN CARRIER CUT]',
+                             '[DSRRL V253 PTDE ENVSPEC RGBM]')){
+            if(!$ascii.Contains($mark)){throw "V258 compiled addon missing $mark"}
+          }
+          Write-Host "V258_ONE_ADDON_SHA256=$((Get-FileHash $name -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host 'V258_SINGLE_ADDON_CONSTRUCTION_AND_DXBC_EMBED_PASS'
+          Write-Host 'V258_NEW_GPU_OPERATOR_ACTIVE=0 PTDE_PIXEL=OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_ONE_ADDON
+          path: DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_V258_PTDE_EQUIPMENT_HEMENVLERP_DXBC_OPERATOR_ISLANDS
