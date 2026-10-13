@@ -9,7 +9,7 @@ $new='DSRRL_V259_STOCK_DSR_FOG_GUARD_V258_SAFE.addon64'
 if(Test-Path $tmp){throw 'V259 temporary builder already exists'}
 try {
     $s=[IO.File]::ReadAllText($root).Replace([string][char]13+[char]10,[string][char]10)
-    $needle=" if(\x24LASTEXITCODE -ne 0){throw 'V258 dormant integrated DXBC source oracle failure'}"
+    $needle=" if("+'$LASTEXITCODE'+" -ne 0){throw 'V258 dormant integrated DXBC source oracle failure'}"
     # Distinguish source generator order: V259 is inserted after V258.
     if($s.Split([string[]]@($needle),[StringSplitOptions]::None).Count -ne 2){
        throw 'V259 V258 overlay oracle insertion point missing/ambiguous'
