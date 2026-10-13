@@ -1,0 +1,71 @@
+name: V259 Exact Stock DSR Fog / LightScattering Guard
+on:
+  push:
+    branches:
+      - agent/v259-stock-dsr-fog-precut-guard-20261013
+  workflow_dispatch:
+
+permissions:
+  contents: read
+jobs:
+  stock-dsr-fog-precut:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Check protected renderer and Fog code are unchanged
+        shell: pwsh
+        run: |
+          git diff --exit-code 4ea4e623bed1900c8470b0e6304d48ae3f09dfc8 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          if($LASTEXITCODE -ne 0){throw 'V259 must not commit Fog/renderer production modifications'}
+          python -m py_compile renderer-core/tools/v259/apply_v259_stock_dsr_fog_ls_guard.py renderer-core/tools/v259/verify_real_stock_fog_boundary.py
+          if($LASTEXITCODE -ne 0){throw 'V259 guard scripts syntax invalid'}
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build V259 Windows native single addon with strict opcode guard
+        shell: pwsh
+        run: |
+          & ./renderer-core/tools/v259/build_v259_stock_fog_single_addon.ps1
+          if($LASTEXITCODE -ne 0){throw 'V259 one addon native build failed'}
+          $name='DSRRL_V259_STOCK_DSR_FOG_GUARD_V258_SAFE.addon64'
+          if(!(Test-Path $name)){throw 'V259 native addon missing'}
+          $data=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($name))
+          foreach($m in @(
+             '[DSRRL V258 PTDE GPU ISLAND DORMANT]',
+             '[DSRRL V255 PHN CARRIER CUT]',
+             'bf52da4e8b27d14b56cd047e67d8b012b2824309c7b55ca64e9ba536940286b0')){
+            if(!$data.Contains($m)){throw "V259 expected compiled guard / DXBC marker missing $m"}
+          }
+          Write-Host "V259_NATIVE_SINGLE_ADDON_SHA256=$((Get-FileHash $name -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host 'V259_CONSTEXPR_STOCK_FOG_GUARD_NATIVE_PASS'
+          Write-Host 'V259_FOG_AND_LIGHTSCATTERING_OPCODE_MODIFICATIONS=ZERO'
+          Write-Host 'V259_PIXEL_EQUIVALENCE=OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V259_STOCK_DSR_FOG_GUARD_ONE_ADDON
+          path: |
+            DSRRL_V259_STOCK_DSR_FOG_GUARD_V258_SAFE.addon64
+            renderer-core/tools/v259/*.py
+          if-no-files-found: error
