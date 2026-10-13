@@ -2,7 +2,7 @@
 """V274 external binary disassembly audit. Needs GNU objdump and original EXEs."""
 import argparse,hashlib,json,subprocess
 from pathlib import Path
-from audit_v273_ptde_common_blend_scalar import validate as ptde_validate
+from audit_v273_ptde_common_blend_scalar import verify as ptde_validate
 DSR_SHA="a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b"
 def segment(exe,start,end):
  r=subprocess.run(["objdump","-d","-M","intel",f"--start-address={start}",f"--stop-address={end}",str(exe)],capture_output=True,text=True,check=True)
