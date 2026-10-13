@@ -19,7 +19,7 @@ def create(layout:Path,output:Path):
     raw=zlib.decompress(base64.b64decode(K_SOURCE_B64))
     if len(raw)!=K_PTDE_ROWS*8 or hashlib.sha256(raw).hexdigest()!=K_RAW_SHA:
         raise ValueError("V253 PTDE donor byte hash / length mismatch")
-    table=list(csv.DictReader(layout.read_text(encoding="utf-8").splitlines(),delimiter="\t"))
+    table=list(csv.DictReader((ln for ln in layout.read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.lstrip().startswith("#")),delimiter="\t"))
     if len(table)!=20:
         raise ValueError("V253 expected 20 exact V13 LightBank identities")
     exp_counts=[64,64,64,30,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64]
