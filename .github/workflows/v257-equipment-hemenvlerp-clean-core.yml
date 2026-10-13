@@ -22,6 +22,7 @@ jobs:
           set -euo pipefail
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -I renderer-core/tools/v257 renderer-core/tools/v257/test_ptde_equipment_hemenvlerp_core.cpp -o /tmp/v257-oracle
           /tmp/v257-oracle
+          python3 renderer-core/tools/v257/test_inventory.py
           echo V257_CONSTRUCTION_REFERENCE_KERNEL_PASS
           echo V257_D3D11_REPLACEMENT_NOT_YET_IMPLEMENTED_PIXEL_OPEN
   exact-reference-msvc:
@@ -38,5 +39,7 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V257 MSVC native compile failed'}
           ./v257-oracle.exe
           if($LASTEXITCODE -ne 0){throw 'V257 MSVC PTDE operator tests failed'}
+          python renderer-core/tools/v257/test_inventory.py
+          if($LASTEXITCODE -ne 0){throw 'V257 sidecar inventory test failed'}
           Write-Host 'V257_NATIVE_WINDOWS_REFERENCE_KERNEL_PASS'
           Write-Host 'V257_ADDON_ACTIVATION_AND_PIXEL=OPEN'
