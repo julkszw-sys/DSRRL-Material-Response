@@ -41,6 +41,10 @@ static source proven() {
     s.ptde_material_producer_verified=true;
     s.native_rx_signature_verified=true;
     s.ptde_env_probe_a_b_verified=true;
+    s.dsr_t2_normal_resource_verified=true;
+    s.dsr_s2_sampler_verified=true;
+    s.single_normal_material_operator_verified=true;
+    s.dsr_normal_scale_producer_verified=true;
     s.c84={0.1f,0.2f,0.3f,0.25f};
     s.c85={0.4f,0.5f,0.6f,0.75f};
     s.c86={1.f,1.f,1.f,1.f};
@@ -72,6 +76,18 @@ int main() {
     require(!build_cb12(denied,cb) && cb.reg==known.reg,"unverified UL accepted");
     denied=s;denied.ptde_env_probe_a_b_verified=false;
     require(!build_cb12(denied,cb) && cb.reg==known.reg,"unverified probes accepted");
+    denied=s;denied.dsr_t2_normal_resource_verified=false;
+    require(!build_cb12(denied,cb) && cb.reg==known.reg,
+            "unverified stock t2 normal accepted");
+    denied=s;denied.dsr_s2_sampler_verified=false;
+    require(!build_cb12(denied,cb) && cb.reg==known.reg,
+            "unverified stock s2 normal sampler accepted");
+    denied=s;denied.single_normal_material_operator_verified=false;
+    require(!build_cb12(denied,cb) && cb.reg==known.reg,
+            "dual/unknown normal operator accepted");
+    denied=s;denied.dsr_normal_scale_producer_verified=false;
+    require(!build_cb12(denied,cb) && cb.reg==known.reg,
+            "missing host normal-scale source accepted");
     denied=s;denied.native_rx_signature_verified=false;
     require(!build_cb12(denied,cb) && cb.reg==known.reg,"unverified RX accepted");
     denied=s;denied.ptde_material_producer_verified=false;
