@@ -1,9 +1,11 @@
-// V258 standalone PTDE DifSpcBmp HemEnvLerp GPU operator subcut.
+// V267: V258 standalone GPU harness now calls reusable inline PTDE operator.
 // Compiled with d3dcompiler_47 into DXBC; never auto-bound to a live DSR PS.
 // Exact PTDE c84.w and c85.w are separate. Filtered RGBA divide occurs
 // BEFORE the A/B interpolation. No t9 BRDF LUT, no DSR roughness/LOD.
 // This shader ends BEFORE c139 / Fog / LightScattering / c110 terminal;
 // output is an intermediate, NOT PTDE visible COLOROUT0.
+#include "ptde_hemenvlerp_envlocal_operator.fxh"
+
 cbuffer V258_PTDE_HEMENVLERP_CB : register(b12) {
     float4 ptde_c84;
     float4 ptde_c85;
@@ -38,16 +40,24 @@ float4 main(Input input) : SV_Target0 {
     const float4 db=ptdeEnvDiffuseB.Sample(ptdeSampler,input.envDiffuseDir);
     const float4 sa=ptdeEnvSpecA.Sample(ptdeSampler,input.reflectionDir);
     const float4 sb=ptdeEnvSpecB.Sample(ptdeSampler,input.reflectionDir);
-    const float3 diff_a=(da.rgb/da.a)*ptde_c86.rgb;
-    const float3 diff_b=(db.rgb/db.a)*ptde_c84.rgb;
-    const float3 spec_a=(sa.rgb/sa.a)*ptde_c87.rgb;
-    const float3 spec_b=(sb.rgb/sb.a)*ptde_c85.rgb;
-    const float3 diff=diff_a+ptde_c84.w*(diff_b-diff_a);
-    const float3 spec=spec_a+ptde_c85.w*(spec_b-spec_a);
-    const float3 ul=ptde_c99.rgb+input.hemisphereT*(ptde_c98.rgb-ptde_c99.rgb);
-    const float3 dtex=ptdeDiffuseTex.Sample(ptdeSampler,input.uv).rgb;
-    const float3 stex=ptdeSpecTex.Sample(ptdeSampler,input.uv).rgb;
-    const float3 diffuse=(diff+ul)*(dtex+ptde_c156.rgb)*ptde_c100.rgb*input.vertexColor;
-    const float3 reflection=spec*stex*ptde_c101.rgb*input.vertexColor;
-    return float4(diffuse+reflection,1);
+    DSRRL_PTDE_EnvLocal op;
+    op.envDiffuseA_RGBA = da;
+    op.envDiffuseB_RGBA = db;
+    op.envSpecA_RGBA = sa;
+    op.envSpecB_RGBA = sb;
+    op.c84_rgb = ptde_c84.rgb;
+    op.c86_rgb = ptde_c86.rgb;
+    op.c85_rgb = ptde_c85.rgb;
+    op.c87_rgb = ptde_c87.rgb;
+    op.c84_w = ptde_c84.w;
+    op.c85_w = ptde_c85.w;
+    op.upperLower = ptde_c99.rgb + input.hemisphereT *
+        (ptde_c98.rgb - ptde_c99.rgb);
+    op.diffuseTex_RGB = ptdeDiffuseTex.Sample(ptdeSampler,input.uv).rgb;
+    op.specTex_RGB = ptdeSpecTex.Sample(ptdeSampler,input.uv).rgb;
+    op.c100_rgb = ptde_c100.rgb;
+    op.c101_rgb = ptde_c101.rgb;
+    op.c156_rgb = ptde_c156.rgb;
+    op.vertex_RGB = input.vertexColor;
+    return float4(DSRRL_PTDE_EnvLocalRGB(op), 1);
 }
