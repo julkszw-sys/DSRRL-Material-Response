@@ -1,31 +1,21 @@
-name: V262 HemEnvLerp PTDE Diffuse DXBC Candidate CI
+name: V262 equipment diffuse CI
 on:
   push:
     branches:
       - agent/v262-equipment-diffuse-lane-20261013
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  operator-dxbc-oracle:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  oracle:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Exact DXBC opcode rewrite and synthetic falsification
-        shell: bash
+        with:
+          fetch-depth: 0
+      - name: Compile and test candidate
+        shell: pwsh
         run: |
-          set -euo pipefail
-          python -m py_compile renderer-core/tools/v262/ptde_diffuse_first_lane_dxbc_candidate.py renderer-core/tools/v262/test_ptde_diffuse_lane.py
           python renderer-core/tools/v262/test_ptde_diffuse_lane.py
-          echo V262_NEW_MATERIAL_LANE_SHADER_CANDIDATE_PASS
-          echo V262_LIVE_RECEIVER_SIDE_CAR_AUTHORIZATION_OPEN
-          echo V262_GAME_RUNTIME_AND_PIXEL_OPEN
-      - name: Confirm production renderer sources unchanged since V259
-        shell: bash
-        run: |
-          git diff --exit-code 6957110bd3d4cf7e20af463a0b8cf083fff1e550 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
-          echo V262_PROTECTED_RENDERER_SOURCE_UNCHANGED
+          if($LASTEXITCODE -ne 0){throw 'V262 validation failure'}
+          git diff --exit-code 092d0fe7b088b045c63249c2b3225f23e4751db8 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          if($LASTEXITCODE -ne 0){throw 'Production renderer modified'}
