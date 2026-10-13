@@ -83,6 +83,14 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V258 real DXBC generation / reflection ABI FAIL'}
           $a=[IO.File]::ReadAllBytes('v258_ptde_env_local_subcut.dxbc')
           $b=[IO.File]::ReadAllBytes('v258_ptde_phn_terminal_subcut.dxbc')
+          foreach($rx in @(33,34,35)){
+            $path="v270_rx${rx}_v268.dxbc"
+            if(!(Test-Path $path)){throw "V270 native receiver DXBC absent: $path"}
+            $candidate=[IO.File]::ReadAllBytes($path)
+            if($candidate.Length -lt 128 -or [Text.Encoding]::ASCII.GetString($candidate,0,4) -ne 'DXBC'){
+              throw "V270 wrong native DXBC $path"}
+            Write-Host "V270_RX${rx}_NATIVE_GPU_SHA256=$((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant())"
+          }
           if([Text.Encoding]::ASCII.GetString($a,0,4) -ne 'DXBC' -or
              [Text.Encoding]::ASCII.GetString($b,0,4) -ne 'DXBC'){
               throw 'V258 output not DXBC'}
@@ -118,6 +126,9 @@ jobs:
           path: |
             v258_ptde_env_local_subcut.dxbc
             v258_ptde_phn_terminal_subcut.dxbc
+            v270_rx33_v268.dxbc
+            v270_rx34_v268.dxbc
+            v270_rx35_v268.dxbc
             renderer-core/tools/v258/*.hlsl
             renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp
             v258_sidecar_candidate_census.json
