@@ -8,6 +8,8 @@ $src='renderer-core/tools/build_v253_ptde_envspec_rgbm.ps1'
 $tmp='renderer-core/tools/_v258_generated_native_build.ps1'
 $v271Mat='renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp'
 $v271MatOriginal=[IO.File]::ReadAllText($v271Mat)
+$v272Draw='renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+$v272DrawOriginal=[IO.File]::ReadAllText($v272Draw)
 if(Test-Path $hdr){throw 'Existing V258 generated header, refusing overwrite'}
 if(Test-Path $tmp){throw 'Existing V258 temporary native builder, refusing overwrite'}
 try{
@@ -98,6 +100,12 @@ try{
        [IO.File]::WriteAllText($v271Mat,$v271MatOriginal)
        if([IO.File]::ReadAllText($v271Mat) -cne $v271MatOriginal){
           throw 'V271 original R19 materializer restore mismatch'
+       }
+    }
+    if(Test-Path $v272Draw){
+       [IO.File]::WriteAllText($v272Draw,$v272DrawOriginal)
+       if([IO.File]::ReadAllText($v272Draw) -cne $v272DrawOriginal){
+          throw 'V272 source draw runtime restore mismatch'
        }
     }
     if(Test-Path $tmp){Remove-Item $tmp -Force}
