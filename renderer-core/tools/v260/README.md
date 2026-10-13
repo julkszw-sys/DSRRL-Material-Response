@@ -49,6 +49,42 @@ Ps_Body; vanilla DSR adds the property with default 0. P_RoughCloth
 has DSR-only value 1. These MTD differences are confirmed source
 facts, NOT a live shader branch proof.
 
+## V261 additional closure from the original binaries (2026-10-13)
+
+The checked-in verifier now reads **RDEF** as well as **SHEX**. It confirms
+that `gFC_MaterialWorkflow` is a 16-byte $Globals variable at byte offset
+1360 = PS `cb0[85]`, `gFC_DifMapMulCol` at `cb0[9]` and
+`gFC_MaterialOverrideParams` at `cb0[100]`, independently for RX33–35.
+This resolves the shader ABI/name correspondence, **not** the per-draw upload.
+
+The ordinary ELSE actually contains **two full distinct gamma-like
+`log(abs(material)) → multiply 2.2 → exp` chains**, in every receiver.
+No such local 2.2 chain exists in the PTDE
+`DifSpcBmp HemEnvLerp` direct `c100 * vertex * DiffTex`
+subcut (annotated ps_3_0 offsets 0663–0679):
+
+| Receiver | First DSR LOG / MUL2.2 / EXP | Second DSR LOG / MUL2.2 / EXP |
+|---|---|---|
+| RX33 | 1301 / 1307 / 1317 | 1330 / 1335 / 1345 |
+| RX34 | 1210 / 1216 / 1226 | 1239 / 1244 / 1254 |
+| RX35 | 870 / 876 / 886 | 899 / 904 / 914 |
+
+The DSR executable material constructor at `0x140292d7f` zeroes r14d,
+and its `g_MaterialWorkflow` code uses that zero as the default for
+missing MTD properties. After reading into `material+0x220`,
+`0x1402935b8` tests `material+0x1e4 & 0x100` and when the flag
+is unset, forces the material workflow value back to zero.
+This is **static CPU-side gating**, not yet GPU upload or draw evidence.
+
+**Actionable but not yet activated**: reconstruct PTDE's *direct local
+material product* in the actual ordinary ELSE consumer, separately from
+the metal IF producer and separately from independent specular/PBL
+operators. A correct candidate must bind PTDE c100 / diffuse sidecar
+to the exact material slot before removing the DSR-only two 2.2
+material transforms, certify downstream live-outs and retain full
+stock DSR Fog/LightScattering. Generic receiver-wide gamma removal,
+power retuning or global exposure changes are NOT authorized.
+
 ## Required semantic cut before an authorized fix
 
 1. Trace the DSR per-draw producer: MTD effective value/FLVER override
