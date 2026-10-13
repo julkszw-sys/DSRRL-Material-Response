@@ -55,6 +55,21 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V257 CPU oracle failure'}
           python renderer-core/tools/v257/test_inventory.py
           if($LASTEXITCODE -ne 0){throw 'V258 sidecar inventory contract failure'}
+      - name: V268 native independent PTDE c84/c85 CB transport atomic fail-open
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core\\tools\\v258 renderer-core\\tools\\v258\\test_v268_gpu_source_contract.cpp /Fe:v268-gpu-source-contract.exe
+          if($LASTEXITCODE -ne 0){throw 'V268 native CB source contract compilation failed'}
+          ./v268-gpu-source-contract.exe
+          if($LASTEXITCODE -ne 0){throw 'V268 native independent c84/c85 and fail-open tests failed'}
+          Write-Host 'V268_NATIVE_GPU_CB_128B_PTDE_PRODUCER_GATE_PASS'
+      - name: V275 production native exact synthetic selector policy oracle
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core\\include renderer-core\\tools\\v258\\test_v275_synthetic_selector_policy.cpp /Fe:v275-native-selector.exe
+          if($LASTEXITCODE -ne 0){throw 'V275 native policy test compiler failure'}
+          ./v275-native-selector.exe
+          if($LASTEXITCODE -ne 0){throw 'V275 exact-policy negative regression'}
       - name: Intersect pinned 1295 sidecar names and 748 equipment source routes
         shell: pwsh
         run: |
@@ -75,6 +90,14 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V258 real DXBC generation / reflection ABI FAIL'}
           $a=[IO.File]::ReadAllBytes('v258_ptde_env_local_subcut.dxbc')
           $b=[IO.File]::ReadAllBytes('v258_ptde_phn_terminal_subcut.dxbc')
+          foreach($rx in @(33,34,35)){
+            $path="v270_rx${rx}_v268.dxbc"
+            if(!(Test-Path $path)){throw "V270 native receiver DXBC absent: $path"}
+            $candidate=[IO.File]::ReadAllBytes($path)
+            if($candidate.Length -lt 128 -or [Text.Encoding]::ASCII.GetString($candidate,0,4) -ne 'DXBC'){
+              throw "V270 wrong native DXBC $path"}
+            Write-Host "V270_RX${rx}_NATIVE_GPU_SHA256=$((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant())"
+          }
           if([Text.Encoding]::ASCII.GetString($a,0,4) -ne 'DXBC' -or
              [Text.Encoding]::ASCII.GetString($b,0,4) -ne 'DXBC'){
               throw 'V258 output not DXBC'}
@@ -88,10 +111,12 @@ jobs:
         run: |
           & ./renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1
           if($LASTEXITCODE -ne 0){throw 'V258 physical-cut one-addon build failed'}
-          $name='DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64'
+          $name='DSRRL_V275_EQUIPMENT_PTDE_SYNTHETIC_SOURCE_GUARD.addon64'
           if(!(Test-Path $name)){throw 'V258 final native addon absent'}
           $ascii=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($name))
-          foreach($mark in @('[DSRRL V258 PTDE GPU ISLAND DORMANT]',
+          foreach($mark in @('[DSRRL V275 SYNTHETIC ZERO SELECTOR NONPUBLISH]',
+                             '[DSRRL V272 INTERIOR LERP B12 ROUTE]',
+                             '[DSRRL V258 PTDE GPU ISLAND DORMANT]',
                              '[DSRRL V255 PHN CARRIER CUT]',
                              '[DSRRL V253 PTDE ENVSPEC RGBM]')){
             if(!$ascii.Contains($mark)){throw "V258 compiled addon missing $mark"}
@@ -99,10 +124,23 @@ jobs:
           Write-Host "V258_ONE_ADDON_SHA256=$((Get-FileHash $name -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host 'V258_SINGLE_ADDON_CONSTRUCTION_AND_DXBC_EMBED_PASS'
           Write-Host 'V258_NEW_GPU_OPERATOR_ACTIVE=0 PTDE_PIXEL=OPEN'
+          Write-Host 'V272_INTERIOR_BETA_SOURCE_ROUTE_CAPTURE_OWNER_RUNTIME=OPEN'
+      - name: V271 verify original tracked materializer restored
+        shell: pwsh
+        run: |
+          git diff --exit-code -- renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp
+          if($LASTEXITCODE -ne 0){throw 'V271 materializer restore mismatch'}
+          Write-Host 'V271_ORIGINAL_TRACKED_MATERIALIZER_RESTORED_PASS'
+          git diff --exit-code -- renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
+          if($LASTEXITCODE -ne 0){throw 'V272 original draw runtime source restore mismatch'}
+          Write-Host 'V272_ORIGINAL_TRACKED_DRAW_RUNTIME_RESTORED_PASS'
+          git diff --exit-code -- renderer-core/src/runtime/pmetal_env_source_runtime.cpp
+          if($LASTEXITCODE -ne 0){throw 'V275 original selector runtime source not restored'}
+          Write-Host 'V275_ORIGINAL_TRACKED_SELECTOR_RUNTIME_RESTORED_PASS'
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_ONE_ADDON
-          path: DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64
+          name: DSRRL_V275_EQUIPMENT_PTDE_SYNTHETIC_SOURCE_GUARD_ONE_ADDON
+          path: DSRRL_V275_EQUIPMENT_PTDE_SYNTHETIC_SOURCE_GUARD.addon64
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
@@ -110,6 +148,9 @@ jobs:
           path: |
             v258_ptde_env_local_subcut.dxbc
             v258_ptde_phn_terminal_subcut.dxbc
+            v270_rx33_v268.dxbc
+            v270_rx34_v268.dxbc
+            v270_rx35_v268.dxbc
             renderer-core/tools/v258/*.hlsl
             renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp
             v258_sidecar_candidate_census.json
