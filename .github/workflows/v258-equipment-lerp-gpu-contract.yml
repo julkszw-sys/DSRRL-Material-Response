@@ -1,0 +1,118 @@
+name: V258 Equipment PTDE LERP DXBC Fast CI
+on:
+  push:
+    branches:
+      - agent/v258-equipment-lerp-gpu-contract-20261013
+  pull_request:
+    paths:
+      - 'renderer-core/tools/v257/**'
+      - 'renderer-core/tools/v258/**'
+      - '.github/workflows/v258-equipment-lerp-gpu-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v258-native-dxbc:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Verify no production renderer source changed
+        shell: pwsh
+        run: |
+          git diff --exit-code 4ea4e623bed1900c8470b0e6304d48ae3f09dfc8 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          if($LASTEXITCODE -ne 0){throw 'V258 modified production renderer'}
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Native PTDE CPU oracle and sidecar inventory tests
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core\tools\v257 renderer-core\tools\v257\test_ptde_equipment_hemenvlerp_core.cpp /Fe:v258-cpu-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V257 CPU oracle build failure'}
+          ./v258-cpu-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V257 CPU oracle failure'}
+          python renderer-core/tools/v257/test_inventory.py
+          if($LASTEXITCODE -ne 0){throw 'V258 sidecar inventory contract failure'}
+      - name: Intersect pinned 1295 sidecar names and 748 equipment source routes
+        shell: pwsh
+        run: |
+          python renderer-core/tools/v258/census_equipment_sidecar_name_authority.py
+          if($LASTEXITCODE -ne 0){throw 'V258 checksum-pinned equipment name census failed'}
+          $c=Get-Content v258_sidecar_candidate_census.json -Raw | ConvertFrom-Json
+          if($c.total_pinned_sidecar_names -ne 1295 -or
+             $c.total_pinned_equipment_route_names -ne 748){
+            throw 'V258 donor corpus count mismatch'}
+          if(@($c.records | Where-Object {$_.runtime_allow -ne $false}).Count -ne 0){
+            throw 'V258 unauthorized material in candidate census'}
+      - name: Native D3DCompiler real PS5 DXBC operator compilation and ABI assertions
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX renderer-core\tools\v258\compile_and_verify_ptde_gpu_subcuts.cpp /Fe:v258-dxbc-oracle.exe /link d3dcompiler.lib
+          if($LASTEXITCODE -ne 0){throw 'V258 DXBC verifier compilation failure'}
+          ./v258-dxbc-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V258 real DXBC generation / reflection ABI FAIL'}
+          $a=[IO.File]::ReadAllBytes('v258_ptde_env_local_subcut.dxbc')
+          $b=[IO.File]::ReadAllBytes('v258_ptde_phn_terminal_subcut.dxbc')
+          if([Text.Encoding]::ASCII.GetString($a,0,4) -ne 'DXBC' -or
+             [Text.Encoding]::ASCII.GetString($b,0,4) -ne 'DXBC'){
+              throw 'V258 output not DXBC'}
+          Write-Host 'V258_COMPILED_TWO_REAL_DXBC_SHADER_SUBCUTS_PASS'
+          Write-Host "V258_ENV_DXBC_SHA256=$((Get-FileHash v258_ptde_env_local_subcut.dxbc -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "V258_TERM_DXBC_SHA256=$((Get-FileHash v258_ptde_phn_terminal_subcut.dxbc -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host 'V258_LIVE_RECEIVER_BIND=OFF_FAIL_OPEN_PENDING_CONSUMER_ABI_AND_SIDECAR'
+          Write-Host 'V258_RUNTIME_PIXEL=OPEN'
+      - name: Build integrated V258 single native ReShade addon with fail-open DXBC island
+        shell: pwsh
+        run: |
+          & ./renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1
+          if($LASTEXITCODE -ne 0){throw 'V258 physical-cut one-addon build failed'}
+          $name='DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64'
+          if(!(Test-Path $name)){throw 'V258 final native addon absent'}
+          $ascii=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($name))
+          foreach($mark in @('[DSRRL V258 PTDE GPU ISLAND DORMANT]',
+                             '[DSRRL V255 PHN CARRIER CUT]',
+                             '[DSRRL V253 PTDE ENVSPEC RGBM]')){
+            if(!$ascii.Contains($mark)){throw "V258 compiled addon missing $mark"}
+          }
+          Write-Host "V258_ONE_ADDON_SHA256=$((Get-FileHash $name -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host 'V258_SINGLE_ADDON_CONSTRUCTION_AND_DXBC_EMBED_PASS'
+          Write-Host 'V258_NEW_GPU_OPERATOR_ACTIVE=0 PTDE_PIXEL=OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_ONE_ADDON
+          path: DSRRL_V258_EQUIPMENT_PTDE_DXBC_DORMANT_V255_SAFE.addon64
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V258_PTDE_EQUIPMENT_HEMENVLERP_DXBC_OPERATOR_ISLANDS
+          path: |
+            v258_ptde_env_local_subcut.dxbc
+            v258_ptde_phn_terminal_subcut.dxbc
+            renderer-core/tools/v258/*.hlsl
+            renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp
+            v258_sidecar_candidate_census.json
+            renderer-core/tools/v257/ptde_equipment_hemenvlerp_core.hpp
+            renderer-core/tools/v257/inventory_dsrll_sidecars.py
+          if-no-files-found: error
