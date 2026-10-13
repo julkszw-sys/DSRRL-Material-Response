@@ -25,7 +25,7 @@ output[3].w -> 0xF956F4 -> setter 0x424D70 -> c85.w
 
 `0xFF1850` issues two `0x4BBF70` calls after `FLDZ` (`0xFF1923`, `0xFF1935`) and two calls after loading the **SAME** `[ebp+0x10]` at `0xFF1958` / `0xFF197D`. The `0x4BBFE7` + `0x4BBFEC` sequence copies that exact floating-point argument into the vector's `.w`, while decoding RGB from the three short channels. Thus, on this *authenticated selector-mismatch interior blend branch*:
 
-**`c84.w == c85.w == t`.**
+**`c84.w == c85.w == t`**, conditional on the `0xFF1850` path accepting **both valid type-4 source records** and resolving both selectors (checks `0xFF18A5..0xFF191D`). With invalid or unavailable records the helper branches to a zero-weight fallback; no claim that every invocation is an interior blend.
 
 At the selector-stable `0xFF1600` path, the decoded vector `.w` is zero for both selected endpoint vectors. These paths do not imply a globally shared physical `c84`/`c85` storage location; their independent CPU setters and registers remain intact. RGB for both constants is multiplied by a different per-scene scalar `[ebp+0x14]`, but the alpha components are copied without that gain (`0xF9567D/83` and `0xF956F4/FE`).
 
@@ -42,7 +42,7 @@ Result is **STATIC RE / CONFIRMED scoped equality**, not measured PTDE runtime v
 ## Effect on V272 and decisions
 
 - V272 owner runtime proved R19 DSR **also** writes a single `source.beta` to `b12[3].w` and `b12[5].w` across eight positive-beta samples.
-- The hypothesis “PTDE necessarily requires different EnvDiffuse and EnvSpec blend weights because it has two registers” is therefore **FALSIFIED for this original PTDE interior blend operator**.
+- The hypothesis “PTDE necessarily requires different EnvDiffuse and EnvSpec blend weights because it has two registers” is therefore **FALSIFIED for this original PTDE interior blend operator with two valid records**.
 - The **remaining semantic question** is whether DSR `source.beta` represents the *same actual selector-relative t* as original PTDE `selector+8` on an exactly matched profile transition, not whether the two internal DSR b12 weights should be forcibly split.
 - Continue checking RGB endpoints, cube probes, material/normal homology, PHN `c110.w` and `c135`, exact receiver/downstream and pixels. The existing R19/V272 shared-beta transport is not changed, and three separate V270 DXBC replacements remain dormant (`PS_bind=OFF`). No unsupported PTDE beta override, blanket gamma/exposure change, or new test addon is justified by this proof.
 
