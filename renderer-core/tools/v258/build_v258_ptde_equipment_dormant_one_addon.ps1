@@ -10,6 +10,8 @@ $v271Mat='renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp
 $v271MatOriginal=[IO.File]::ReadAllText($v271Mat)
 $v272Draw='renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
 $v272DrawOriginal=[IO.File]::ReadAllText($v272Draw)
+$v275Source='renderer-core/src/runtime/pmetal_env_source_runtime.cpp'
+$v275SourceOriginal=[IO.File]::ReadAllText($v275Source)
 if(Test-Path $hdr){throw 'Existing V258 generated header, refusing overwrite'}
 if(Test-Path $tmp){throw 'Existing V258 temporary native builder, refusing overwrite'}
 try{
@@ -50,13 +52,17 @@ try{
  if($LASTEXITCODE -ne 0){throw 'V272 interior Lerp b12 source route apply failed'}
  python renderer-core/tools/v258/apply_v272_positive_beta_source_route.py
  if($LASTEXITCODE -ne 0){throw 'V272 interior Lerp b12 source route oracle failed'}
+ python renderer-core/tools/v258/apply_v275_nonpublish_synthetic_selector.py --apply
+ if($LASTEXITCODE -ne 0){throw 'V275 exact synthetic selector overlay apply failed'}
+ python renderer-core/tools/v258/apply_v275_nonpublish_synthetic_selector.py
+ if($LASTEXITCODE -ne 0){throw 'V275 source oracle failed'}
 '@
     $injection=$injection.TrimEnd()
     $eol=$s.IndexOf([char]10,$at)
     if($eol -lt 0){throw 'V258 expected newline after source oracle'}
     $s=$s.Insert($eol+1,$injection+[char]10)
     $old="DSRRL_V253_EXACT_PTDE_ENVSPEC_RGBM_V252_SAFE.addon64"
-    $new="DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64"
+    $new="DSRRL_V275_EQUIPMENT_PTDE_SYNTHETIC_SOURCE_GUARD.addon64"
     if(!$s.Contains($old)){throw 'V258 addon output name anchor missing'}
     $s=$s.Replace($old,$new)
     $tag="'[DSRRL V253 PTDE ENVSPEC RGBM]',"
@@ -69,6 +75,7 @@ try{
   '[DSRRL V258 PTDE GPU ISLAND DORMANT]',
   '[DSRRL V270 NATIVE RX GPU SHADERS DORMANT]',
   '[DSRRL V272 INTERIOR LERP B12 ROUTE]',
+  '[DSRRL V275 SYNTHETIC ZERO SELECTOR NONPUBLISH]',
 '@
     $s=$s.Replace($tag,$tag+[char]10+$added.TrimEnd())
     $s=$s.Replace('V253_EXACT_PTDE_LIGHTBANK_ENVSPEC_RGBM_CONSTRUCTION_PASS',
@@ -85,6 +92,7 @@ try{
     foreach($marker in @('[DSRRL V258 PTDE GPU ISLAND DORMANT]',
                            '[DSRRL V270 NATIVE RX GPU SHADERS DORMANT]',
                            '[DSRRL V272 INTERIOR LERP B12 ROUTE]',
+                           '[DSRRL V275 SYNTHETIC ZERO SELECTOR NONPUBLISH]',
                            '[DSRRL V255 PHN CARRIER CUT]',
                            '[DSRRL V254 LERP EVENTS]',
                            '[DSRRL V253 PTDE ENVSPEC RGBM]')){
@@ -94,6 +102,7 @@ try{
     Write-Host 'V270_FIVE_DXBC_IN_ONE_ADDON_DORMANT_EMBED_PASS'
     Write-Host 'V270_NATIVE_RX_DRAW_BINDING=INACTIVE'
     Write-Host 'V272_INTERIOR_LERP_B12_ROUTING_TELEMETRY_COMPILED'
+    Write-Host 'V275_SYNTHETIC_NONPUBLISH_COMPILED PTDE_PIXEL=OPEN'
     Write-Host 'V258_PTDE_PIXEL_BEHAVIOR=OPEN'
 } finally {
     if(Test-Path $v271Mat){
@@ -106,6 +115,12 @@ try{
        [IO.File]::WriteAllText($v272Draw,$v272DrawOriginal)
        if([IO.File]::ReadAllText($v272Draw) -cne $v272DrawOriginal){
           throw 'V272 source draw runtime restore mismatch'
+       }
+    }
+    if(Test-Path $v275Source){
+       [IO.File]::WriteAllText($v275Source,$v275SourceOriginal)
+       if([IO.File]::ReadAllText($v275Source) -cne $v275SourceOriginal){
+          throw 'V275 source runtime restore mismatch'
        }
     }
     if(Test-Path $tmp){Remove-Item $tmp -Force}
