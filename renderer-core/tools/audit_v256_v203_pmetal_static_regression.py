@@ -103,7 +103,7 @@ def inspect_reference_guards():
     v255 = (base/"apply_v255_lerp_phn_cut_diag.py").read_text(encoding="utf8")
     assert "sidecar_20261010::exact_nonmetal_material(query.material)" in v216
     assert "sidecar_20261010::exact_nonmetal_draw(material, decision)" in v224
-    assert "ptde_spec_exact(" in v253
+    assert "v253_ptde_envspec_rgbm::lookup(" in v253
     assert "FAKE_REPLACEMENT" in v255
     return {
         "v216_t1_alias": "only exact nonmetal material and RX33-35; check global registry effects separately",
