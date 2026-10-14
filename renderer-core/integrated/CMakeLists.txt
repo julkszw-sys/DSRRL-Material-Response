@@ -146,6 +146,8 @@ option(
     "P_Metal R19: exact PTDE HemEnvLerp EnvDiffuse A/B+beta consumer over paired PTDE RGBA probe resources; extends b12 only for the Lerp endpoint carrier"
     OFF)
 
+option(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG "Stable LS domain" OFF)
+
 option(
     DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY
     "R43 descendant V287: reject legacy HemEnvLerp R19 at registration; accept only exact final V286 per-RX certified payloads, empty allowlist fails open to stock"
