@@ -1,0 +1,1 @@
+V298 owner-local PTDE six-family probe beta continuity: 800 synthetic paired probe inputs, five interpolation positions each, 4000 tests. Maximum affine CPU deviation 7.45058e-8; all six PTDE source operators output identical values under matched inputs; postgamma 2.2 gives different output in 4000/4000 samples. Fog is stock DSR. No matched GPU or pixel claim.
