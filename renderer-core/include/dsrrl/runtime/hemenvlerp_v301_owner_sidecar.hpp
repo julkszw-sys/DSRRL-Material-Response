@@ -39,8 +39,13 @@ inline bool load(std::uint32_t receiver,
     std::filesystem::path base(module);
     const auto folder=base.parent_path() / L"DSRRL" /
                       L"EnvSpec" / L"HemEnvLerp";
+#if defined(DSRRL_PMETAL_V315_STOCK_FOG_LS_RX)
+    const auto file=folder /
+         (L"v286_RX"+std::to_wstring(receiver)+L".dxbc");
+#else
     const auto file=folder /
          (L"v297_RX"+std::to_wstring(receiver)+L".dxbc");
+#endif
     std::ifstream input(file,std::ios::binary|std::ios::ate);
     if(!input)return false;
     const auto length=input.tellg();
