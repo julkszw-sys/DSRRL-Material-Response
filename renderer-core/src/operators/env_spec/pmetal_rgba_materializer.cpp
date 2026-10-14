@@ -3437,11 +3437,90 @@ bool apply_exact_ptde_shadow_visibility_r7(
 }
 #endif
 
-// P_Metal atmosphere/Fog/LightScattering override is intentionally absent.
-// The historical V4B transform depended on a legacy cb12 FogRGB carrier that
-// is incompatible with the cumulative P_Metal ABI. Per project policy this
-// operator stays stock DSR until explicitly reopened; no latent compile-time
-// switch or alternate FogRGB carrier is retained in this lineage.
+// V289: Stable P_Metal only, narrow PTDE post-LightScattering domain candidate.
+// This intentionally leaves original DSR pre-Fog, Fog and LightScattering
+// equation/inputs byte-identical. Do NOT inherit historical R10E: it also
+// changed pre-Fog and Fog composition, which the owner explicitly excludes.
+#if defined(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
+bool apply_stable_ptde_ls_postdomain_stock_fog(
+    std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index = 0u;
+    if (!parse_dxbc(bytes.data(), bytes.size(), chunks, code_index) ||
+        !extract_words(chunks, code_index, words) ||
+        !decode(words, instructions))
+        return false;
+
+    // These exact source windows were independently attested on licensed
+    // original DSR Stable RX33/34/35; identical all three receiver families.
+    // 204 DWORD: Fog ADD and 195-DWORD LightScattering through its output
+    // before the DSR-only LOG/MUL(2.2)/EXP continuation.
+    constexpr char k_fog_ls_204_sha[] =
+        "28c23273a5fb0b984b55fde72ee59546af4aa8646c55e1cb1bf8db426e9a4363";
+    constexpr std::array<std::uint32_t,21> k_dsr_post_ls_gamma{{
+        0x0600002fu,0x00100072u,0u,
+        0x80100246u,0x00000081u,0u,
+        0x0a000038u,0x00100072u,0u,
+        0x00100246u,0u,0x00004002u,
+        0x400ccccdu,0x400ccccdu,0x400ccccdu,0u,
+        0x05000019u,0x00100072u,0u,
+        0x00100246u,0u
+    }};
+    constexpr std::array<std::uint32_t,4> k_next_branch{{
+        0x0400004cu,0x0020800au,0u,0x00000066u
+    }};
+    std::size_t found = 0u;
+    std::size_t post = 0u;
+    for (const auto &ins : instructions) {
+        const auto at = ins.offset;
+        if (ins.opcode != 0x2fu || ins.length != 6u ||
+            at < 204u || at + 25u > words.size() ||
+            !std::equal(k_dsr_post_ls_gamma.begin(),
+                        k_dsr_post_ls_gamma.end(),
+                        words.begin() + static_cast<std::ptrdiff_t>(at)) ||
+            !std::equal(k_next_branch.begin(),k_next_branch.end(),
+                        words.begin() + static_cast<std::ptrdiff_t>(at+21u)))
+            continue;
+        // DSR pre-Fog has separate source encoding; no byte of the
+        // exact Fog+LS 204-DWORD operator may be rewritten in this branch.
+        const auto ptr = reinterpret_cast<const std::uint8_t *>(
+            words.data()+at-204u);
+        if (!hashing::matches_hex(hashing::sha256(ptr,204u*4u),
+                                  k_fog_ls_204_sha))
+            continue;
+        ++found; post = at;
+    }
+    if (found != 1u)
+        return false;
+    const auto original=words;
+    std::fill(words.begin()+static_cast<std::ptrdiff_t>(post),
+              words.begin()+static_cast<std::ptrdiff_t>(post+21u),
+              0x0100003au); // precisely 21 one-DWORD NOPs
+    if (!std::equal(original.begin(),
+                    original.begin()+static_cast<std::ptrdiff_t>(post),
+                    words.begin()) ||
+        !std::equal(original.begin()+static_cast<std::ptrdiff_t>(post+21u),
+                    original.end(),
+                    words.begin()+static_cast<std::ptrdiff_t>(post+21u)))
+        return false;
+    std::vector<std::uint8_t> rebuilt;
+    if (!rebuild(bytes.data(),bytes.size(),std::move(chunks),
+                 code_index,words,rebuilt))
+        return false;
+    std::vector<chunk> verify;
+    std::vector<std::uint32_t> check;
+    std::size_t check_index=0u;
+    if (!parse_dxbc(rebuilt.data(),rebuilt.size(),verify,check_index) ||
+        !extract_words(verify,check_index,check) ||
+        check!=words)
+        return false;
+    bytes=std::move(rebuilt);
+    return true;
+}
+#endif
 
 bool apply_linear_envdiffuse_consumer_diag(
     std::vector<std::uint8_t> &bytes) noexcept
@@ -4869,6 +4948,14 @@ materialize_pmetal_rgba_receiver(
 
 // Atmosphere/Fog/LightScattering remains stock DSR in R6B. Do not compose
     // the historical V4B pre-Fog/post-LightScattering transform here.
+
+#if defined(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
+    if (!apply_stable_ptde_ls_postdomain_stock_fog(base)) {
+        outcome.result =
+            pmetal_rgba_materialize_result::fail_postcondition;
+        return outcome;
+    }
+#endif
 
     if (compose_upper_lower) {
         std::vector<std::uint8_t> ul;
