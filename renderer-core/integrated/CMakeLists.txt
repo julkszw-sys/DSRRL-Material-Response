@@ -1305,3 +1305,40 @@ add_executable(dsrrl_fixed_pointlight_corpus_native_check
 target_include_directories(dsrrl_fixed_pointlight_corpus_native_check PRIVATE "${DSRRL_RENDERER_CORE_ROOT}/include")
 target_compile_features(dsrrl_fixed_pointlight_corpus_native_check PRIVATE cxx_std_17)
 target_link_libraries(dsrrl_fixed_pointlight_corpus_native_check PRIVATE dsrrl_renderer_core d3d11)
+
+# V276 HANDOFF Stage A: compile exact ORIGINAL R19 source in an owner-local
+# offline DXBC exporter. Never commit licensed retail shader bytecode.
+option(
+    DSRRL_V276_BUILD_REAL_R19_EXPORTER
+    "Opt-in offline exporter of genuine materialized R19 shader bytecode"
+    OFF)
+if(DSRRL_V276_BUILD_REAL_R19_EXPORTER)
+    add_executable(
+        dsrrl_v276_real_r19_offline_exporter
+        "${DSRRL_RENDERER_CORE_ROOT}/tools/v276/export_real_r19_final_dxbc.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_diffuse_v1.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
+        "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp")
+    target_include_directories(
+        dsrrl_v276_real_r19_offline_exporter PRIVATE
+        "${DSRRL_RENDERER_CORE_ROOT}/include"
+        "${DSRRL_CORE_GENERATED_ROOT}")
+    target_link_libraries(
+        dsrrl_v276_real_r19_offline_exporter PRIVATE
+        dsrrl_renderer_core d3d11 d3dcompiler)
+    target_compile_features(
+        dsrrl_v276_real_r19_offline_exporter PRIVATE cxx_std_17)
+    # Inherit exact live addon's DEFINITIONS, not manually guessed
+    # standalone emitter settings. R19 full chain then identical to addon.
+    target_compile_definitions(
+        dsrrl_v276_real_r19_offline_exporter PRIVATE
+        $<TARGET_PROPERTY:dsrrl_renderer_core_integrated,COMPILE_DEFINITIONS>)
+    add_dependencies(
+        dsrrl_v276_real_r19_offline_exporter
+        dsrrl_core_material_response_diffuse_v1_authority
+        dsrrl_core_pmetal_envspec_hemenvlerp_authority)
+    if(MSVC)
+        target_compile_options(
+            dsrrl_v276_real_r19_offline_exporter PRIVATE /W4 /WX)
+    endif()
+endif()
