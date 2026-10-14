@@ -1,0 +1,1 @@
+V287 is a descendant of immutable R43 RC1. The previous R19 HemEnvLerp replacement must be rejected unless exact V286 full-DXBC SHA and receiver-specific size are certified. Until then, non-matching Lerp draw calls fail open to stock DSR. Stable R17, PointLight R40, other renderer components stay unchanged. Current approved list is deliberately empty. No new live pixel claim.
