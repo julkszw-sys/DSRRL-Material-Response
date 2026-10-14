@@ -1,0 +1,30 @@
+name: V281 PTDE R5 Stable to Lerp Exact Normal Operator
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source-and-fail-open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile owner-local source and reject synthetic inputs
+        run: |
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror             -Irenderer-core/include             renderer-core/tools/v281/reconstruct_lerp_r5_from_stable_final.cpp             -o /tmp/v281-r5
+          printf 'DXBCfake' >/tmp/v281-no-owner
+          mkdir -p /tmp/v281-outputs
+          if /tmp/v281-r5 /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner                /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-outputs; then
+            echo 'V281 ERROR: invalid source accepted'; exit 1
+          fi
+          test ! -e /tmp/v281-outputs/v281_R5_LerpRX33.dxbc
+          test ! -e /tmp/v281-outputs/v281_R5_LerpRX34.dxbc
+          test ! -e /tmp/v281-outputs/v281_R5_LerpRX35.dxbc
+          echo V281_STABLE_TO_LERP_R5_NATIVE_SOURCE_AND_FAIL_OPEN_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V281_STABLE_TO_LERP_R5_SOURCE_ONLY
+          path: renderer-core/tools/v281/*.cpp
+          if-no-files-found: error
