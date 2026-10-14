@@ -28,6 +28,9 @@ jobs:
           c++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tools/v286/reconstruct_lerp_r5_r11_r7_from_final.cpp -o /tmp/v286-source
           if /tmp/v286-source /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-outputs; then exit 1; fi
           echo V286_NATIVE_FAILOPEN_PASS
+      - name: V288 atomic source publication unit checks
+        run: |
+          python3 renderer-core/tools/v288/test_atomic_owner_v286_export.py
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_V281_STABLE_TO_LERP_R5_SOURCE_ONLY
