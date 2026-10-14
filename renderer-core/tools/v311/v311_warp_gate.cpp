@@ -37,8 +37,8 @@ static bool check(ID3D11Device* dev,ID3D11DeviceContext* ctx,
     for(UINT i=0;i<desc.OutputParameters;++i){
         D3D11_SIGNATURE_PARAMETER_DESC param{};
         if(FAILED(refl->GetOutputParameterDesc(i,&param)))return false;
-        if(param.SystemValueType==D3D_NAME_TARGET && param.Register==0u)rt0=true;
-        if(param.SystemValueType==D3D_NAME_TARGET && param.Register==1u)rt1=true;
+        if(param.SemanticName && _stricmp(param.SemanticName,"SV_Target")==0 && param.SemanticIndex==0u && param.Register==0u && param.Mask==15u)rt0=true;
+        if(param.SemanticName && _stricmp(param.SemanticName,"SV_Target")==0 && param.SemanticIndex==1u && param.Register==1u && param.Mask==15u)rt1=true;
     }
     if(!rt0 || !rt1){std::cerr<<label<<" missing RT0 or Glow RT1\n";return false;}
     D3D11_SHADER_INPUT_BIND_DESC resource{};
