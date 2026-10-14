@@ -46,6 +46,13 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V299 source compile failed'}
           & ./v299-donor-test.exe
           if($LASTEXITCODE -ne 0){throw 'V299 provenance fail-open failed'}
+      - name: V301 owner DXBC sidecar missing SHA native fail-open
+        shell: pwsh
+        run: |
+          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include renderer-core/tests/v301_owner_sidecar_empty_approval_test.cpp /Fe:v301-owner-failopen.exe
+          if($LASTEXITCODE -ne 0){throw 'V301 owner sidecar header compile failed'}
+          & ./v301-owner-failopen.exe
+          if($LASTEXITCODE -ne 0){throw 'V301 empty owner approval unexpectedly allowed shader'}
       - name: MSVC strict compile and fail-open test
         shell: pwsh
         run: |
