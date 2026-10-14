@@ -1,0 +1,74 @@
+name: V317 Exact V272 Native Graft PR
+on:
+  push:
+    branches:
+      - agent/v317-v272-equipment-preserved-owner-v286-lerp-20261014
+  pull_request:
+    paths:
+      - '.github/workflows/v317-exact-native-graft-pr.yml'
+      - 'renderer-core/tools/v317/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v272-modern-lerp:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: ON
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: ON
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: ON
+      DSRRL_V203_OWNER_PATH_TRACE: ON
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: ON
+      DSRRL_V206_NATIVE_T1_ADAPTER: ON
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: ON
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: ON
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: ON
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: ON
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: ON
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: ON
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: ON
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: ON
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v317-v272-equipment-preserved-owner-v286-lerp-20261014
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Native exact V272 plus modern V286 RX33-35
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $builder='renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1'
+          $initial=[IO.File]::ReadAllText($builder)
+          & python renderer-core/tools/v317/insert_build_stage.py
+          if($LASTEXITCODE -ne 0){throw 'V317 build stage injection failed'}
+          & cl.exe /nologo /std:c++17 /EHsc /W4 /WX renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp /Fe:v258-dxbc-oracle.exe /link d3dcompiler.lib
+          if($LASTEXITCODE -ne 0){throw 'V272 legacy diagnostic native compiler failure'}
+          & ./v258-dxbc-oracle.exe
+          if($LASTEXITCODE -ne 0){throw 'V272 diagnostic shader oracle failure'}
+          & $builder
+          if($LASTEXITCODE -ne 0){throw 'V317 original V272 native build failed'}
+          $legacy='DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64'
+          if(!(Test-Path $legacy)){throw 'V317 output missing'}
+          $binary=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($legacy))
+          foreach($m in @('[DSRRL V317 OWNER V286 LERP]','[DSRRL V272 INTERIOR LERP B12 ROUTE]','[DSRRL V258 PTDE GPU ISLAND DORMANT]')){
+            if(!$binary.Contains($m)){throw "V317 native marker not found: $m"}
+          }
+          New-Item -ItemType Directory -Path deploy -Force | Out-Null
+          $out='deploy/DSRRL_V317_V272_SPECRGB_V286_LERP.addon64'
+          Copy-Item $legacy $out
+          $sha=(Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          @{schema='DSRRL_V317_OWNER_V286_LERP_NATIVE_V1';addon_sha256=$sha;equipment='V272_FULL_SPECRGB_CONFIG';lerp='V286_OWNER_SHA_LOCK';fog='STOCK_DSR';lightscattering='STOCK_DSR';runtime='OPEN';pixel='OPEN'} | ConvertTo-Json | Set-Content deploy/receipt.json
+          Write-Output "V317_NATIVE_SINGLE_ADDON_PASS_SHA256=$sha"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V317-V272-SpecRGB-V286-Lerp
+          path: deploy/
+          retention-days: 90
+          if-no-files-found: error
