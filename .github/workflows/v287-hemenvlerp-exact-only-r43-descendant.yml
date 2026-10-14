@@ -1,0 +1,23 @@
+name: V287 Exact Lerp Admission Build
+on:
+  push:
+    branches:
+      - agent/v287-hemenvlerp-exact-only-admission-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-admission:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: MSVC strict compile and fail-open test
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core/include renderer-core/tests/v287_hemenvlerp_admission_tests.cpp /Fe:v287-test.exe
+          if($LASTEXITCODE -ne 0){throw 'build failed'}
+          & ./v287-test.exe
+          if($LASTEXITCODE -ne 0){throw 'test failed'}
