@@ -158,8 +158,8 @@ void check_signature(ID3D11ShaderReflection* original,
           "R17 exact b12 carrier not present");
   D3D11_SHADER_BUFFER_DESC cb{};
   auto* carrier=result->GetConstantBufferByName("DSRRL_MaterialCarrier");
-  require(carrier&&SUCCEEDED(carrier->GetDesc(&cb))&&cb.Size==96,
-          "final R17 b12 must contain six float4s = 96 bytes");
+  require(carrier&&SUCCEEDED(carrier->GetDesc(&cb))&&cb.Size==64,
+          "Stable R17 b12 must declare four float4s = 64 bytes (Lerp R19 only widens to 96)");
 }
 void driver_accept(const std::vector<std::uint8_t>& shader){
   ID3D11Device* device=nullptr;
@@ -277,7 +277,7 @@ int main(int argc,char** argv){
         <<" final_sha="<<hash<<" final_bytes="<<output.size()
         <<" stock_fog_word="<<d.fog<<" final_fog_word="<<new_fog
         <<" stock_glow_word="<<d.glow<<" final_glow_word="<<new_glow
-        <<" RDEF_b12=96 ABI=STOCK WARP_CREATE=PASS\n";
+        <<" RDEF_b12=64 ABI=STOCK WARP_CREATE=PASS\n";
     }
     std::cout<<"V276_THREE_REAL_R17_FINAL_SHADER_DONORS_EXPORT_PASS\n";
     return 0;
