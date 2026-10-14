@@ -1,0 +1,3 @@
+# V284 Lerp R11
+
+Source-only operator diagnostic. Lerp R19 currently contains a stock t8/s8 whole-surface SAO multiplication unlike Stable R17 R11. This workstream is subordinate to exact owner-only shader material, SHA and downstream verification; PS bind OFF; PTDE pixel OPEN. See local original-DXBC census RX33/34/35: t8 sample offsets 1878/1787/1440 and immediately following scalar MUL 1891/1800/1453. R3-equivalent late SpecTex.a gate is already neutralized by Lerp R15-R17; do not port twice. Preserve stock Fog/LightScattering/Glow; avoid blanket shared RX patch.
