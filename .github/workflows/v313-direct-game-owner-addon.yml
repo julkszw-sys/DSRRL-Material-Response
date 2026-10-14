@@ -1,0 +1,68 @@
+name: V313 Direct Game Owner RX Single Addon
+on:
+  push:
+    branches:
+      - agent/v313-direct-game-owner-rx-20261014
+  pull_request:
+    paths:
+      - '.github/workflows/v313-direct-game-owner-addon.yml'
+      - 'renderer-core/tools/v313/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  direct-game-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Exact 3-RX owner source approval (SHA and size only, no DXBC bytes)
+        shell: pwsh
+        run: |
+          $header=@'
+          #pragma once
+          // V313 owner-explicit DIRECT GAME diagnostic. NO WARP, NO PIXEL CERTIFICATION.
+          #include <array>
+          #include <cstddef>
+          #include <cstdint>
+          namespace dsrrl::runtime::hemenvlerp_v301 {
+          struct owner_rx { std::uint32_t receiver_id; std::size_t size; const char* sha256; };
+          inline constexpr std::array<owner_rx,3> approved{{
+            {33u,24140u,"a591a3181fb9953f8fb59305f5901a66c4cfd0a16652e5871a8ebb1ac01313cc"},
+            {34u,23840u,"96fb2897db71426380c834703a69205f02e9306506ba7385b1ed5999a5b584dd"},
+            {35u,20680u,"20af2d760a39a7e1d5b8903a451eb8bf061ce1da5e0ac8dfa5c4ff367eed513b"},
+          }};
+          }
+          '@
+          $target='renderer-core/include/dsrrl/runtime/hemenvlerp_v301_owner_approval.hpp'
+          [IO.File]::WriteAllText((Join-Path $PWD $target),$header,[Text.UTF8Encoding]::new($false))
+          if((Get-Content $target -Raw) -notmatch 'array<owner_rx,3> approved'){ throw 'V313_APPROVAL_COUNT_NOT_3' }
+      - name: Native single addon compile with V301 diagnostic RX33-35 enabled
+        shell: pwsh
+        run: |
+          & renderer-core/tools/v287/configure.ps1 -BuildDirectory build-v313
+          if($LASTEXITCODE -ne 0){throw 'V313_BASE_CMAKE_FAIL'}
+          & cmake -S renderer-core/integrated -B build-v313 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON -DDSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC=ON
+          if($LASTEXITCODE -ne 0){throw 'V313_APPROVED_CONFIG_FAIL'}
+          & cmake --build build-v313 --config Release --target dsrrl_renderer_core_integrated
+          if($LASTEXITCODE -ne 0){throw 'V313_NATIVE_BUILD_FAIL'}
+          $add=@(Get-ChildItem build-v313 -Filter '*.addon64' -File -Recurse)
+          if($add.Count -ne 1){throw "V313 expected ONE addon got $($add.Count)"}
+          New-Item -ItemType Directory -Path deploy -Force | Out-Null
+          Copy-Item -LiteralPath $add[0].FullName -Destination 'deploy/DSRRL_V313_DIRECT_GAME_DIAGNOSTIC.addon64'
+          $sha=(Get-FileHash 'deploy/DSRRL_V313_DIRECT_GAME_DIAGNOSTIC.addon64' -Algorithm SHA256).Hash.ToLowerInvariant()
+          @{version='V313';schema='DSRRL_V313_DIRECT_GAME_NATIVE_CI_V1';addon_sha256=$sha;approval_count=3;original_owner_shader_warp='SKIPPED_BY_OWNER';runtime='OPEN';pixels='OPEN';source_commit=$env:GITHUB_SHA;protected_latest_hook_source='UNCHANGED'} | ConvertTo-Json | Set-Content 'deploy/V313_CI_RECEIPT.json'
+          Write-Output 'V313_ACTIVE_OWNER_3RX_ONE_ADDON_CONSTRUCTION_PASS; runtime/pixels not verified'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V313-Direct-Game-Single-Addon
+          path: deploy/
+          retention-days: 14
+          if-no-files-found: error
