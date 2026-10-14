@@ -1,0 +1,42 @@
+name: V278 Exact Final R19 SpecRGB COLOR0 Candidate
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-and-negative-oracle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact RX33-35 PTDE local material suboperator candidate
+        run: |
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Irenderer-core/include \
+            renderer-core/tools/v278/build_owner_r19_equipment_spec_rgb_color0_candidate.cpp \
+            -o /tmp/v278-r19-material-operator
+          python3 - <<'PY'
+          with open('/tmp/unowned-empty-dxbc','wb') as f:
+              f.write(b'DXBC' + bytes(128))
+          PY
+          if /tmp/v278-r19-material-operator 33 /tmp/unowned-empty-dxbc /tmp/badcandidate; then
+            echo "V278_FAIL synthetic fake original accepted"; exit 1
+          fi
+          if /tmp/v278-r19-material-operator 34 /tmp/unowned-empty-dxbc /tmp/badcandidate; then
+            echo "V278_FAIL synthetic fake RX34 accepted"; exit 1
+          fi
+          if /tmp/v278-r19-material-operator 35 /tmp/unowned-empty-dxbc /tmp/badcandidate; then
+            echo "V278_FAIL synthetic fake RX35 accepted"; exit 1
+          fi
+          if /tmp/v278-r19-material-operator 123 /tmp/unowned-empty-dxbc /tmp/badcandidate; then
+            echo "V278_FAIL unregistered RX accepted"; exit 1
+          fi
+          echo 'V278_NATIVE_SOURCE_COMPILE_AND_FOUR_NEGATIVE_FAIL_OPEN_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V278_MATERIAL_LOCAL_OPERATOR_SOURCE_ONLY
+          path: |
+            renderer-core/tools/v278/*.cpp
+          if-no-files-found: error
