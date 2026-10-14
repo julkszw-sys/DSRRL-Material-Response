@@ -7,6 +7,7 @@
 
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
+#include "dsrrl/runtime/pmetal_donor_provenance_policy.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -1656,7 +1657,7 @@ bool read_exact_source(
     // 1249 vanilla DSR records. The three DSR-only trailing rows (m14/s14/
     // m18 row 64) are *not* eligible for nearest PTDE donor substitution.
     // Original DSR packer has already consumed the real native row.
-    if (row_id >= bank->count && row_id < bank->live_count) {
+    if (pmetal_donor_provenance::classify(row_id,bank->live_count,bank->count) == pmetal_donor_provenance::row_origin::dsr_only) {
         record_hook_decode(hook_decode_dsr_only,
             version_u32,count_u32,index,row_id,signature);
         return false;
