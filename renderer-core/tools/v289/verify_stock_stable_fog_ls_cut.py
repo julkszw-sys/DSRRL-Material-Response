@@ -62,7 +62,7 @@ def audit(rx,b):
 
 def from_zip(path):
  with zipfile.ZipFile(path) as z:data=z.read(BINDER)
- if data[:4]!=b"DCX\\0":raise AssertionError("DCX")
+ if data[:3]!=b"DCX" or data[3]!=0:raise AssertionError("DCX")
  payload=zlib.decompress(data[0x4c:])
  found={};pos=0
  while (pos:=payload.find(b"DXBC",pos))>=0:
