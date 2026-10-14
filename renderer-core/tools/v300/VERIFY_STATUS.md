@@ -1,0 +1,1 @@
+V300 offline owner shader validation: expected full SHA and DXBC checksums are mandatory. Final V286 and V297 runtime approval is still OFF pending WARP CreatePixelShader acceptance. No commercial shader binaries are committed to GitHub.

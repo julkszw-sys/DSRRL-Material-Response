@@ -4,6 +4,7 @@ on:
     branches:
       - agent/v258-equipment-lerp-gpu-contract-20261013
       - agent/v276-r19-final-dxbc-export-second-lane-20261014
+      - agent/v300-final-owner-shader-materialization-20261014
   pull_request:
     paths:
       - 'renderer-core/tools/v257/**'
@@ -165,6 +166,89 @@ jobs:
           & ./v276-final-r19-exporter.exe --self-test
           if($LASTEXITCODE -ne 0){throw 'V276 real materializer null donor fail-open test failed'}
           Write-Host 'V276_R19_PRODUCTION_SOURCE_LINKED_SELFTEST_PASS'
+      - name: V300 compile TRUE Stable R17 final PS exporter and stage R5+R11+R7 source
+        shell: pwsh
+        run: |
+          $cache=Get-Content 'build/CMakeCache.txt'
+          foreach($name in @('DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL',
+                             'DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW',
+                             'DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE')){
+            if($cache -notcontains "$($name):BOOL=ON"){throw "V300 Stable prerequisite OFF: $name"}
+          }
+          $defs=@($cache | Where-Object {$_ -match '^(DSRRL_PMETAL_[A-Z0-9_]+):BOOL=ON
+          path: |
+            v276-final-r19-exporter.exe
+            renderer-core/tools/v276/export_real_r19_final_dxbc.cpp
+            renderer-core/tools/v276/extract_original_retail_rx_owner_local.py
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING_ONE_ADDON
+          path: DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V258_PTDE_EQUIPMENT_HEMENVLERP_DXBC_OPERATOR_ISLANDS
+          path: |
+            v258_ptde_env_local_subcut.dxbc
+            v258_ptde_phn_terminal_subcut.dxbc
+            v270_rx33_v268.dxbc
+            v270_rx34_v268.dxbc
+            v270_rx35_v268.dxbc
+            renderer-core/tools/v258/*.hlsl
+            renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp
+            v258_sidecar_candidate_census.json
+            renderer-core/tools/v257/ptde_equipment_hemenvlerp_core.hpp
+            renderer-core/tools/v257/inventory_dsrll_sidecars.py
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: DSRRL_V276_PORTABLE_R19_OFFLINE_SOURCE
+          path: |
+            renderer-core/src/**
+            renderer-core/include/**
+            renderer-core/tools/v276/*.cpp
+            renderer-core/tools/v276/*.py
+            build/generated/dsrrl/operators/material_response/generated_diffuse_response_v1.hpp
+            build/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp
+            build/CMakeCache.txt
+          if-no-files-found: error
+} | ForEach-Object { '/D' + ($_.Split(':')[0]) })
+          $defs += '/DDSRRL_RELEASE_CLEANUP'
+          $src=@(
+            'renderer-core/tools/v300/export_real_r17_final_dxbc.cpp',
+            'renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp',
+            'renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp',
+            'renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp'
+          )
+          $lib='build/renderer-core-lib/Release/dsrrl_renderer_core.lib'
+          if(!(Test-Path $lib)){throw 'V300 exact production library missing'}
+          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include /Ibuild/generated @defs @src $lib /Fe:v300-final-r17-exporter.exe /link d3d11.lib d3dcompiler.lib
+          if($LASTEXITCODE -ne 0){throw 'V300 real Stable R17 exporter failed native compile'}
+          & ./v300-final-r17-exporter.exe --self-test
+          if($LASTEXITCODE -ne 0){throw 'V300 Stable R17 null donor fail-open failed'}
+          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include renderer-core/tools/v286/reconstruct_lerp_r5_r11_r7_from_final.cpp /Fe:v300-v286-lerp.exe
+          if($LASTEXITCODE -ne 0){throw 'V300 V286 reconstruction tool failed compile'}
+          & ./v300-v286-lerp.exe
+          if($LASTEXITCODE -eq 0){throw 'V300 V286 missing-owner-input should reject'}
+          $global:LASTEXITCODE=0
+          Write-Host 'V300_TWO_PRODUCTION_EXPORTERS_COMPILED_R17_R19_AND_V286_SOURCE_PASS'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V300_FINAL_STABLE_LERP_OWNER_ONLY_OFFLINE_TOOLS
+          path: |
+            v300-final-r17-exporter.exe
+            v276-final-r19-exporter.exe
+            v300-v286-lerp.exe
+            renderer-core/tools/v300/export_real_r17_final_dxbc.cpp
+            renderer-core/tools/v300/run_owner_final_pipeline.ps1
+            renderer-core/tools/v288/atomic_owner_v286_export.py
+            renderer-core/tools/v288/dxbc_legacy_checksum.py
+            renderer-core/tools/v297/patch_lerp_owner_post_ls_domain.py
+            renderer-core/tools/v276/extract_original_retail_rx_owner_local.py
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_V276_R19_FINAL_DXBC_OFFLINE_EXPORTER_WIN64
