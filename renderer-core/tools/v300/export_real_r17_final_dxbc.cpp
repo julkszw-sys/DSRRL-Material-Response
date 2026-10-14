@@ -219,6 +219,25 @@ int main(int argc,char** argv){
   try{
     core::feature_registry features;
     require(configure(features),"production feature policy setup failed");
+    if(argc==4 && std::strcmp(argv[1],"--driver-compare")==0){
+      const auto original=read(argv[2]),candidate=read(argv[3]);
+      (void)shex(original);
+      (void)shex(candidate);
+      ID3D11ShaderReflection* a=nullptr;
+      ID3D11ShaderReflection* b=nullptr;
+      auto first=D3DReflect(original.data(),original.size(),
+          IID_ID3D11ShaderReflection,reinterpret_cast<void**>(&a));
+      auto second=D3DReflect(candidate.data(),candidate.size(),
+          IID_ID3D11ShaderReflection,reinterpret_cast<void**>(&b));
+      require(SUCCEEDED(first)&&SUCCEEDED(second)&&a&&b,
+              "V300 owner driver compare reflection failed");
+      try{check_signature(a,b);}
+      catch(...){a->Release();b->Release();throw;}
+      a->Release();b->Release();
+      driver_accept(candidate);
+      std::cout<<"V300_OWNER_FINAL_IO_SIGNATURE_WARP_PS_PASS\n";
+      return 0;
+    }
     if(argc==2 && std::strcmp(argv[1],"--self-test")==0){
       std::vector<std::uint8_t> out{0xBEu};
       const auto result=operators::env_spec::materialize_pmetal_rgba_receiver(
