@@ -16,6 +16,7 @@ STABLE=ROOT/"renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
 LERP=ROOT/"renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
 STABLE_CENSUS=ROOT/"renderer-core/data/census/stable_hemenv_receiver_census_v1.json"
 REFERENCE=ROOT/"renderer-core/tools/v257/ptde_equipment_hemenvlerp_core.hpp"
+R5_BRIDGE=ROOT/"renderer-core/tools/v281/reconstruct_lerp_r5_from_stable_final.cpp"
 
 def require(condition,why):
     if not condition:
@@ -84,6 +85,18 @@ def run():
             "source_structure_verified":True,
             "semantic_or_pixel_parity":status
         })
+    # V281 first genuinely matched Stable R5 PTDE normal producer into
+    # ACTUAL final Lerp RX33/34/35 — still an owner-only candidate.
+    r5 = R5_BRIDGE.read_text(encoding="utf8")
+    require("Stable R17" in r5 and "final R19" in r5 and
+            "x.stable_cross" in r5 and "x.lerp_bitangent" in r5 and
+            "C::fix_checksum(" in r5 and "exact" in r5.lower(),
+            "authenticated V281 Stable-to-Lerp R5 normal producer missing")
+    for label in ("552ae40c58300ec63a398a4d92e5e5c926694623756a95d2c5df7e7e36e1af1a",
+                  "2bdfeac13fcce953bfa39b8fb299e79dfdb99cd2bb72d6a20a9d66ce052efc22",
+                  "fd364e4eaef350f2cbd86bb6fc4aa4b56a5e40f08e8e646b7951897174e772ca"):
+        require(label in (ROOT/"renderer-core/tools/v281/V281_ACTUAL_STABLE_TO_LERP_R5_OPERATOR_CONTINUITY.md").read_text(encoding="utf8"),
+                "V281 owner SHA-pinned normal result not in stable continuity evidence")
     for token in ("struct environment","struct surface_input","compose_local(",
                   "compose_terminal(","env_blend("):
         require(token in r,"PTDE reference kernel removed: "+token)
@@ -96,6 +109,7 @@ def run():
       "status":"SOURCE_STRUCTURE_PASS_PARITY_NOT_ESTABLISHED",
       "stable_control":"owner-authenticated R17 P_Metal HemEnv rx33/34/35 only; historical visible success",
       "lerp":"R19 reconstructed; new replacement RX shader binding still dormant",
+      "v281_normal_R5_matched_static_operator":"OWNER_VERIFIED_3_RX_OFFLINE_CANDIDATE_ONLY",
       "stable_original_rx":[{k:stable_rx[r][k] for k in
             ("receiver_id","shader_name","code_sha256")} for r in (33,34,35)],
       "operator_cuts":checks,
