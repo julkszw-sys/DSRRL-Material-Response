@@ -56,6 +56,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path 'v286-rejected' | Out-Null
           & ./v286-source-test.exe v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-rejected
           if($LASTEXITCODE -eq 0){throw 'V286 incorrectly accepted unverified donor'}
+          $global:LASTEXITCODE=0
           if(@(Get-ChildItem 'v286-rejected' -File).Count -ne 0){throw 'V286 wrote partial output on rejection'}
           Write-Host 'V286_NATIVE_SOURCE_COMPILE_AND_SHA_FAILOPEN_PASS'
       - name: Native PTDE CPU oracle and sidecar inventory tests
