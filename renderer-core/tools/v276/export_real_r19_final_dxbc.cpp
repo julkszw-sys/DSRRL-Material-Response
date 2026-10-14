@@ -14,7 +14,9 @@
 #include <d3d11.h>
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -53,7 +55,8 @@ std::vector<std::uint8_t> read(const std::filesystem::path& path){
   require(n>0 && n<1024*1024,"unexpected DXBC input size");
   std::vector<std::uint8_t> data(static_cast<std::size_t>(n));
   f.seekg(0);
-  f.read(reinterpret_cast<char*>(data.data()),n);
+  f.read(reinterpret_cast<char*>(data.data()),
+         static_cast<std::streamsize>(n));
   require(bool(f),"truncated original RX donor");
   return data;
 }
