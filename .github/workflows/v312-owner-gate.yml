@@ -1,0 +1,60 @@
+name: V312 exact owner admission source-only
+on:
+  push:
+    branches: [agent/v312-owner-gate-20261014]
+  pull_request:
+    paths:
+      - 'renderer-core/tools/v312/**'
+      - '.github/workflows/v312-owner-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-fail-open:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile owner-private admission source
+        shell: pwsh
+        run: |
+          python -m py_compile renderer-core/tools/v312/v312_owner_gate.py
+          if ($LASTEXITCODE -ne 0) { throw 'V312_SOURCE_SYNTAX_FAIL' }
+      - name: No private inputs cannot authorize or materialize
+        shell: pwsh
+        run: |
+          $out=Join-Path $env:RUNNER_TEMP 'v312-failed-input'
+          $argsList=@('renderer-core/tools/v312/v312_owner_gate.py','authorize','renderer-core/tools/v312',$out)
+          $proc=Start-Process -FilePath python -ArgumentList $argsList -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -eq 0 -or (Test-Path -LiteralPath $out)) { throw 'V312_FAIL_OPEN_BROKEN' }
+      - name: Status and constraints
+        shell: pwsh
+        run: |
+          Write-Output 'V312_SOURCE_ONLY_FAILOPEN_PASS; original owner WARP remains OPEN'
+          Write-Output 'No renderer, R43 RC1, Fog, latest_hook_source, PointLight or DoF changes'
+
+  one-addon-fail-open:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Compile exactly one addon with empty private owner approval
+        shell: pwsh
+        run: |
+          & renderer-core/tools/v287/configure.ps1 -BuildDirectory build-v312-inert
+          if ($LASTEXITCODE -ne 0) { throw 'V312_BASE_CONFIG_FAIL' }
+          & cmake -S renderer-core/integrated -B build-v312-inert -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON -DDSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC=ON
+          if ($LASTEXITCODE -ne 0) { throw 'V312_V301_CONFIG_GUARD_FAIL' }
+          & cmake --build build-v312-inert --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { throw 'V312_NATIVE_ONE_ADDON_FAIL' }
+          $apps=@(Get-ChildItem -LiteralPath build-v312-inert -Recurse -File -Filter '*.addon64')
+          if ($apps.Count -ne 1) { throw 'V312_REQUIRES_SINGLE_ADDON' }
+          $include=Get-Content 'renderer-core/include/dsrrl/runtime/hemenvlerp_v301_owner_approval.hpp' -Raw
+          if ($include -notmatch 'array<owner_rx,0> approved') { throw 'V312_INERT_APPROVAL_MUST_BE_EMPTY' }
+          Write-Output 'V312_NATIVE_ONE_ADDON_FAILOPEN_PASS; owner WARP and runtime/pixel OPEN'
