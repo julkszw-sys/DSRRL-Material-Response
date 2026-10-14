@@ -61,5 +61,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: V274B-V272-Lerp-Deferred-CPU-CB85-Witness
-          path: DSRRL_V274_V272_EQUIPMENT_LERP_ACTUAL_CB85_WITNESS.addon64
+          path: DSRRL_V274B_V272_EQUIPMENT_LERP_DEFERRED_CB0_SHADOW.addon64
           if-no-files-found: error
