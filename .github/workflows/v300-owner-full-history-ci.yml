@@ -56,7 +56,7 @@ jobs:
           $defs += '/DDSRRL_RELEASE_CLEANUP'
           $lib='build/renderer-core-lib/Release/dsrrl_renderer_core.lib'
           if(!(Test-Path $lib)){throw 'V300 linked core library missing'}
-          $common=@('renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp','renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp')
+          $common=@('renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp','renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp','renderer-core/src/operators/lightbank/upper_lower_hemenv_materializer.cpp')
           & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include /Ibuild/generated @defs renderer-core/tools/v300/export_real_r17_final_dxbc.cpp renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp @common $lib /Fe:v300-final-r17-exporter.exe /link d3d11.lib d3dcompiler.lib
           if($LASTEXITCODE -ne 0){throw 'V300 real Stable R17 materializer compilation failed'}
           & ./v300-final-r17-exporter.exe --self-test
