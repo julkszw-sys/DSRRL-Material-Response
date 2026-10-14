@@ -33,7 +33,7 @@ def test():
  a=bytearray(b);put(a,40+4,999999);rejected(a,"chunk size")
  a=bytearray(b);put(a,48+32+8,999999);rejected(a,"variable table")
  a=bytearray(b);put(a,48+56+4,999999);rejected(a,"variable bounds")
- a=bytearray(b);a[48+56+40*9]^=1
+ a=bytearray(b);a[48+56+40*9+9]^=1
  fields,_=rdef(a);assert fields.get(12)!="gFC_FogCol"
  a=bytearray(b);put(a,48+56+40+4,12*16);rejected(a,"duplicate register")
  # Identity gate denies all synthetic shaders regardless of structurally valid RDEF.
