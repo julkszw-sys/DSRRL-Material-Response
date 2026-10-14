@@ -23,8 +23,9 @@ jobs:
         shell: pwsh
         run: |
           $out=Join-Path $env:RUNNER_TEMP 'v312-failed-input'
-          python renderer-core/tools/v312/v312_owner_gate.py authorize renderer-core/tools/v312 $out
-          if ($LASTEXITCODE -eq 0 -or (Test-Path -LiteralPath $out)) { throw 'V312_FAIL_OPEN_BROKEN' }
+          $argsList=@('renderer-core/tools/v312/v312_owner_gate.py','authorize','renderer-core/tools/v312',$out)
+          $proc=Start-Process -FilePath python -ArgumentList $argsList -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -eq 0 -or (Test-Path -LiteralPath $out)) { throw 'V312_FAIL_OPEN_BROKEN' }
       - name: Status and constraints
         shell: pwsh
         run: |
