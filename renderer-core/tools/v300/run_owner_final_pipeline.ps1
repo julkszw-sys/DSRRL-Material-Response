@@ -23,7 +23,7 @@ try{
  $stable=Join-Path $staging "stable_r17"
  $lerp=Join-Path $staging "lerp_r19"
  Checked "$bin/v300-final-r17-exporter.exe" @("$original/stable33.dxbc","$original/stable34.dxbc","$original/stable35.dxbc",$stable)
- Checked "$bin/v276-final-r19-exporter.exe" @("$original/lerp33.dxbc","$original/lerp34.dxbc","$original/lerp35.dxbc",$lerp)
+ Checked "$bin/v300-final-r19-exporter.exe" @("$original/lerp33.dxbc","$original/lerp34.dxbc","$original/lerp35.dxbc",$lerp)
  $pins=@(
   @("stable_r17/final_r17_RX33.dxbc","b8a9f32010dd279ffae5dd3c787dceb4b06c696c3fe4007bd87ba8f3303e25ca"),
   @("stable_r17/final_r17_RX34.dxbc","abb86881378803d3389bb42d63c97750865a62e23b1ede205bfb63795855ec30"),
