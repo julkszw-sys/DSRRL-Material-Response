@@ -127,6 +127,17 @@ jobs:
           git diff --exit-code -- renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
           if($LASTEXITCODE -ne 0){throw 'V272 original draw runtime source restore mismatch'}
           Write-Host 'V272_ORIGINAL_TRACKED_DRAW_RUNTIME_RESTORED_PASS'
+      - name: V286 native exact Lerp R5 R11 R7 source and fail-open
+        shell: pwsh
+        run: |
+          & cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core/include renderer-core/tools/v286/reconstruct_lerp_r5_r11_r7_from_final.cpp /Fe:v286-source-test.exe
+          if($LASTEXITCODE -ne 0){throw 'V286 native compilation failed'}
+          [IO.File]::WriteAllText('v286-wrong-source.dxbc','DXBCfake')
+          New-Item -ItemType Directory -Force -Path 'v286-rejected' | Out-Null
+          & ./v286-source-test.exe v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-wrong-source.dxbc v286-rejected
+          if($LASTEXITCODE -eq 0){throw 'V286 incorrectly accepted unverified donor'}
+          if(@(Get-ChildItem 'v286-rejected' -File).Count -ne 0){throw 'V286 wrote partial output on rejection'}
+          Write-Host 'V286_NATIVE_SOURCE_COMPILE_AND_SHA_FAILOPEN_PASS'
       - name: V276 compile REAL R19 final DXBC exporter
         shell: pwsh
         run: |
