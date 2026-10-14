@@ -95,6 +95,118 @@ static void save(const result& r,const char* path){
           static_cast<std::streamsize>(r.bytes.size()));
   check(static_cast<bool>(f),"unable to write complete DXBC");
 }
+
+// V267: independent compilation oracle against exact retail RX33/34/35
+// semantic register/mask census. Compiled fixtures are NEVER embedded or bound.
+// Matching the input/output ABI is NECESSARY, not sufficient for pixel equivalence.
+struct v267_semantic {
+  const char *name;
+  UINT index, reg, mask, component_type;
+};
+static void native_abi_fixture(const char *entry, bool shadow, bool ptde = false) {
+  ID3DBlob *blob=nullptr,*errors=nullptr;
+  const HRESULT h=D3DCompileFromFile(
+    ptde ? L"renderer-core/tools/v258/v268_native_ptde_rx_environment_fixture.hlsl" :
+           L"renderer-core/tools/v258/v267_rx_abi_fixture.hlsl",nullptr,
+    D3D_COMPILE_STANDARD_FILE_INCLUDE,entry,"ps_5_0",
+    D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_WARNINGS_ARE_ERRORS|
+    D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&blob,&errors);
+  if(FAILED(h)||!blob) {
+    if(errors)std::fwrite(errors->GetBufferPointer(),1,
+                           errors->GetBufferSize(),stderr);
+    if(errors)errors->Release();
+    throw std::runtime_error("V267 HLSL receiver ABI fixture compile failed");
+  }
+  if(errors)errors->Release();
+  ID3D11ShaderReflection *reflection=nullptr;
+  check(SUCCEEDED(D3DReflect(blob->GetBufferPointer(),blob->GetBufferSize(),
+        IID_ID3D11ShaderReflection,reinterpret_cast<void**>(&reflection)))
+        && reflection,"V267 D3DReflect failure");
+  const v267_semantic expected_regular[]={
+    {"SV_Position",0,0,15,3},{"TEXCOORD",0,1,15,3},
+    {"TEXCOORD",2,2,15,3},{"TEXCOORD",3,3,15,3},
+    {"TEXCOORD",4,4,15,3},{"TEXCOORD",5,5,7,3},
+    {"COLOR",0,6,15,3},{"TEXCOORD",6,7,3,3},
+    {"SV_IsFrontFace",0,8,1,1},
+  };
+  const v267_semantic expected_shadow[]={
+    {"SV_Position",0,0,15,3},{"TEXCOORD",0,1,15,3},
+    {"TEXCOORD",1,2,15,3},{"TEXCOORD",2,3,15,3},
+    {"TEXCOORD",3,4,15,3},{"TEXCOORD",4,5,15,3},
+    {"TEXCOORD",5,6,7,3},{"COLOR",0,7,15,3},
+    {"TEXCOORD",6,8,3,3},{"SV_IsFrontFace",0,9,1,1},
+  };
+  const auto* expected=shadow?expected_shadow:expected_regular;
+  const UINT count=shadow?10u:9u;
+  D3D11_SHADER_DESC desc{};
+  check(SUCCEEDED(reflection->GetDesc(&desc))&&
+        desc.InputParameters==count&&desc.OutputParameters==2u,
+        "V267 RX semantic input count or dual render target missing");
+  for(UINT i=0;i<count;++i) {
+    D3D11_SIGNATURE_PARAMETER_DESC d{};
+    check(SUCCEEDED(reflection->GetInputParameterDesc(i,&d)),
+          "V267 native input reflection unavailable");
+    const auto &e=expected[i];
+    check(_stricmp(d.SemanticName,e.name)==0 &&
+          d.SemanticIndex==e.index && d.Register==e.reg &&
+          d.Mask==e.mask && static_cast<UINT>(d.ComponentType)==e.component_type,
+          "V267 HLSL native input ABI differs from pinned retail DSR RX");
+  }
+  for(UINT i=0;i<2u;++i) {
+    D3D11_SIGNATURE_PARAMETER_DESC d{};
+    check(SUCCEEDED(reflection->GetOutputParameterDesc(i,&d)),
+          "V267 native output reflection unavailable");
+    check(_stricmp(d.SemanticName,"SV_Target")==0 &&
+          d.SemanticIndex==i && d.Register==i && d.Mask==15u,
+          "V267 dual target signature not retail DSR equivalent");
+  }
+  if (ptde) {
+    // Real GPU sampling of the native RX interpolants through shared
+    // PTDE EnvLocal, but synthetic RT1 makes this a NON-LIVE fixture.
+    binding(reflection,"V268_PTDE_EnvLocal",12,D3D_SIT_CBUFFER);
+    D3D11_SHADER_BUFFER_DESC cb_desc{};
+    auto *cb=reflection->GetConstantBufferByName("V268_PTDE_EnvLocal");
+    check(cb&&SUCCEEDED(cb->GetDesc(&cb_desc))&&cb_desc.Size==8u*16u,
+          "V268 native PTDE fixture b12 ABI mismatch");
+    struct v268_slot { const char *name; UINT slot; };
+    const v268_slot textures[]={
+      {"ptdeDiffuseTex",0u},{"ptdeSpecTex",10u},
+      {"ptdeEnvDiffuseA",11u},{"ptdeEnvSpecA",12u},
+      {"ptdeEnvDiffuseB",13u},{"ptdeEnvSpecB",14u}
+    };
+    for (const auto &t:textures)
+      binding(reflection,t.name,t.slot,D3D_SIT_TEXTURE);
+    binding(reflection,"ptdeSampler",0u,D3D_SIT_SAMPLER);
+    // V269: original retail RX normal map is stock resource t2 with its
+    // own s2 sampler. Host normal-strength producer remains UNVERIFIED.
+    binding(reflection,"stockNormalTex",2u,D3D_SIT_TEXTURE);
+    binding(reflection,"stockNormalSampler",2u,D3D_SIT_SAMPLER);
+    binding(reflection,"V269_UNVERIFIED_StockNormalScale",13u,D3D_SIT_CBUFFER);
+    D3D11_SHADER_BUFFER_DESC norm_desc{};
+    auto *norm_cb=reflection->GetConstantBufferByName(
+        "V269_UNVERIFIED_StockNormalScale");
+    check(norm_cb&&SUCCEEDED(norm_cb->GetDesc(&norm_desc))&&
+          norm_desc.Size==16u,"V269 host normal-scale CB ABI mismatch");
+
+    // Keep compiled native RX shader bytecode INSIDE the same dormant addon
+    // in V270. It remains forbidden to bind this synthetic RT1 fixture.
+    const unsigned char *bytes=static_cast<const unsigned char*>(
+        blob->GetBufferPointer());
+    check(blob->GetBufferSize()>=128u && std::memcmp(bytes,"DXBC",4)==0,
+          "V270 compiled native RX DXBC missing");
+    result native{};
+    native.bytes.assign(bytes,bytes+blob->GetBufferSize());
+    const std::string path=std::string("v270_")+entry+".dxbc";
+    save(native,path.c_str());
+    std::printf("V270_%s_NATIVE_RX_DXBC_SAVED_DORMANT bytes=%zu\\n",
+                entry,native.bytes.size());
+    std::printf("V269_%s_DSR_T2_NORMAL_AWARE_PTDE_ENVLOCAL_COMPILED_NOT_BOUND_PASS\n",entry);
+  }
+  reflection->Release();
+  blob->Release();
+  std::printf("V267_%s_NATIVE_INPUT_DUAL_TARGET_SIGNATURE_PASS\n",entry);
+}
+
 int main() {
   try {
     const auto env=compile(
@@ -103,9 +215,15 @@ int main() {
     const auto term=compile(
       L"renderer-core/tools/v258/ptde_phn_terminal_gpu_subcut.hlsl",
       "PHN_TERMINAL",2u*16u,false);
+    native_abi_fixture("rx33",false);
+    native_abi_fixture("rx34",true);
+    native_abi_fixture("rx35",false);
+    native_abi_fixture("rx33_v268",false,true);
+    native_abi_fixture("rx34_v268",true,true);
+    native_abi_fixture("rx35_v268",false,true);
     save(env,"v258_ptde_env_local_subcut.dxbc");
     save(term,"v258_ptde_phn_terminal_subcut.dxbc");
-    std::puts("V258_DXBC_RESOURCE_ABI_AND_2_SHADER_CONSTRUCTION_PASS");
+    std::puts("V267_NATIVE_RX33_34_35_SIGNATURE_AND_V258_GPU_ISLAND_CONSTRUCTION_PASS");
     std::puts("V258_NOT_READY_FOR_LIVE_DSR_RECEIVER_BIND");
     return 0;
   }catch(const std::exception& e){

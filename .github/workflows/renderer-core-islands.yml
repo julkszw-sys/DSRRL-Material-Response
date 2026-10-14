@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: V297 paired Lerp post-LightScattering fail-open
+        run: python3 renderer-core/tools/v297/test_lerp_post_ls_failopen.py
+      - name: V288 source atomicity
+        run: python3 renderer-core/tools/v288/test_atomic_owner_v286_export.py
       - name: Verify generated material routes
         run: |
           python3 renderer-core/tools/generate_material_routes.py \

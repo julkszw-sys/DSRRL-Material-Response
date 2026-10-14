@@ -1,0 +1,36 @@
+name: V284 Lerp R5 R11 Exact Operator Construction
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-and-fail-open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native source compile and strict missing-owner negative test
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Irenderer-core/include \
+            renderer-core/tools/v284/reconstruct_lerp_r5_r11_from_final.cpp \
+            -o /tmp/v284
+          printf 'DXBCinvalid' >/tmp/v284-invalid
+          mkdir /tmp/v284-out
+          if /tmp/v284 \
+            /tmp/v284-invalid /tmp/v284-invalid /tmp/v284-invalid \
+            /tmp/v284-invalid /tmp/v284-invalid /tmp/v284-invalid \
+            /tmp/v284-out; then
+            echo 'ERROR: false acceptance of nonowner shader'; exit 1
+          fi
+          test -z "$(ls -A /tmp/v284-out)"
+          echo V284_NATIVE_CONSTRUCTION_FAILOPEN_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V284_LERP_R5_R11_OPERATOR_SOURCE_ONLY
+          path: renderer-core/tools/v284/*.cpp
+          if-no-files-found: error

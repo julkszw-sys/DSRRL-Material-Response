@@ -1,0 +1,1 @@
+V288 transaction boundary: verify all six materialized owner-final Stable R17 and Lerp R19 DXBC identities; stage RX33 RX34 RX35 candidate files, validate checksums, then publish a complete SHA manifest in one atomic directory rename. Incomplete outputs fail open and never enter V287 admission. This is source construction, not runtime or PTDE pixel evidence.

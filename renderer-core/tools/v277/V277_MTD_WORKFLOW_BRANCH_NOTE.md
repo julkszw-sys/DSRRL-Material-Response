@@ -1,0 +1,3 @@
+# V277 — material-scoped gamma branch
+
+Actual final R19 RX33/34/35 use IF_Z cb0[85].x. The second DSR material gamma EXP is exclusively inside the nonzero ELSE branch. Original SHA-pinned DSR Mtd.mtdbnd.dcx contains ordinary P_Leather[DSB] and P_DullLeather[DSB] authored workflow=0, whereas `_Spec` variants carry 1. This is an authored MTD default, not a measured per-draw GPU constant. P_DullLeather[DSB].mtd also has two different raw SHA256 records in the retail binder, so filename-only ownership is not sound. Neither branch proves PTDE pixel residual. Preserve P_Metal and stock Fog/Glow; do not globally remove ordinary gamma.

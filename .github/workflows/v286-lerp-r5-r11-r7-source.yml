@@ -1,0 +1,36 @@
+name: V286 Lerp R5 R11 R7 Exact Shadow Operator
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-failopen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact RX33-35 donor transfer and reject missing owner shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Irenderer-core/include \
+            renderer-core/tools/v286/reconstruct_lerp_r5_r11_r7_from_final.cpp \
+            -o /tmp/v286
+          printf 'DXBCmissing' > /tmp/v286-invalid
+          mkdir -p /tmp/v286-output
+          if /tmp/v286 /tmp/v286-invalid /tmp/v286-invalid /tmp/v286-invalid \
+            /tmp/v286-invalid /tmp/v286-invalid /tmp/v286-invalid \
+            /tmp/v286-output; then
+            echo 'ERROR: invalid original shader was accepted'
+            exit 1
+          fi
+          test -z "$(ls -A /tmp/v286-output)"
+          echo V286_NATIVE_SOURCE_COMPILATION_AND_FAIL_OPEN_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V286_LERP_R5_R11_R7_SOURCE_ONLY
+          path: renderer-core/tools/v286/*.cpp
+          if-no-files-found: error

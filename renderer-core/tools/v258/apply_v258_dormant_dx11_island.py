@@ -30,10 +30,15 @@ NEW=(
             };
             check_blob(v258_dxbc::k_env_local_subcut_ps);
             check_blob(v258_dxbc::k_terminal_subcut_ps);
-            char info[320]{};
+            check_blob(v258_dxbc::k_native_rx33_normal_ptde_dormant_ps);
+            check_blob(v258_dxbc::k_native_rx34_normal_ptde_dormant_ps);
+            check_blob(v258_dxbc::k_native_rx35_normal_ptde_dormant_ps);
+            char info[520]{};
             std::snprintf(info,sizeof(info),
                 "[DSRRL V258 PTDE GPU ISLAND DORMANT] "
+                "[DSRRL V270 NATIVE RX GPU SHADERS DORMANT] "
                 "env_dxbc_bytes=%u terminal_dxbc_bytes=%u "
+                "native_rx33_bytes=%u rx34_bytes=%u rx35_bytes=%u "
                 "linked_witness=%08x receiver=%u "
                 "physical_sidecar_authority=OPEN PS_bind=OFF "
                 "bridge_active=0 DSR_draw=UNCHANGED PTDE_pixel=OPEN",
@@ -41,6 +46,12 @@ NEW=(
                     v258_dxbc::k_env_local_subcut_ps.size()),
                 static_cast<unsigned>(
                     v258_dxbc::k_terminal_subcut_ps.size()),
+                static_cast<unsigned>(
+                    v258_dxbc::k_native_rx33_normal_ptde_dormant_ps.size()),
+                static_cast<unsigned>(
+                    v258_dxbc::k_native_rx34_normal_ptde_dormant_ps.size()),
+                static_cast<unsigned>(
+                    v258_dxbc::k_native_rx35_normal_ptde_dormant_ps.size()),
                 static_cast<unsigned>(witness),
                 static_cast<unsigned>(decision.receiver_id));
             reshade::log::message(reshade::log::level::info,info);
