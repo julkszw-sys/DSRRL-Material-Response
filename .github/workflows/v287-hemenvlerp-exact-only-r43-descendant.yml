@@ -33,6 +33,19 @@ jobs:
           if($LASTEXITCODE -eq 0){throw 'Unpaired LS was accepted without explicit diagnostic authorization'}
           $global:LASTEXITCODE=0
           Write-Host 'V296_UNPAIRED_STABLE_LS_RELEASE_REJECT_PASS'
+      - name: V299 source-complete donor layout provenance
+        shell: pwsh
+        run: python renderer-core/tools/v299/test_dsr_only_donor_layout.py
+      - name: V299 PROTECT latest_hook_source against future regressions
+        shell: pwsh
+        run: python renderer-core/tools/v299/test_latest_hook_source_protect.py
+      - name: V299 native DSR-only provenance guard 20 banks
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core/include renderer-core/tests/v299_dsr_only_donor_policy_test.cpp /Fe:v299-donor-test.exe
+          if($LASTEXITCODE -ne 0){throw 'V299 source compile failed'}
+          & ./v299-donor-test.exe
+          if($LASTEXITCODE -ne 0){throw 'V299 provenance fail-open failed'}
       - name: MSVC strict compile and fail-open test
         shell: pwsh
         run: |
@@ -55,7 +68,7 @@ jobs:
         shell: pwsh
         run: |
           & renderer-core/tools/v287/configure.ps1
-          cmake -S renderer-core/integrated -B build-v287 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON
+          cmake -S renderer-core/integrated -B build-v287 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON -DDSRRL_PMETAL_V299_DSR_ONLY_ROW_PROVENANCE=ON
           if($LASTEXITCODE -ne 0){throw 'V289 configuration failed'}
           cmake --build build-v287 --config Release --target dsrrl_renderer_core_integrated
           if($LASTEXITCODE -ne 0){throw 'addon build failed'}
