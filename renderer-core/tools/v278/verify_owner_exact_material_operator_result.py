@@ -4,7 +4,7 @@ import hashlib,struct,json,sys
 from pathlib import Path
 PINS={
  33:('1d9fed8a55689e09bacf55a66a88f2c3474f7c3f9a5604fe5151b0506b06caab','aba3a135806a8b5396ae959e2eda94affed5b78e8439447002835301b4ef6733',1108,7,6),
- 34:('8f86b1aec73b3b9ec77c10ce6de2308d0b0d4533a1430373ea92b297ee387f97','0f98a40c352fb562d98ec9c9b7e06c44b04158bc61bdbe6afb5f7bdfcb93',1017,6,7),
+ 34:('8f86b1aec73b3b9ec77c10ce6de2308d0b0d4533a1430373ea92b297ee387f97','0f98a40c352fb562d98ec9b2e9c9b7e06c44b04158bc61bdbe6afb5f7bdfcb93',1017,6,7),
  35:('b5f94ccec4e01e7d98c4329c2b28aecfd65e103729be969a53f486b182c55b70','fb840c245c31d4094d112c8a77fee44eb5be273ed83bd3d98edd4afeb0f5c738',677,5,6)}
 def chunks(data):
  assert data[:4]==b'DXBC' and struct.unpack_from('<I',data,24)[0]==len(data)
