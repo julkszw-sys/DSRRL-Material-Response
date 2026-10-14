@@ -1,0 +1,18 @@
+name: V280 Stable Lerp PTDE Operator Continuity
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stable-lerp-source-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce stable and Lerp operators are tracked together
+        run: |
+          python3 renderer-core/tools/v280/verify_stable_lerp_continuity_contract.py
+          echo "V280_STABLE_AND_LERP_OPERATOR_CONTINUITY_SOURCE_PASS"
+          echo "V280_RUNTIME_ENDPOINT_PIXEL_PARITY_OPEN"
