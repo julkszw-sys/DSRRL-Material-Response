@@ -42,10 +42,6 @@ try{
  if($LASTEXITCODE -ne 0){throw 'V271 original DSR Fog/LS/Glow postcondition patch failure'}
  python renderer-core/tools/v258/apply_v271_stock_atmos_glow_guard.py
  if($LASTEXITCODE -ne 0){throw 'V271 original DSR Fog/LS/Glow postcondition oracle failure'}
- python renderer-core/tools/v272_hybrid/apply_lerp_stock_alpha_gate.py --apply
- if($LASTEXITCODE -ne 0){throw 'V272 hybrid Lerp stock alpha gate patch failed'}
- python renderer-core/tools/v272_hybrid/apply_lerp_stock_alpha_gate.py
- if($LASTEXITCODE -ne 0){throw 'V272 hybrid Lerp stock alpha gate oracle failed'}
  python renderer-core/tools/v258/apply_v258_dormant_dx11_island.py --apply
  if($LASTEXITCODE -ne 0){throw 'V258 dormant integrated DXBC overlay failure'}
  python renderer-core/tools/v258/apply_v258_dormant_dx11_island.py
