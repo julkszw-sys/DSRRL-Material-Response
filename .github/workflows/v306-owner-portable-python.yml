@@ -1,0 +1,47 @@
+name: V306 Owner Portable Python Runtime
+on:
+  push:
+    branches:
+      - agent/v306-self-contained-owner-python-20261014
+    paths:
+      - '.github/workflows/v306-owner-portable-python.yml'
+      - 'renderer-core/tools/v306/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable-runtime:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Acquire official Windows x64 embeddable CPython 3.12.10
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $ProgressPreference='SilentlyContinue'
+          $url='https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip'
+          Invoke-WebRequest -Uri $url -OutFile 'v306-cpython-official.zip' -UseBasicParsing
+          $hash=(Get-FileHash 'v306-cpython-official.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          Expand-Archive -Path 'v306-cpython-official.zip' -DestinationPath 'portable-python' -Force
+          foreach($name in @('python.exe','python312.dll','python312.zip','python3.dll')) {
+            if(!(Test-Path (Join-Path portable-python $name))) {throw "Missing embedded runtime: $name"}
+          }
+          & ./portable-python/python.exe -c "import sys, pathlib, hashlib, json, tempfile, subprocess; assert sys.version_info[:2] == (3,12); print('V306_CP312_STDLIB_OK', sys.version)"
+          if($LASTEXITCODE -ne 0) {throw 'Python embeddable runtime did not execute'}
+          $pkg=@{
+            schema='DSRRL_V306_EMBEDDED_CPYTHON_WINDOWS_X64'
+            python_version='3.12.10'
+            source_url=$url
+            official_zip_sha256=$hash
+            launcher='portable-python/python.exe'
+            note='Official CPython embeddable distribution including its upstream license. Private owner runner ONLY.'
+          }
+          $pkg | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 'V306_EMBEDDED_RUNTIME_MANIFEST.json'
+          Write-Host "V306_EMBEDDED_PYTHON_NATIVE_STD_LIB_PASS SHA=$hash"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V306_CPYTHON_31210_WIN64_PORTABLE_RUNTIME
+          path: |
+            portable-python/**
+            V306_EMBEDDED_RUNTIME_MANIFEST.json
+          if-no-files-found: error
