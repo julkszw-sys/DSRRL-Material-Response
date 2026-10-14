@@ -68,7 +68,7 @@ jobs:
         shell: pwsh
         run: |
           & renderer-core/tools/v287/configure.ps1
-          cmake -S renderer-core/integrated -B build-v287 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON -DDSRRL_PMETAL_V299_DSR_ONLY_ROW_PROVENANCE=ON
+          cmake -S renderer-core/integrated -B build-v287 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON -DDSRRL_PMETAL_V299_DSR_ONLY_ROW_PROVENANCE=ON -DDSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC=ON
           if($LASTEXITCODE -ne 0){throw 'V289 configuration failed'}
           cmake --build build-v287 --config Release --target dsrrl_renderer_core_integrated
           if($LASTEXITCODE -ne 0){throw 'addon build failed'}
