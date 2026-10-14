@@ -59,7 +59,7 @@ try {
     # tracked code overlays and does not restore all of them. We verified the
     # workspace was pristine before the build; restore only its own tracked
     # temporary renderer sources here. Never touch the pinned V272 commit.
-    git restore --source=HEAD --worktree -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+    git restore --source=HEAD --worktree -- renderer-core/src renderer-core/include renderer-core/integrated
     if($LASTEXITCODE -ne 0){throw 'V273 native overlay tracked-source restore command failed'}
     git diff --exit-code HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
     if($LASTEXITCODE -ne 0){throw 'V273 transient renderer source not restored to byte-exact HEAD'}
