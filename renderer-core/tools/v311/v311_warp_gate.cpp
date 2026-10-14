@@ -30,8 +30,9 @@ static bool check(ID3D11Device* dev,ID3D11DeviceContext* ctx,
     if(FAILED(hr) || !refl){std::cerr<<label<<" D3DReflect "<<std::hex<<hr<<"\n";return false;}
     D3D11_SHADER_DESC desc{};
     hr=refl->GetDesc(&desc);
-    if(FAILED(hr) || D3D_SHVER_GET_TYPE(desc.Version)!=D3D_SHVER_PIXEL_SHADER ||
-       D3D_SHVER_GET_MAJOR(desc.Version)!=5u)return false;
+    // D3DReflect validates the container; CreatePixelShader enforces PS stage.
+    // Shader model major is encoded in version bits [7:4].
+    if(FAILED(hr) || ((desc.Version >> 4u) & 0xFu) != 5u)return false;
     bool rt0=false,rt1=false;
     for(UINT i=0;i<desc.OutputParameters;++i){
         D3D11_SIGNATURE_PARAMETER_DESC param{};
