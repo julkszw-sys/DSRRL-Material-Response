@@ -29,7 +29,7 @@ class TestV274B(unittest.TestCase):
             v.patch(old.replace(v.UNREGISTER,'NOT_V272_UNREGISTER',1),'integrated')
     def test_cpu_shadow_not_mutation(self):
         h=v.SRC.read_text(encoding='utf-8')
-        self.assertIn('D3D11_DEVICE_CONTEXT',h.upper())
+        self.assertIn('ID3D11DeviceContext *context',h)
         self.assertIn('addon_event::',v.REGISTER_ADDED)
         self.assertIn('before the original ID3D11DeviceContext::Unmap',h)
         self.assertIn('CPU_WRITER_SAME_THREAD_ORDER_ONLY',h)
