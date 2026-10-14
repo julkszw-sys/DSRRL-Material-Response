@@ -147,6 +147,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY
+    "R43 descendant V287: reject legacy HemEnvLerp R19 at registration; accept only exact final V286 per-RX certified payloads, empty allowlist fails open to stock"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -822,6 +827,17 @@ if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
+endif()
+
+if(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
+    if(NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR
+            "V287 migration requires R19 Lerp ABI; legacy PS admission is disabled until verified V286 output")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)

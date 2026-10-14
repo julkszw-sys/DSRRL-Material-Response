@@ -1,0 +1,54 @@
+name: V287 Exact Lerp Admission Build
+on:
+  push:
+    branches:
+      - agent/v287-hemenvlerp-exact-only-admission-20261014
+  pull_request:
+    paths:
+      - 'renderer-core/include/dsrrl/runtime/hemenvlerp_v287_admission.hpp'
+      - 'renderer-core/tests/v287_hemenvlerp_admission_tests.cpp'
+      - 'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+      - '.github/workflows/v287-hemenvlerp-exact-only-r43-descendant.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-admission:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: MSVC strict compile and fail-open test
+        shell: pwsh
+        run: |
+          cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core/include renderer-core/tests/v287_hemenvlerp_admission_tests.cpp /Fe:v287-test.exe
+          if($LASTEXITCODE -ne 0){throw 'build failed'}
+          & ./v287-test.exe
+          if($LASTEXITCODE -ne 0){throw 'test failed'}
+
+  one-addon-diagnostic:
+    needs: test-admission
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Configure and build R43 descendant
+        shell: pwsh
+        run: |
+          & renderer-core/tools/v287/configure.ps1
+          cmake --build build-v287 --config Release --target dsrrl_renderer_core_integrated
+          if($LASTEXITCODE -ne 0){throw 'addon build failed'}
+          $a=@(Get-ChildItem build-v287 -Recurse -Filter '*.addon64')
+          if($a.Count -ne 1){throw 'expected one addon'}
+          Copy-Item $a[0].FullName V287_R43_DIAGNOSTIC.addon64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V287_R43_EXACT_ONLY_DIAGNOSTIC
+          path: V287_R43_DIAGNOSTIC.addon64
+          if-no-files-found: error
