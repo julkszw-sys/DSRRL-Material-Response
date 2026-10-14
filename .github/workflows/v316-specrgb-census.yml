@@ -1,0 +1,77 @@
+name: V316 SpecRGB Consumer Census One Addon
+on:
+  push:
+    branches:
+      - agent/v316-srgb-consumer-census-20261014
+  pull_request:
+    paths:
+      - '.github/workflows/v316-specrgb-census.yml'
+      - 'renderer-core/src/runtime/material_resource_draw_runtime.cpp'
+      - 'renderer-core/include/dsrrl/runtime/hemenvlerp_v301_owner_sidecar.hpp'
+      - 'renderer-core/integrated/CMakeLists.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v316-one-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Exact owner V286 RX approvals / NO private DXBC committed
+        shell: pwsh
+        run: |
+          $header=@'
+          #pragma once
+          // V315 exact V286 receiver SHA. Stock Fog/LightScattering; diagnostic only.
+          #include <array>
+          #include <cstddef>
+          #include <cstdint>
+          namespace dsrrl::runtime::hemenvlerp_v301 {
+          struct owner_rx { std::uint32_t receiver_id; std::size_t size; const char* sha256; };
+          inline constexpr std::array<owner_rx,3> approved{{
+            {33u,24140u,"07be4be60e2fd940ba5dd2ca65114d69b4c027b3770dfee4304d86988bb96be0"},
+            {34u,23840u,"fd4de199491cf2e46355fecb9a70df1db643e2862a28a3204eecf5f7ff10d2a0"},
+            {35u,20680u,"a1b19e53200568b94c81885c6616490d68d9f012607e527b5f69e1f57871b8ff"},
+          }};
+          }
+          '@
+          $target='renderer-core/include/dsrrl/runtime/hemenvlerp_v301_owner_approval.hpp'
+          [IO.File]::WriteAllText((Join-Path $PWD $target),$header,[Text.UTF8Encoding]::new($false))
+          if((Get-Content $target -Raw) -notmatch 'array<owner_rx,3> approved'){ throw 'V315_NOT_3_APPROVED' }
+      - name: Build one addon with stock Fog and LS
+        shell: pwsh
+        run: |
+          & renderer-core/tools/v287/configure.ps1 -BuildDirectory build-v316
+          if($LASTEXITCODE -ne 0){throw 'V315_BASE_CONFIG_FAIL'}
+          & cmake -S renderer-core/integrated -B build-v316 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=OFF -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=OFF -DDSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC=ON -DDSRRL_PMETAL_V315_STOCK_FOG_LS_RX=ON -DDSRRL_SPECRGB_ROUTE_CENSUS_V316=ON
+          if($LASTEXITCODE -ne 0){throw 'V315_STOCK_FOG_LS_CONFIG_FAIL'}
+          & cmake --build build-v316 --config Release --target dsrrl_renderer_core_integrated
+          if($LASTEXITCODE -ne 0){throw 'V315_NATIVE_BUILD_FAIL'}
+          $addons=@(Get-ChildItem build-v316 -Recurse -Filter '*.addon64' -File)
+          if($addons.Count -ne 1){throw "V315 expected 1 addon got $($addons.Count)"}
+          New-Item -ItemType Directory -Path deploy | Out-Null
+          Copy-Item -LiteralPath $addons[0].FullName -Destination 'deploy/DSRRL_V316_SPECRGB_CENSUS_STOCK_FOG_LS.addon64'
+          $sha=(Get-FileHash 'deploy/DSRRL_V316_SPECRGB_CENSUS_STOCK_FOG_LS.addon64' -Algorithm SHA256).Hash.ToLowerInvariant()
+          @{schema='DSRRL_V315_RX33_35_STOCK_FOG_LS_NATIVE_CI_V1';addon_sha256=$sha;exact_owner_rx=3;owner_shader_version='V286';fog='STOCK_DSR';lightscattering='STOCK_DSR';custom_post_ls='OFF';spec_rgb_census='READ_ONLY_EXACT_EQUIPMENT';windows_warp='SKIPPED_BY_OWNER';runtime='OPEN';pixels='OPEN';source_commit=$env:GITHUB_SHA;extra_shader_family_authorized=0} | ConvertTo-Json | Set-Content 'deploy/V316_CI_RECEIPT.json'
+          Write-Output 'V315_STOCK_FOG_LS_SINGLE_ADDON_CONSTRUCTION_PASS'
+      - name: Refuse conflicting custom post-LS flags (negative build configuration test)
+        shell: pwsh
+        run: |
+          & cmake -S renderer-core/integrated -B build-v316 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON *> (Join-Path $env:RUNNER_TEMP 'v315-negative-cmake.log')
+          if($LASTEXITCODE -eq 0){throw 'V315_GUARD_REGRESSION'}
+          Write-Output 'V315_CUSTOM_FOG_LS_CONFLICT_REJECTED'
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V316-SpecRGB-Census-Single-Addon
+          path: deploy/
+          retention-days: 14
+          if-no-files-found: error
