@@ -1,0 +1,81 @@
+name: V317 PR Native V272 Equipment + V286 Lerp
+on:
+  push:
+    branches: [agent/v317-v272-equipment-preserved-owner-v286-lerp-20261014]
+  pull_request:
+    paths:
+      - '.github/workflows/v317-v272-equipment-v286-lerp-pr.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  one-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Reproduce V272 protected source and graft ONLY active Lerp shader at its final compile stage
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $script='renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1'
+          $cmake='renderer-core/integrated/CMakeLists.txt'
+          $source='renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+          $hdr1='renderer-core/include/dsrrl/runtime/hemenvlerp_v301_owner_approval.hpp'
+          $hdr2='renderer-core/include/dsrrl/runtime/hemenvlerp_v301_owner_sidecar.hpp'
+          $old=[IO.File]::ReadAllText($script)
+          $cmakeOld=[IO.File]::ReadAllText($cmake)
+          $sourceOld=[IO.File]::ReadAllText($source)
+          $anchor=@'
+           python renderer-core/tools/v258/apply_v272_positive_beta_source_route.py
+           if($LASTEXITCODE -ne 0){throw 'V272 interior Lerp b12 source route oracle failed'}
+          '@
+          $addition=@'
+           python renderer-core/tools/v317/apply_v317_owner_v286_lerp.py --apply
+           if($LASTEXITCODE -ne 0){throw 'V317 exact-owner Lerp overlay failure'}
+           python renderer-core/tools/v317/apply_v317_owner_v286_lerp.py
+           if($LASTEXITCODE -ne 0){throw 'V317 exact-owner Lerp oracle failure'}
+          '@
+          $lf=[string][char]10
+          $normalized=$old.Replace(([string][char]13+$lf),$lf)
+          if($normalized.Split([string[]]@($anchor),[StringSplitOptions]::None).Count -ne 2){throw 'V272 overlay anchor no longer unique'}
+          try {
+            $modified=$normalized.Replace($anchor,$anchor+$lf+$addition.TrimEnd())
+            [IO.File]::WriteAllText($script,$modified,[Text.UTF8Encoding]::new($false))
+            & cl.exe /nologo /std:c++17 /EHsc /W4 /WX renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp /Fe:v258-dxbc-oracle.exe /link d3dcompiler.lib
+            if($LASTEXITCODE -ne 0){throw 'V272 native D3DCompiler build failed'}
+            & ./v258-dxbc-oracle.exe
+            if($LASTEXITCODE -ne 0){throw 'V272 native DXBC oracle failed'}
+            & $script
+            if($LASTEXITCODE -ne 0){throw 'V272 exact native one-addon build failed'}
+            $native='DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64'
+            if(!(Test-Path -LiteralPath $native)){throw 'V272 output missing'}
+            $buf=[IO.File]::ReadAllBytes($native)
+            $ascii=[Text.Encoding]::ASCII.GetString($buf)
+            foreach($marker in @('[DSRRL V317 OWNER V286 LERP]','[DSRRL V272 INTERIOR LERP B12 ROUTE]','[DSRRL V258 PTDE GPU ISLAND DORMANT]')){
+              if(!$ascii.Contains($marker)){throw "V317 compiled DLL missing $marker"}
+            }
+            New-Item -ItemType Directory -Path deploy | Out-Null
+            $target='deploy/DSRRL_V317_V272_EQUIPMENT_SPECRGB_V286_LERP.addon64'
+            Copy-Item -LiteralPath $native -Destination $target
+            @{version='V317';base='ae9ac314d06ad8758e1aa7430cb236eef0eefe27';addon_sha256=(Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant();old_v270_lerp='DORMANT';owner_v286_lerp='COMPILED_EXACT_SHA_LOADER';equipment_specrgb='V272_SOURCE_UNCHANGED';fog='STOCK_DSR';lightscattering='STOCK_DSR';runtime='OPEN';pixel='OPEN';source_commit=$env:GITHUB_SHA} | ConvertTo-Json | Set-Content deploy/V317_CI_RECEIPT.json
+          } finally {
+            [IO.File]::WriteAllText($script,$old)
+            [IO.File]::WriteAllText($cmake,$cmakeOld)
+            if(Test-Path $hdr1){Remove-Item $hdr1 -Force}
+            if(Test-Path $hdr2){Remove-Item $hdr2 -Force}
+            if([IO.File]::ReadAllText($source) -cne $sourceOld){throw 'V317 failed to restore exact V272 source'}
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V317-V272-Equipment-SpecRGB-Modern-V286-Lerp
+          path: deploy/
+          retention-days: 90
+          if-no-files-found: error
