@@ -52,7 +52,8 @@ try{
    $rx=$_
    foreach($candidate in @("$stable/final_r17_RX$rx.dxbc","$lerp/final_r19_RX$rx.dxbc",
          "$v286/v286_R5_R11_R7_LerpRX$rx.dxbc","$v297/v286_R5_R11_R7_LerpRX$rx.dxbc")){
-     Checked "$bin/v300-verify-ps.exe" @("$original/stable$rx.dxbc",$candidate)
+     $stock=if($candidate.StartsWith($stable,[StringComparison]::OrdinalIgnoreCase)){"$original/stable$rx.dxbc"}else{"$original/lerp$rx.dxbc"}
+     Checked "$bin/v300-final-r17-exporter.exe" @("--driver-compare",$stock,$candidate)
    }
  }
  $receipt=@{
