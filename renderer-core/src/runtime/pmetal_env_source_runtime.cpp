@@ -2936,17 +2936,21 @@ bool pmetal_env_source_runtime::latest(
         return true;
     }
 
-    // Narrow fallback carrier recovered from the attested retail LightBank
-    // single/blend packers (V13 semantic cut). It is consumed only by an
-    // already-authenticated exact P_Metal draw. The retail packer is a state
-    // producer: retain its latest generation until the next exact source
-    // update, matching the validated V13 lifetime without exposing it to U/L.
+#if !defined(DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN)
+    // Legacy R43 unkeyed fallback. Not valid in V299: an exact selector
+    // for a DSR-only LightBank row can fail its PTDE donor lookup, leaving
+    // a prior unrelated global/TLS hook payload. Such a payload would
+    // overwrite real DSR EnvSpec/EnvDiffuse values on this draw.
     if (latest_hook_source(out)) {
         telemetry::hot_count(
             g_consumer_ok);
         return true;
     }
+#endif
 
+    // V299: no exact material-keyed, currently valid PTDE row => stock DSR.
+    // Never resurrect stale global donor data, including for beta A/B where
+    // only one side is DSR-only. The original game packer is never modified.
     telemetry::hot_count(
         g_consumer_fail);
     return false;
