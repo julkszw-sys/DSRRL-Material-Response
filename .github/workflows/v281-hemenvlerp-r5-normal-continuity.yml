@@ -23,6 +23,11 @@ jobs:
           test ! -e /tmp/v281-outputs/v281_R5_LerpRX34.dxbc
           test ! -e /tmp/v281-outputs/v281_R5_LerpRX35.dxbc
           echo V281_STABLE_TO_LERP_R5_NATIVE_SOURCE_AND_FAIL_OPEN_PASS
+      - name: V286 strict donor transfer source compile
+        run: |
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tools/v286/reconstruct_lerp_r5_r11_r7_from_final.cpp -o /tmp/v286-source
+          if /tmp/v286-source /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-no-owner /tmp/v281-outputs; then exit 1; fi
+          echo V286_NATIVE_FAILOPEN_PASS
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_V281_STABLE_TO_LERP_R5_SOURCE_ONLY
