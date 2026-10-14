@@ -842,6 +842,12 @@ if(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY>)
 endif()
 
+if(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
+endif()
+
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
     target_compile_definitions(
         dsrrl_renderer_core_integrated
