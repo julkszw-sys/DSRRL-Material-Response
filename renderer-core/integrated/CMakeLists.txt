@@ -147,6 +147,10 @@ option(
     OFF)
 
 option(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG "Stable LS domain" OFF)
+option(DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN
+    "Reject unkeyed PTDE donor reuse when LightBank row is DSR-only, preserve vanilla DSR output"
+    OFF)
+
 option(DSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY
     "Explicitly allow V289 unpaired Stable LS for diagnostic builds; NEVER release while Lerp LS remains stock"
     OFF)
@@ -856,6 +860,12 @@ if(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
     target_compile_definitions(
         dsrrl_renderer_core_integrated PRIVATE
         DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
+endif()
+
+if(DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
