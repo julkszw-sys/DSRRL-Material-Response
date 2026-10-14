@@ -1,0 +1,67 @@
+name: V300 Owner Exporter Full History CI
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  pull_request:
+    paths:
+      - 'renderer-core/tools/v300/**'
+      - '.github/workflows/v300-owner-final-native-exporters.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  materializer-source:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build production renderer library and native addon base
+        shell: pwsh
+        run: |
+          & ./renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1
+          if($LASTEXITCODE -ne 0){throw 'V300 base production build failed'}
+      - name: Compile R17 Stable real materializer exporter with WARP validator
+        shell: pwsh
+        run: |
+          $cache=Get-Content build/CMakeCache.txt
+          foreach($name in @('DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE','DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL')) {
+            if($cache -notcontains "$($name):BOOL=ON"){throw "V300 missing production flag: $name"}
+          }
+          $defs=@($cache | Where-Object {$_ -match '^(DSRRL_PMETAL_[A-Z0-9_]+):BOOL=ON$'} | ForEach-Object {'/D'+($_.Split(':')[0])})
+          $defs += '/DDSRRL_RELEASE_CLEANUP'
+          $lib='build/renderer-core-lib/Release/dsrrl_renderer_core.lib'
+          if(!(Test-Path $lib)){throw 'V300 linked core library missing'}
+          $common=@('renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp','renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp')
+          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include /Ibuild/generated @defs renderer-core/tools/v300/export_real_r17_final_dxbc.cpp renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp @common $lib /Fe:v300-final-r17-exporter.exe /link d3d11.lib d3dcompiler.lib
+          if($LASTEXITCODE -ne 0){throw 'V300 real Stable R17 materializer compilation failed'}
+          & ./v300-final-r17-exporter.exe --self-test
+          if($LASTEXITCODE -ne 0){throw 'V300 Stable null source fail-open failed'}
+          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include @defs renderer-core/tools/v276/export_real_r19_final_dxbc.cpp renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp @common $lib /Fe:v300-final-r19-exporter.exe /link d3d11.lib d3dcompiler.lib
+          if($LASTEXITCODE -ne 0){throw 'V300 real Lerp R19 materializer compilation failed'}
+          & ./v300-final-r19-exporter.exe --self-test
+          if($LASTEXITCODE -ne 0){throw 'V300 Lerp null source fail-open failed'}
+          & cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core/include renderer-core/tools/v286/reconstruct_lerp_r5_r11_r7_from_final.cpp /Fe:v300-v286-lerp.exe
+          if($LASTEXITCODE -ne 0){throw 'V300 V286 source compile failed'}
+          Write-Host 'V300_REAL_STABLE_LERP_MATERIALIZERS_NATIVE_COMPILE_PASS'
+          Write-Host 'V300_FINAL_OWNER_RX_DATA_NOT_UPLOADED; RUNTIME_PIXEL_OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V300_NATIVE_OWNER_ONLY_EXPORTERS_R17_R19_V286
+          path: |
+            v300-final-r17-exporter.exe
+            v300-final-r19-exporter.exe
+            v300-v286-lerp.exe
+            renderer-core/tools/v300/*
+            renderer-core/tools/v288/*.py
+            renderer-core/tools/v297/*.py
+          if-no-files-found: error
