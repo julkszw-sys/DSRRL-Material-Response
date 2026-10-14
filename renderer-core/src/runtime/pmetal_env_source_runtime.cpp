@@ -691,7 +691,8 @@ enum hook_decode_stage : std::uint32_t {
     hook_decode_bank_unknown = 6u,
     hook_decode_row_unknown = 7u,
     hook_decode_nonfinite = 8u,
-    hook_decode_ok = 9u
+    hook_decode_ok = 9u,
+    hook_decode_dsr_only = 10u
 };
 
 void record_hook_decode(
@@ -1650,6 +1651,17 @@ bool read_exact_source(
         return false;
     }
 
+#if defined(DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN)
+    // Source complete V13 donor banks have 1246 PTDE-covered records among
+    // 1249 vanilla DSR records. The three DSR-only trailing rows (m14/s14/
+    // m18 row 64) are *not* eligible for nearest PTDE donor substitution.
+    // Original DSR packer has already consumed the real native row.
+    if (row_id >= bank->count && row_id < bank->live_count) {
+        record_hook_decode(hook_decode_dsr_only,
+            version_u32,count_u32,index,row_id,signature);
+        return false;
+    }
+#endif
     const auto *row = pmetal_env_source_authority::find_row(*bank,row_id);
     if (row == nullptr) {
         record_hook_decode(hook_decode_row_unknown,version_u32,count_u32,index,row_id,signature);
