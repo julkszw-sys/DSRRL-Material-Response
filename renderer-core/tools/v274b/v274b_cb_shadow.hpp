@@ -134,6 +134,8 @@ struct observation {
     std::uint64_t epoch=0;
     float cb85=0,cb100w=0,cb102=0;
     float cb10[3]{};
+    // V274C: full Fog c12 and scattering c13..20 CPU-producer bytes.
+    std::array<float,36u> atmosphere{};
     const char *status="B0_ABSENT";
 };
 inline observation observe(ID3D11DeviceContext *context) noexcept {
@@ -180,6 +182,9 @@ inline observation observe(ID3D11DeviceContext *context) noexcept {
             out.cb100w=scalar(100,3);
             out.cb102=scalar(102,0);
             for(std::size_t i=0;i<3u;++i) out.cb10[i]=scalar(10,i);
+            for(std::size_t reg=12u; reg<=20u; ++reg)
+                for(std::size_t lane=0u; lane<4u; ++lane)
+                    out.atmosphere[(reg-12u)*4u+lane]=scalar(reg,lane);
             // Same-thread is only a conservative writer-order witness.
             // This is NOT a GPU readback, exact command-list replay proof,
             // or pixel match. Cross-thread is especially non-authoritative.
@@ -266,5 +271,45 @@ inline void log_prepared(ID3D11DeviceContext *context,
         static_cast<unsigned long long>(
             g_update_cbs.load(std::memory_order_relaxed)));
     reshade::log::message(reshade::log::level::info,line);
+    // V274C: second bounded log line from ALREADY captured same CPU shadow.
+    // These are material-local Fog + LS *producer values*, never a pixel
+    // result or proof that deferred command-list execution retained them.
+    char atmosphere_line[1600]{};
+    int written=std::snprintf(atmosphere_line,sizeof(atmosphere_line),
+        "[DSRRL V274C ATMOS CB0] rx=%u route=%u mtd=%016llx "
+        "flver=%016llx slot=%u beta=%.9g shadow=%u same_thread=%u "
+        "epoch=%llu producer=%u authority=CPU_WRITER_ONLY "
+        "gpu_cb=UNOBSERVED pixel=OPEN",
+        static_cast<unsigned>(rx),
+        static_cast<unsigned>(route),
+        static_cast<unsigned long long>(mtd_hash),
+        static_cast<unsigned long long>(flver_hash),
+        static_cast<unsigned>(slot),
+        static_cast<double>(beta),
+        o.has_shadow ? 1u : 0u,
+        o.same_thread ? 1u : 0u,
+        static_cast<unsigned long long>(o.epoch),
+        static_cast<unsigned>(o.writer_source));
+    if(written>0 && static_cast<std::size_t>(written)<sizeof(atmosphere_line)) {
+        std::size_t at=static_cast<std::size_t>(written);
+        for(std::uint32_t reg=12u; reg<=20u; ++reg) {
+            const std::size_t row=(reg-12u)*4u;
+            const int n=std::snprintf(atmosphere_line+at,
+                sizeof(atmosphere_line)-at,
+                " cb%u=%+.9g,%+.9g,%+.9g,%+.9g",
+                static_cast<unsigned>(reg),
+                static_cast<double>(o.atmosphere[row+0u]),
+                static_cast<double>(o.atmosphere[row+1u]),
+                static_cast<double>(o.atmosphere[row+2u]),
+                static_cast<double>(o.atmosphere[row+3u]));
+            if(n<=0 || static_cast<std::size_t>(n)>=sizeof(atmosphere_line)-at) {
+                at=0u;
+                break;
+            }
+            at+=static_cast<std::size_t>(n);
+        }
+        if(at!=0u)
+            reshade::log::message(reshade::log::level::info,atmosphere_line);
+    }
 }
 } // namespace dsrrl::runtime::v274b
