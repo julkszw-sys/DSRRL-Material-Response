@@ -1,0 +1,42 @@
+name: V311 Windows WARP Shader Gate (source-only)
+on:
+  push:
+    branches:
+      - agent/v311-warp-owner-source-gate-20261014
+  pull_request:
+    paths:
+      - 'renderer-core/tools/v311/**'
+      - '.github/workflows/v311-warp-source-only.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  warp-fixture:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: MSVC strict compile (no owner shaders)
+        shell: pwsh
+        run: |
+          & cl.exe /nologo /std:c++17 /EHsc /W4 /WX /utf-8 renderer-core/tools/v311/v311_warp_gate.cpp /Fe:v311-warp-gate.exe d3d11.lib d3dcompiler.lib
+          if ($LASTEXITCODE -ne 0) { throw 'V311_MSVC_BUILD_FAIL' }
+      - name: WARP self-test on synthetic dual-RT and 96-byte b12 fixture
+        shell: pwsh
+        run: |
+          & .\v311-warp-gate.exe --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'V311_SYNTHETIC_WARP_FAIL' }
+      - name: Upload signed-by-CI test executable (no proprietary DXBC)
+        uses: actions/upload-artifact@v4
+        with:
+          name: v311-warp-gate-x64
+          path: v311-warp-gate.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Provenance and scope
+        shell: pwsh
+        run: |
+          Write-Output 'V311_SOURCE_ONLY_WARP_FIXTURE_PASS (not original shader or pixel pass)'
+          Write-Output 'Owner DXBC is intentionally excluded from public GitHub and CI'
