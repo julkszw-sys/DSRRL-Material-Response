@@ -33,6 +33,9 @@ jobs:
           if($LASTEXITCODE -eq 0){throw 'Unpaired LS was accepted without explicit diagnostic authorization'}
           $global:LASTEXITCODE=0
           Write-Host 'V296_UNPAIRED_STABLE_LS_RELEASE_REJECT_PASS'
+      - name: V299 PROTECT latest_hook_source against future regressions
+        shell: pwsh
+        run: python renderer-core/tools/v299/test_latest_hook_source_protect.py
       - name: V299 native DSR-only provenance guard 20 banks
         shell: pwsh
         run: |
