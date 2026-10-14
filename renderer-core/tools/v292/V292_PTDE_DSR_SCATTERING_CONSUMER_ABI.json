@@ -1,0 +1,65 @@
+{
+  "schema": "DSRRL_V292_PTDE_DSR_STABLE_SCATTERING_CONSUMER_ABI",
+  "scope": "PTDE ps3 FRPG_Phn_DifSpcBmp_*HemEnv vs DSR ps5 RX33/34/35; P_Metal exact draw gate",
+  "status": "HIGH_CONFIDENCE_SOURCE_CONSUMER_MAPPING_NOT_PIXEL",
+  "ptde_scattering_sha256": "ec37b28cfa68b451fb4e8b7bca471a2c31e466ea43150eb053f37164ea9a585d",
+  "dsr_fog_and_scattering_204_word_sha256": "28c23273a5fb0b984b55fde72ee59546af4aa8646c55e1cb1bf8db426e9a4363",
+  "constant_mapping": [
+    {
+      "ptde": "c103",
+      "dsr": "cb0[13]",
+      "role": "fog continuation",
+      "carrier_status": "SOURCE_PATTERN"
+    },
+    {
+      "ptde": "c139",
+      "dsr": "cb0[12]",
+      "role": "fog input",
+      "carrier_status": "SOURCE_PATTERN"
+    },
+    {
+      "ptde": "c105",
+      "dsr": "cb0[14]",
+      "ptde_instruction_uses": 2,
+      "dsr_instruction_uses": 2
+    },
+    {
+      "ptde": "c106",
+      "dsr": "cb0[15]",
+      "ptde_instruction_uses": 1,
+      "dsr_instruction_uses": 1
+    },
+    {
+      "ptde": "c107",
+      "dsr": "cb0[16]",
+      "ptde_instruction_uses": 2,
+      "dsr_instruction_uses": 2,
+      "dsr_operand_uses": 3
+    },
+    {
+      "ptde": "c108",
+      "dsr": "cb0[17]",
+      "ptde_instruction_uses": 1,
+      "dsr_instruction_uses": 1
+    },
+    {
+      "ptde": "c109",
+      "dsr": "cb0[18]",
+      "ptde_instruction_uses": 1,
+      "dsr_instruction_uses": 1
+    },
+    {
+      "ptde": "c110",
+      "dsr": "cb0[19]",
+      "ptde_instruction_uses": 2,
+      "dsr_instruction_uses": 2
+    },
+    {
+      "ptde": "c111",
+      "dsr": "cb0[20]",
+      "role": "pre-scattering geometric input",
+      "dsr_instruction_uses": 2
+    }
+  ],
+  "restriction": "Register/use matching is not a proof of uploaded dynamic values or exact operator/pixel equality. Need source producer and CB upload, matched frames/probe, DSR shader algebraic comparison. Fog stock is protected. V289 only removes post-LS DSR pow and must remain diagnostic until residual proof."
+}
