@@ -1,0 +1,13 @@
+#pragma once
+// V317 owner diagnostic only: exact V300 V286, no PTDE pixel certification
+#include <array>
+#include <cstddef>
+#include <cstdint>
+namespace dsrrl::runtime::hemenvlerp_v301 {
+struct owner_rx { std::uint32_t receiver_id; std::size_t size; const char* sha256; };
+inline constexpr std::array<owner_rx,3> approved{{
+  {33u,24140u,"07be4be60e2fd940ba5dd2ca65114d69b4c027b3770dfee4304d86988bb96be0"},
+  {34u,23840u,"fd4de199491cf2e46355fecb9a70df1db643e2862a28a3204eecf5f7ff10d2a0"},
+  {35u,20680u,"a1b19e53200568b94c81885c6616490d68d9f012607e527b5f69e1f57871b8ff"},
+}};
+}
