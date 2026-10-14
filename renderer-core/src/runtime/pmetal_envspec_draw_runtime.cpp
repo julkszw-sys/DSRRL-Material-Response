@@ -8,6 +8,9 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #if defined(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
 #include "dsrrl/runtime/hemenvlerp_v287_admission.hpp"
+#if defined(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+#include "dsrrl/runtime/hemenvlerp_v301_owner_approval.hpp"
+#endif
 #endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
@@ -21,6 +24,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#if defined(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+#include <filesystem>
+#include <fstream>
+#include <vector>
+#endif
 
 namespace dsrrl::runtime {
 namespace {
