@@ -181,3 +181,19 @@ jobs:
             renderer-core/tools/v257/ptde_equipment_hemenvlerp_core.hpp
             renderer-core/tools/v257/inventory_dsrll_sidecars.py
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V276_PORTABLE_R19_OFFLINE_SOURCE
+          path: |
+            renderer-core/src/feature_registry.cpp
+            renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp
+            renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp
+            renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp
+            renderer-core/include/**
+            renderer-core/tools/v276/*.cpp
+            renderer-core/tools/v276/*.py
+            build/generated/dsrrl/operators/material_response/generated_diffuse_response_v1.hpp
+            build/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp
+            build/CMakeCache.txt
+          if-no-files-found: error
