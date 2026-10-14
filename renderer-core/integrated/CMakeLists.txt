@@ -147,6 +147,19 @@ option(
     OFF)
 
 option(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG "Stable LS domain" OFF)
+option(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC
+  "V301 only: load and SHA-approve owner-generated Lerp V297 sidecar per exact P_Metal RX; diagnostic not pixel certified"
+  OFF)
+if(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+  if(NOT DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY OR
+     NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE OR
+     NOT DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG OR
+     NOT DSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY)
+    message(FATAL_ERROR
+      "V301 requires exact R19 ABI, V287 admission, matching Stable post-LS and explicit diagnostic authorization")
+  endif()
+endif()
+
 option(DSRRL_PMETAL_V299_DSR_ONLY_ROW_PROVENANCE
     "Classify source-only DSR rows without modifying the protected fallback; pixel behavior unverified"
     OFF)
@@ -860,6 +873,11 @@ if(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
     target_compile_definitions(
         dsrrl_renderer_core_integrated PRIVATE
         DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
+endif()
+
+if(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+  target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+    DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
 endif()
 
 if(DSRRL_PMETAL_V299_DSR_ONLY_ROW_PROVENANCE)

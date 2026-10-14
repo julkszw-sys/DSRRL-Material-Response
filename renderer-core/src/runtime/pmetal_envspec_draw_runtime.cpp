@@ -8,6 +8,10 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #if defined(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
 #include "dsrrl/runtime/hemenvlerp_v287_admission.hpp"
+#if defined(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+#include "dsrrl/runtime/hemenvlerp_v301_owner_approval.hpp"
+#include "dsrrl/runtime/hemenvlerp_v301_owner_sidecar.hpp"
+#endif
 #endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
@@ -21,6 +25,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#if defined(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+#include <filesystem>
+#include <fstream>
+#include <vector>
+#endif
 
 namespace dsrrl::runtime {
 namespace {
@@ -545,20 +554,33 @@ register_lerp_replacement(
         return false;
     }
 
-    const auto payload_sha256 =
-        hashing::sha256(
-            static_cast<const std::uint8_t *>(
-                dxbc),
-            dxbc_size);
-
-#if defined(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
-    if (!hemenvlerp_v287::permits(
-            outcome.semantic_receiver_id,
-            payload_sha256,
-            dxbc_size)) {
+    const void *admitted_dxbc = dxbc;
+    std::size_t admitted_size = dxbc_size;
+#if defined(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+    std::vector<std::uint8_t> approved_sidecar;
+    if (!hemenvlerp_v301::load(
+            outcome.semantic_receiver_id,dxbc,dxbc_size,approved_sidecar)) {
         ++lerp_replacement_register_fail_;
         return false;
     }
+    admitted_dxbc = approved_sidecar.data();
+    admitted_size = approved_sidecar.size();
+#endif
+    const auto payload_sha256 =
+        hashing::sha256(
+            static_cast<const std::uint8_t *>(admitted_dxbc),
+            admitted_size);
+
+#if defined(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
+#if !defined(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+    if (!hemenvlerp_v287::permits(
+            outcome.semantic_receiver_id,
+            payload_sha256,
+            admitted_size)) {
+        ++lerp_replacement_register_fail_;
+        return false;
+    }
+#endif
 #endif
 
     std::lock_guard<std::mutex> lock(
@@ -590,7 +612,7 @@ register_lerp_replacement(
             sha_it->second ==
                 payload_sha256 &&
             size_it->second ==
-                dxbc_size;
+                admitted_size;
 
         if (same_payload) {
             ++lerp_replacement_register_ok_;
@@ -607,8 +629,8 @@ register_lerp_replacement(
     ID3D11PixelShader *shader = nullptr;
     if (FAILED(
             device_->CreatePixelShader(
-                dxbc,
-                dxbc_size,
+                admitted_dxbc,
+                admitted_size,
                 nullptr,
                 &shader)) ||
         shader == nullptr) {
@@ -624,7 +646,7 @@ register_lerp_replacement(
         payload_sha256;
     lerp_replacement_size_[
         outcome.semantic_receiver_id] =
-        dxbc_size;
+        admitted_size;
 
     ++lerp_replacement_register_ok_;
     return true;
