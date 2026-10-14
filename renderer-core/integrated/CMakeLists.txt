@@ -148,7 +148,7 @@ option(
 
 option(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG "Stable LS domain" OFF)
 option(DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN
-    "Reject unkeyed PTDE donor reuse when LightBank row is DSR-only, preserve vanilla DSR output"
+    "Classify source-only DSR rows without modifying the protected fallback; pixel behavior unverified"
     OFF)
 
 option(DSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY
