@@ -1,0 +1,37 @@
+name: V283 Stable R17 MaterialWorkflow0 Gamma Operator Candidate
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  owner-local-source-and-fail-open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile bounded Stable R17 operator tool and reject absent original inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Irenderer-core/include \
+            renderer-core/tools/v283/build_owner_stable_r17_workflow0_gamma_candidate.cpp \
+            -o /tmp/v283-stable-workflow0
+          printf 'DXBC-invalid-do-not-ship' > /tmp/v283-no-owner
+          mkdir -p /tmp/v283-candidate-output
+          if /tmp/v283-stable-workflow0 \
+            /tmp/v283-no-owner /tmp/v283-no-owner /tmp/v283-no-owner \
+            /tmp/v283-candidate-output; then
+            echo "FAIL: unverified shader accepted"
+            exit 1
+          fi
+          test -z "$(ls -A /tmp/v283-candidate-output)"
+          echo V283_NATIVE_SOURCE_FAIL_OPEN_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V283_STABLE_WORKFLOW0_GAMMA_SOURCE_ONLY
+          path: |
+            renderer-core/tools/v283/build_owner_stable_r17_workflow0_gamma_candidate.cpp
+          if-no-files-found: error
