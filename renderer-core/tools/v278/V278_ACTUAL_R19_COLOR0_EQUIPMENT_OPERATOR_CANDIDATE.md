@@ -40,7 +40,7 @@ a working control; this candidate must not change its draw.**
 | RX | Final R19 SHA prefix | Candidate SHA256 | Bytes |
 |---|---|---|---:|
 |33|1d9fed8a|aba3a135806a8b5396ae959e2eda94affed5b78e8439447002835301b4ef6733|22540|
-|34|8f86b1ae|0f98a40c352fb562d98ec9c9b7e06c44b04158bc61bdbe6afb5f7bdfcb93|22240|
+|34|8f86b1ae|0f98a40c352fb562d98ec9b2e9c9b7e06c44b04158bc61bdbe6afb5f7bdfcb93|22240|
 |35|b5f94cc|fb840c245c31d4094d112c8a77fee44eb5be273ed83bd3d98edd4afeb0f5c738|20612|
 
 V278 derives owner-local outputs (not distributed). Offline tests:
