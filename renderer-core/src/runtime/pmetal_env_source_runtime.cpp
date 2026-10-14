@@ -1652,7 +1652,7 @@ bool read_exact_source(
         return false;
     }
 
-#if defined(DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN)
+#if defined(DSRRL_PMETAL_V299_DSR_ONLY_ROW_PROVENANCE)
     // Source complete V13 donor banks have 1246 PTDE-covered records among
     // 1249 vanilla DSR records. The three DSR-only trailing rows (m14/s14/
     // m18 row 64) are *not* eligible for nearest PTDE donor substitution.
