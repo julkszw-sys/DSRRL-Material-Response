@@ -20,6 +20,9 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: V294 exact Fog and LightScattering RDEF ABI source guards
+        shell: pwsh
+        run: python renderer-core/tools/v294/test_stable_ls_rdef_abi.py
       - name: MSVC strict compile and fail-open test
         shell: pwsh
         run: |
