@@ -146,6 +146,9 @@ option(
     "P_Metal R19: exact PTDE HemEnvLerp EnvDiffuse A/B+beta consumer over paired PTDE RGBA probe resources; extends b12 only for the Lerp endpoint carrier"
     OFF)
 
+option(DSRRL_SPECRGB_ROUTE_CENSUS_V316
+  "V316 bounded passive SpecRGB non-P_Metal carrier/consumer identity census; does not activate any replacement"
+  OFF)
 option(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG "Stable LS domain" OFF)
 option(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC
   "V301/V315 exact-source owner-local per-RX sidecar diagnostic; not pixel certified"
@@ -890,6 +893,10 @@ endif()
 if(DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
   target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
     DSRRL_PMETAL_V301_OWNER_DXBC_DIAGNOSTIC)
+endif()
+if(DSRRL_SPECRGB_ROUTE_CENSUS_V316)
+  target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+    DSRRL_SPECRGB_ROUTE_CENSUS_V316)
 endif()
 if(DSRRL_PMETAL_V315_STOCK_FOG_LS_RX)
   target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
