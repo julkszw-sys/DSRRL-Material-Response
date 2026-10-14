@@ -1544,6 +1544,65 @@ prepare_draw_requests_bound(
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
 
+#if defined(DSRRL_SPECRGB_ROUTE_CENSUS_V316)
+    // Passive receiver/material/resource census. Never binds a shader or SRV.
+    // A tuple is logged once; cap diagnostics to avoid flooding game log.
+    if (receiver_id >= 24u && receiver_id <= 47u &&
+        exact_material) {
+        constexpr std::size_t k_entries = 128u;
+        static std::array<std::atomic<std::uint64_t>, k_entries> seen{};
+        static std::atomic<std::uint32_t> published{0u};
+        const auto spec_semantic =
+            operators::material_response::classify_mtd_semantic(
+                query,
+                operators::material_response::mtd_semantic_operator::spec_rgb);
+        const bool permitted =
+            h1 != 0u &&
+            generated::spec_equipment_name_hash_allowed_v12(h1);
+        std::uint64_t identity =
+            query.material.semantic_name_hash ^
+            (query.material.flver_identity_hash << 1u) ^
+            (h1 << 3u) ^
+            (static_cast<std::uint64_t>(receiver_id) << 56u) ^
+            (static_cast<std::uint64_t>(query.material.material_slot) << 32u) ^
+            (spec_rgb_consumer_ready ? 0x5e7c000001ull : 0u);
+        if (identity == 0u) identity = 1u;
+        bool first = false;
+        for (auto &entry : seen) {
+            auto prev = entry.load(std::memory_order_relaxed);
+            if (prev == identity) break;
+            if (prev == 0u &&
+                entry.compare_exchange_strong(
+                    prev, identity,
+                    std::memory_order_relaxed)) {
+                first = published.fetch_add(1u,std::memory_order_relaxed) < k_entries;
+                break;
+            }
+        }
+        if (first) {
+            char line[560]{};
+            std::snprintf(
+                line,sizeof(line),
+                "[DSRRL SPECRGB CENSUS V316] rx=%u mtd_sem=%016llx flver=%016llx slot=%u owner=%u mr=%u consumer=%u feature=%u stock_t1_hash=%016llx corpus=%u sidecar=%u mtd_spec=%u",
+                receiver_id,
+                static_cast<unsigned long long>(query.material.semantic_name_hash),
+                static_cast<unsigned long long>(query.material.flver_identity_hash),
+                query.material.material_slot,
+                query.material.owner_tuple_exact ? 1u : 0u,
+                full_material_response_ready ? 1u : 0u,
+                spec_rgb_consumer_ready ? 1u : 0u,
+                core_.features().enabled(core::operator_id::spec_rgb) ? 1u : 0u,
+                static_cast<unsigned long long>(h1),
+                permitted ? 1u : 0u,
+                companions[1] != nullptr ? 1u : 0u,
+                spec_semantic.state ==
+                    operators::material_response::mtd_semantic_state::use
+                    ? 1u : 0u);
+            reshade::log::message(reshade::log::level::info,line);
+        }
+    }
+#endif
+
     if (full_material_response_ready &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
