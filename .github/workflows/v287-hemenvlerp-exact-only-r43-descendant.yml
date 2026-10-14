@@ -3,6 +3,12 @@ on:
   push:
     branches:
       - agent/v287-hemenvlerp-exact-only-admission-20261014
+  pull_request:
+    paths:
+      - 'renderer-core/include/dsrrl/runtime/hemenvlerp_v287_admission.hpp'
+      - 'renderer-core/tests/v287_hemenvlerp_admission_tests.cpp'
+      - 'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+      - '.github/workflows/v287-hemenvlerp-exact-only-r43-descendant.yml'
   workflow_dispatch:
 permissions:
   contents: read
