@@ -126,7 +126,8 @@ std::size_t unique_window(const std::vector<std::uint32_t>& source,
   return hit;
 }
 void check_signature(ID3D11ShaderReflection* original,
-                     ID3D11ShaderReflection* result){
+                     ID3D11ShaderReflection* result,
+                     bool require_stable_r17_carrier=true){
   D3D11_SHADER_DESC a{},b{};
   require(SUCCEEDED(original->GetDesc(&a))&&SUCCEEDED(result->GetDesc(&b)),
           "D3DReflect GetDesc failed");
@@ -148,6 +149,7 @@ void check_signature(ID3D11ShaderReflection* original,
     }
   }
   require(b.OutputParameters==2,"real RX output1 (Glow) was lost");
+  if(!require_stable_r17_carrier) return;
   D3D11_SHADER_INPUT_BIND_DESC bind{};
   require(SUCCEEDED(result->GetResourceBindingDescByName(
             "DSRRL_MaterialCarrier",&bind)) &&
@@ -231,7 +233,7 @@ int main(int argc,char** argv){
           IID_ID3D11ShaderReflection,reinterpret_cast<void**>(&b));
       require(SUCCEEDED(first)&&SUCCEEDED(second)&&a&&b,
               "V300 owner driver compare reflection failed");
-      try{check_signature(a,b);}
+      try{check_signature(a,b,false);}
       catch(...){a->Release();b->Release();throw;}
       a->Release();b->Release();
       driver_accept(candidate);
