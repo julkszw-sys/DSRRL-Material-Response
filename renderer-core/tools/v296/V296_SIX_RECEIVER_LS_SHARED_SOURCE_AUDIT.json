@@ -1,0 +1,51 @@
+{
+  "schema": "DSRRL_V296_PTDE_DSR_STABLE_LERP_LS_SHARED_SOURCE_V1",
+  "scope": "Original SHA pinned PTDE FPO and DSR DXBC, six receiver-family pairs",
+  "status": "SOURCE_CONFIRMED_NO_RUNTIME_OR_PIXEL",
+  "ptde_common_scattering_76_sha256": "ec37b28cfa68b451fb4e8b7bca471a2c31e466ea43150eb053f37164ea9a585d",
+  "dsr_common_scattering_tail_129_sha256": "d91051cb7545eddfa64feda8cd024e1ecc94f0d383d6dfb79462c99f65233f14",
+  "dsr_fog_scattering_204_sha256": "28c23273a5fb0b984b55fde72ee59546af4aa8646c55e1cb1bf8db426e9a4363",
+  "receivers": [
+    {
+      "family": "stable",
+      "rx": 33,
+      "dsr_gamma_word": 2682,
+      "ptde_sha256": "0c6f2982bc36d56151791acd03caffb63358324d746f3dd408cfeda976fb2daf"
+    },
+    {
+      "family": "stable",
+      "rx": 34,
+      "dsr_gamma_word": 2601,
+      "ptde_sha256": "9e931f72ca7ebe7ae5bf68f23ff8a7ff3a818f314fd2578f47b1315e9331d9a6"
+    },
+    {
+      "family": "stable",
+      "rx": 35,
+      "dsr_gamma_word": 2254,
+      "ptde_sha256": "77b40333a33f5543149a7b9ecd371da23af38febbd149b151e429d38a4c2b836"
+    },
+    {
+      "family": "lerp",
+      "rx": 33,
+      "dsr_gamma_word": 2764,
+      "ptde_sha256": "ab3debbe2f90ccbcc7b70173dc87b4c98c6b6e126b1bd6d93b59685fd38ba72d"
+    },
+    {
+      "family": "lerp",
+      "rx": 34,
+      "dsr_gamma_word": 2683,
+      "ptde_sha256": "51451c962c42574a1335a5ebe0eadbc1bc7e3929bcf4af7684cc8229e81d875f"
+    },
+    {
+      "family": "lerp",
+      "rx": 35,
+      "dsr_gamma_word": 2336,
+      "ptde_sha256": "c3c911c0482d52ff91a1ea34cf330c95b15cf265561b87a649443dd8b31bee3e"
+    }
+  ],
+  "fog_policy": "STOCK_DSR_UNMODIFIED",
+  "pre_gamma_domain": "V295 numeric core match on paired inputs; producer equality OPEN",
+  "seam_policy": "Stable-only V289 correction diagnostic-only; require paired Lerp before release",
+  "runtime": "OFF",
+  "pixel": "OPEN"
+}

@@ -146,6 +146,18 @@ option(
     "P_Metal R19: exact PTDE HemEnvLerp EnvDiffuse A/B+beta consumer over paired PTDE RGBA probe resources; extends b12 only for the Lerp endpoint carrier"
     OFF)
 
+option(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG "Stable LS domain" OFF)
+option(DSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY
+    "Explicitly allow V289 unpaired Stable LS for diagnostic builds; NEVER release while Lerp LS remains stock"
+    OFF)
+if(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG AND
+   NOT DSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY)
+    message(FATAL_ERROR
+      "V296: Stable-only PTDE LS post-domain cannot be released while Lerp matches stock DSR; choose explicit V289 diagnostics or certify a matching Lerp receiver.")
+endif()
+
+
+
 option(
     DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY
     "R43 descendant V287: reject legacy HemEnvLerp R19 at registration; accept only exact final V286 per-RX certified payloads, empty allowlist fails open to stock"
@@ -838,6 +850,12 @@ if(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY>)
+endif()
+
+if(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)

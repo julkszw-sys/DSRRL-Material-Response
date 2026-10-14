@@ -1,0 +1,16 @@
+{
+  "schema": "DSRRL_V298_PAIRED_PTDE_STABLE_LERP_PROBE_BETA_LOCAL_CONTINUITY_V1",
+  "ptde_original_sha_authenticated_families": 6,
+  "synthetic_probe_pairs": 800,
+  "beta_samples_per_pair": 5,
+  "total_sampled_beta_states": 4000,
+  "ptde_scattering_c110_w": "held constant; different from EnvSpec probe beta",
+  "max_rgb_affine_error": 7.450580596923828e-8,
+  "max_cross_family_output_error": 0,
+  "stock_gamma_domain_sensitive_samples": 4000,
+  "max_gamma_domain_difference": 0.28275235101214113,
+  "fog": "Stock DSR; this is an offline operator-only test",
+  "runtime": "OFF",
+  "pixel": "OPEN",
+  "assumption": "Fogged input scene is interpolated continuously between identical-material probes A and B. Real GPU inputs and PTDE pixels not captured."
+}

@@ -20,6 +20,19 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: V294 exact Fog and LightScattering RDEF ABI source guards
+        shell: pwsh
+        run: python renderer-core/tools/v294/test_stable_ls_rdef_abi.py
+      - name: V295 DSR scattering CPU interpreter source guards
+        shell: pwsh
+        run: python renderer-core/tools/v295/test_dsr_stable_ls_cpu.py
+      - name: V296 reject unpaired Stable LightScattering in normal builds
+        shell: pwsh
+        run: |
+          cmake -S renderer-core/integrated -B build-v296-reject -A x64 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=OFF
+          if($LASTEXITCODE -eq 0){throw 'Unpaired LS was accepted without explicit diagnostic authorization'}
+          $global:LASTEXITCODE=0
+          Write-Host 'V296_UNPAIRED_STABLE_LS_RELEASE_REJECT_PASS'
       - name: MSVC strict compile and fail-open test
         shell: pwsh
         run: |
@@ -42,6 +55,8 @@ jobs:
         shell: pwsh
         run: |
           & renderer-core/tools/v287/configure.ps1
+          cmake -S renderer-core/integrated -B build-v287 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON
+          if($LASTEXITCODE -ne 0){throw 'V289 configuration failed'}
           cmake --build build-v287 --config Release --target dsrrl_renderer_core_integrated
           if($LASTEXITCODE -ne 0){throw 'addon build failed'}
           $a=@(Get-ChildItem build-v287 -Recurse -Filter '*.addon64')

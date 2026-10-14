@@ -1,0 +1,39 @@
+{
+  "schema": "V295_EXACT_SOURCE_SCATTERING_CPU_DIFFERENTIAL_V1",
+  "input_type": "SEMANTICALLY_PAIRED_SYNTHETIC_NOT_RUNTIME",
+  "seed": 2659475,
+  "ptde_fpo_SHA_authorized": true,
+  "dsr_dxbc_SHA_authorized": true,
+  "dsr_stable_scattering_129word_sha256": "d91051cb7545eddfa64feda8cd024e1ecc94f0d383d6dfb79462c99f65233f14",
+  "ptde_scattering_76word_sha256": "ec37b28cfa68b451fb4e8b7bca471a2c31e466ea43150eb053f37164ea9a585d",
+  "mapping": "PTDE c105-c110 to DSR cb0[14-19]; seed PTDE r0=DSR r1 fogged surface, cosine PTDE r0.w=DSR r0.y; PTDE exp2(r3)=DSR r2; c0.w=1",
+  "max_abs_error": 8.596968903429314e-8,
+  "total_cases": 5400,
+  "postgamma_numerically_distinct_cases": 5400,
+  "fog": "STOCK_DSR",
+  "hardware_or_matched_CB_values": "NOT_TESTED",
+  "ptde_pixel": "OPEN",
+  "receivers": [
+    {
+      "rx": 33,
+      "trials": 1800,
+      "max_abs_error": 7.490073650195939e-8,
+      "mean_max_abs_error": 1.693469170596034e-8,
+      "gamma_distinct": 1800
+    },
+    {
+      "rx": 34,
+      "trials": 1800,
+      "max_abs_error": 8.596968903429314e-8,
+      "mean_max_abs_error": 1.6679526537494315e-8,
+      "gamma_distinct": 1800
+    },
+    {
+      "rx": 35,
+      "trials": 1800,
+      "max_abs_error": 6.951581354996961e-8,
+      "mean_max_abs_error": 1.6693222663135147e-8,
+      "gamma_distinct": 1800
+    }
+  ]
+}

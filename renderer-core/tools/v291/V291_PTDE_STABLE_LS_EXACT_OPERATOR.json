@@ -1,0 +1,21 @@
+{
+  "schema":"DSRRL_V291_PTDE_STABLE_SCATTERING_SOURCE_V1",
+  "status":"CONFIRMED_SOURCE_ONLY_PIXEL_OPEN",
+  "ptde_source":"Owner original PTDE FRPG_Phn_DifSpcBmp ... HemEnv fpo ps_3_0",
+  "receivers":[
+    {"rx":33,"family":"Csd HemEnv","fpo_sha256":"0c6f2982bc36d56151791acd03caffb63358324d746f3dd408cfeda976fb2daf","fog_c139_positions":[1176,1180],"ls_window":[1203,1279]},
+    {"rx":34,"family":"Sdw HemEnv","fpo_sha256":"9e931f72ca7ebe7ae5bf68f23ff8a7ff3a818f314fd2578f47b1315e9331d9a6","fog_c139_positions":[969,973],"ls_window":[996,1072]},
+    {"rx":35,"family":"Plain HemEnv","fpo_sha256":"77b40333a33f5543149a7b9ecd371da23af38febbd149b151e429d38a4c2b836","fog_c139_positions":[591,595],"ls_window":[618,694]}
+  ],
+  "common_ls_dwords":76,
+  "common_ls_instructions":19,
+  "common_ls_sha256":"ec37b28cfa68b451fb4e8b7bca471a2c31e466ea43150eb053f37164ea9a585d",
+  "opcodes":["mad","mad","rsq","rcp","mul","mul","mul","mad","exp","exp","exp","add","mul","mul","mul","mul","mul","mad","lrp"],
+  "ptde_constant_uses":{"c105":2,"c106":1,"c107":2,"c108":1,"c109":1,"c110":2},
+  "fog_operator_c139_before_ls":true,
+  "excluded":"c135 PHN terminal is later, not part of this 76-word scattering cut",
+  "v289_limitation":"V289 removes DSR post-LS pow only. It is NOT a complete replacement of the 76-DWORD PTDE scattering operator.",
+  "operator_gate":"Require semantic producer, cb/srv transport, exact Stable material+PS receiver routing, Fog stock bytes/state, verified PTDE consumer and downstream pixel evidence.",
+  "runtime":"OFF",
+  "ptde_pixel":"OPEN"
+}
