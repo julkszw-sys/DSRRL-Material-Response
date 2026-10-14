@@ -302,7 +302,7 @@ static std::vector<std::uint8_t> port_r7(
  const auto donor_samp=std::count_if(ds.begin(),ds.end(),
     [&](std::size_t at){return d.w[at]==0x0300005au&&
       d.w[at+1u]==0x00106000u&&d.w[at+2u]==7u;});
- need(donor_temp==1u&&donor_samp==1u,
+ need(donor_temp==1&&donor_samp==1,
       "Stable R17 R7 donor ABI differs from PTDE sampler/scratch");
  constexpr auto extra=559u-176u;
  auto words=h.w;
@@ -394,7 +394,7 @@ static std::vector<std::uint8_t> port_r7(
 }
 
 int main(int argc,char**argv){try{
- need(argc==8,"usage: v281 stable33 stable34 stable35 lerp33 lerp34 lerp35 output-dir");
+ need(argc==8,"usage: v286 stable33 stable34 stable35 lerp33 lerp34 lerp35 empty-output-dir");
  const std::filesystem::path outdir(argv[7]);
  std::filesystem::create_directories(outdir);
  for(int i=0;i<3;i++){
