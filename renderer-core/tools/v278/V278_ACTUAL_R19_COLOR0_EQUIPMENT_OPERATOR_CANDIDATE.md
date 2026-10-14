@@ -29,8 +29,7 @@ Each gets exactly one tokenized DXBC instruction:
 MUL rSpec.xyz, rSpec.xyz, vCOLOR0.xyz
 ```
 
-at the immediate cut between `t10*raw_c101` and
-`IF_Z cb0[85].x`, preserving other original code. The tool does NOT
+as the first instruction **inside the THEN block** following `IF_Z cb0[85].x`, preserving other original code and leaving nonzero-workflow ELSE behavior untouched. The tool does NOT
 write the original file, register a pixel shader, or enable a replacement
 on a world/body/material draw. Actual draw binding requires exact physical
 equipment model+FLVER, SHA-pinned MTD, material slot, verified currently
@@ -40,9 +39,9 @@ a working control; this candidate must not change its draw.**
 
 | RX | Final R19 SHA prefix | Candidate SHA256 | Bytes |
 |---|---|---|---:|
-|33|1d9fed8a|a8ae3f46a3639803382cab8f3820f842010f55c08a4c392d40828b154e65839c|22540|
-|34|8f86b1ae|16dd7ec6be918de3de0dab987693df8bcade61757f223fd6c0beac4c576088c1|22240|
-|35|b5f94cc|e040c39a59ee9a45c6c11b9b2c41c46335a874079a1271edc64dd58b9d37553e|20612|
+|33|1d9fed8a|aba3a135806a8b5396ae959e2eda94affed5b78e8439447002835301b4ef6733|22540|
+|34|8f86b1ae|0f98a40c352fb562d98ec9c9b7e06c44b04158bc61bdbe6afb5f7bdfcb93|22240|
+|35|b5f94cc|fb840c245c31d4094d112c8a77fee44eb5be273ed83bd3d98edd4afeb0f5c738|20612|
 
 V278 derives owner-local outputs (not distributed). Offline tests:
 3/3 input full SHA authenticated; 3/3 insertion exact and resulting
