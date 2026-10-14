@@ -1,0 +1,63 @@
+name: V273 V272 Lerp Stock DSR MaterialWorkflow Control
+on:
+  push:
+    branches:
+      - agent/v273-v272-lerp-only-stock-mw-control-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-v272-lerp-only:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Exact V272 source/protect and negative Lerp-only tests
+        shell: pwsh
+        run: |
+          git diff --exit-code ae9ac314d06ad8758e1aa7430cb236eef0eefe27 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          if($LASTEXITCODE -ne 0){throw 'Protected V272 production renderer differs'}
+          python -m py_compile renderer-core/tools/v273/apply_v273_lerp_stock_mw_control.py renderer-core/tools/v273/test_v273_lerp_control.py
+          if($LASTEXITCODE -ne 0){throw 'V273 patch/test syntax FAIL'}
+          python renderer-core/tools/v273/test_v273_lerp_control.py
+          if($LASTEXITCODE -ne 0){throw 'V273 native preimage oracles FAIL'}
+      - name: Native single addon full V272 equipment plus Lerp-only DSR MaterialWorkflow control
+        shell: pwsh
+        run: |
+          & ./renderer-core/tools/v273/build_v273_lerp_stock_mw_control.ps1
+          if($LASTEXITCODE -ne 0){throw 'V273 full native one-addon build FAIL'}
+          $out='DSRRL_V273_V272_EQUIPMENT_LERP_STOCK_DSR_MW_CONTROL.addon64'
+          if(!(Test-Path $out)){throw 'V273 native addon missing'}
+          Write-Host "V273_BINARY_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+          git diff --exit-code -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1
+          if($LASTEXITCODE -ne 0){throw 'Tracked V272 sources not restored'}
+          Write-Host 'V273_CONSTRUCTION_NATIVE_PASS_RUNTIME_PIXEL_OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V273-V272-Equipment-Lerp-Stock-DSR-MW-Control
+          path: DSRRL_V273_V272_EQUIPMENT_LERP_STOCK_DSR_MW_CONTROL.addon64
+          if-no-files-found: error
