@@ -67,6 +67,7 @@ jobs:
           & cmake -S renderer-core/integrated -B build-v315 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON -DDSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY=ON *> (Join-Path $env:RUNNER_TEMP 'v315-negative-cmake.log')
           if($LASTEXITCODE -eq 0){throw 'V315_GUARD_REGRESSION'}
           Write-Output 'V315_CUSTOM_FOG_LS_CONFLICT_REJECTED'
+          exit 0
       - uses: actions/upload-artifact@v4
         with:
           name: V315-Stock-Fog-LS-V286-Single-Addon
