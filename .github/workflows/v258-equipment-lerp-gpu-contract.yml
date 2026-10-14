@@ -148,7 +148,7 @@ jobs:
           )
           $lib='build/renderer-core-lib/Release/dsrrl_renderer_core.lib'
           if(!(Test-Path $lib)){throw 'V276 production core library absent'}
-          & cl.exe /nologo /std:c++17 /EHsc /W4 /WX /Irenderer-core/include /Ibuild/generated @defs @src $lib /Fe:v276-final-r19-exporter.exe /link d3d11.lib d3dcompiler.lib
+          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include /Ibuild/generated @defs @src $lib /Fe:v276-final-r19-exporter.exe /link d3d11.lib d3dcompiler.lib
           if($LASTEXITCODE -ne 0){throw 'V276 C++ production materializer compile failed'}
           & ./v276-final-r19-exporter.exe --self-test
           if($LASTEXITCODE -ne 0){throw 'V276 real materializer null donor fail-open test failed'}
