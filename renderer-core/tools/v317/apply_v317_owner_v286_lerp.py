@@ -29,7 +29,7 @@ def main():
     ready=(TAG in s and "DSRRL_V317_OWNER_V286_LERP" in cm and
            (I/SHA_H).exists() and (I/LOAD_H).exists())
     if ready:
-        need(s.count(TAG)==2,"duplicate/ambiguous V317 owner Lerp patch")
+        need(s.count(TAG)==1,"duplicate/ambiguous V317 owner Lerp patch")
         print("V317_V272_OWNER_V286_LERP_OVERLAY_ORACLE_PASS")
         return
     need(TAG not in s,"partial V317 patch")
