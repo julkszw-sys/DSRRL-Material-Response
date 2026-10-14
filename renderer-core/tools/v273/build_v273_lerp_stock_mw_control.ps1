@@ -6,22 +6,21 @@ $ErrorActionPreference='Stop'
 $baseline='ae9ac314d06ad8758e1aa7430cb236eef0eefe27'
 $builder='renderer-core/tools/v258/build_v258_ptde_equipment_dormant_one_addon.ps1'
 $original=[IO.File]::ReadAllText($builder).Replace([string][char]13+[char]10,[string][char]10)
-$anchor=@'
- python renderer-core/tools/v258/apply_v271_stock_atmos_glow_guard.py
- if($LASTEXITCODE -ne 0){throw 'V271 original DSR Fog/LS/Glow postcondition oracle failure'}
-'@
+$unique='V271 original DSR Fog/LS/Glow postcondition oracle failure'
 $overlay=@'
  python renderer-core/tools/v273/apply_v273_lerp_stock_mw_control.py --apply
  if($LASTEXITCODE -ne 0){throw 'V273 Lerp-only source overlay failed'}
  python renderer-core/tools/v273/apply_v273_lerp_stock_mw_control.py
  if($LASTEXITCODE -ne 0){throw 'V273 exact Lerp materializer oracle failed'}
 '@
-$anchorAt=$original.IndexOf($anchor,[StringComparison]::Ordinal)
-if($anchorAt -lt 0 -or
-   $original.IndexOf($anchor,$anchorAt+1,[StringComparison]::Ordinal) -ge 0){
-    throw 'V273 preimage: original V271->V258 source insertion anchor is not unique'
+$markerAt=$original.IndexOf($unique,[StringComparison]::Ordinal)
+if($markerAt -lt 0 -or
+   $original.IndexOf($unique,$markerAt+1,[StringComparison]::Ordinal) -ge 0){
+    throw 'V273 preimage: V271 source oracle marker absent or duplicated'
 }
-$patched=$original.Replace($anchor,$anchor+[char]10+$overlay.TrimEnd())
+$lineEnd=$original.IndexOf([char]10,$markerAt)
+if($lineEnd -lt 0){throw 'V273 source builder insertion line missing EOL'}
+$patched=$original.Insert($lineEnd+1,$overlay.TrimEnd()+[char]10)
 $baselineAddon='DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64'
 $out='DSRRL_V273_V272_EQUIPMENT_LERP_STOCK_DSR_MW_CONTROL.addon64'
 try {
