@@ -241,7 +241,7 @@ int main(int argc,char** argv){
     if(argc==2 && std::strcmp(argv[1],"--self-test")==0){
       std::vector<std::uint8_t> out{0xBEu};
       const auto result=operators::env_spec::materialize_pmetal_rgba_receiver(
-          features,nullptr,0,out);
+          features,nullptr,0,false,out);
       require(result.result==operators::env_spec::
               pmetal_rgba_materialize_result::fail_invalid_dxbc &&
               out.empty(),"production R17 null-donor fail-open regression");
@@ -260,10 +260,10 @@ int main(int argc,char** argv){
               "owner original donor SHA does not match exact RX");
       std::vector<std::uint8_t> output;
       const auto outcome=operators::env_spec::materialize_pmetal_rgba_receiver(
-          features,input.data(),input.size(),output);
+          features,input.data(),input.size(),false,output);
       require(outcome.result==operators::env_spec::
                 pmetal_rgba_materialize_result::applied &&
-              outcome.semantic_receiver_id==d.rx && !output.empty(),
+              outcome.receiver_id==d.rx && !output.empty(),
               "actual production R17 chain failed to materialize this receiver");
       std::size_t new_fog=0,new_glow=0;
       check_exact(d,input,output,new_fog,new_glow);
