@@ -42,6 +42,8 @@ jobs:
         shell: pwsh
         run: |
           & renderer-core/tools/v287/configure.ps1
+          cmake -S renderer-core/integrated -B build-v287 -DDSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG=ON
+          if($LASTEXITCODE -ne 0){throw 'V289 configuration failed'}
           cmake --build build-v287 --config Release --target dsrrl_renderer_core_integrated
           if($LASTEXITCODE -ne 0){throw 'addon build failed'}
           $a=@(Get-ChildItem build-v287 -Recurse -Filter '*.addon64')
