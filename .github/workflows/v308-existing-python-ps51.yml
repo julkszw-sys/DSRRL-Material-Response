@@ -1,0 +1,27 @@
+name: V308 Existing Python PowerShell 5.1 Probe
+on:
+  push:
+    branches:
+      - agent/v308-existing-python-powershell51-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-launcher-python-314:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          architecture: x64
+      - name: Verify existing Python 3.14, Windows PowerShell 5.1 and argv with spaced path
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $folder='C:\Temporary Fixture With Spaces'
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          $path=Join-Path $folder 'V308 Python Args Fixture.py'
+          Set-Content -Path $path -Value 'import sys; assert sys.version_info[:2] == (3,14); print("V308_PYTHON_314_PROBE_FIXTURE_PASS")' -Encoding UTF8
+          & ./renderer-core/tools/v308/test_existing_python_argv.ps1 -ProbeScript $path
+          if($LASTEXITCODE -ne 0){throw 'V308 launcher probe failed'}
