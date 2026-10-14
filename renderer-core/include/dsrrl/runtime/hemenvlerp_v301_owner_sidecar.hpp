@@ -37,7 +37,7 @@ inline bool load(std::uint32_t receiver,
     const auto n=GetModuleFileNameW(nullptr,module,MAX_PATH);
     if(n==0u || n>=MAX_PATH)return false;
     std::filesystem::path base(module);
-    const auto folder=base.parent_path() / L"DSR" / L"DSRRL" /
+    const auto folder=base.parent_path() / L"DSRRL" /
                       L"EnvSpec" / L"HemEnvLerp";
     const auto file=folder /
          (L"v297_RX"+std::to_wstring(receiver)+L".dxbc");
