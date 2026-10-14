@@ -253,13 +253,17 @@ bool pmetal_producer_state_latest(
 {
     out = {};
 
-    // Fast path: selector and draw share a thread.
+#if !defined(DSRRL_PMETAL_V299_DSR_ONLY_STOCK_FAILOPEN)
+    // Legacy R43 TLS shortcut can resurrect a donor from a previous selector
+    // even when another thread invalidated the material-keyed synchronized
+    // slot for a DSR-only row. V299 always checks the shared slot validity.
     if (g_record.valid &&
         g_record.epoch == epoch &&
         same_material(g_record.material, material)) {
         out = g_record.source;
         return true;
     }
+#endif
 
     // Exact synchronized fallback for deferred/immediate command-list thread
     // handoff. The material key is only an index/filter; positive authority is
