@@ -147,6 +147,16 @@ option(
     OFF)
 
 option(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG "Stable LS domain" OFF)
+option(DSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY
+    "Explicitly allow V289 unpaired Stable LS for diagnostic builds; NEVER release while Lerp LS remains stock"
+    OFF)
+if(DSRRL_PMETAL_STABLE_LS_PTDE_POSTDOMAIN_STOCK_FOG AND
+   NOT DSRRL_PMETAL_V289_UNPAIRED_LS_DIAGNOSTIC_ONLY)
+    message(FATAL_ERROR
+      "V296: Stable-only PTDE LS post-domain cannot be released while Lerp matches stock DSR; choose explicit V289 diagnostics or certify a matching Lerp receiver.")
+endif()
+
+
 
 option(
     DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY
