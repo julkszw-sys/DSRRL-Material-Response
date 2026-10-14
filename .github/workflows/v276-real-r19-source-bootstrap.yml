@@ -1,0 +1,37 @@
+name: V276 Real R19 Source Bootstrap
+on:
+  push:
+    branches:
+      - agent/v276-r19-final-dxbc-export-second-lane-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate exact production manifest headers
+        run: |
+          mkdir -p build/generated/dsrrl/operators/env_spec
+          mkdir -p build/generated/dsrrl/operators/material_response
+          python renderer-core/tools/generate_pmetal_envspec_hemenvlerp_v1.py \
+            --input renderer-core/data/provenance/pmetal_envspec_hemenvlerp_v1.tsv \
+            --output build/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp
+          python renderer-core/tools/generate_material_response_diffuse_v1.py \
+            --input renderer-core/data/provenance/material_response_diffuse_v1.tsv \
+            --output build/generated/dsrrl/operators/material_response/generated_diffuse_response_v1.hpp
+          test -s build/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp
+          test -s build/generated/dsrrl/operators/material_response/generated_diffuse_response_v1.hpp
+          echo V276_PRODUCTION_RX_AND_DIFFUSE_MANIFEST_HEADERS_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V276_SOURCE_ONLY_R19_GENERATED_HEADERS
+          path: |
+            renderer-core/src/**
+            renderer-core/include/**
+            renderer-core/tools/v276/*.cpp
+            renderer-core/tools/v276/*.py
+            build/generated/dsrrl/operators/env_spec/generated_pmetal_envspec_hemenvlerp_v1.hpp
+            build/generated/dsrrl/operators/material_response/generated_diffuse_response_v1.hpp
+          if-no-files-found: error
