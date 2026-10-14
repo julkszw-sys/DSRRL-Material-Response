@@ -126,6 +126,68 @@ jobs:
           git diff --exit-code -- renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
           if($LASTEXITCODE -ne 0){throw 'V272 original draw runtime source restore mismatch'}
           Write-Host 'V272_ORIGINAL_TRACKED_DRAW_RUNTIME_RESTORED_PASS'
+      - name: V276 compile TRUE R19 production source offline final DXBC exporter
+        shell: pwsh
+        run: |
+          # From THE SAME build/CMakeCache as the user-facing one-addon.
+          # Do not reimplement R19, never include proprietary donor in CI.
+          $cache=Get-Content 'build/CMakeCache.txt'
+          $required=@('DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE',
+                      'DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW',
+                      'DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL')
+          foreach($name in $required){
+            if(!($cache -contains "$($name):BOOL=ON")){
+              throw "V276 real R19 compile flag absent in native addon: $name"
+            }
+          }
+          $defs=@($cache | Where-Object {
+            $_ -match '^(DSRRL_PMETAL_[A-Z0-9_]+):BOOL=ON
+          path: DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING.addon64
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V258_PTDE_EQUIPMENT_HEMENVLERP_DXBC_OPERATOR_ISLANDS
+          path: |
+            v258_ptde_env_local_subcut.dxbc
+            v258_ptde_phn_terminal_subcut.dxbc
+            v270_rx33_v268.dxbc
+            v270_rx34_v268.dxbc
+            v270_rx35_v268.dxbc
+            renderer-core/tools/v258/*.hlsl
+            renderer-core/tools/v258/compile_and_verify_ptde_gpu_subcuts.cpp
+            v258_sidecar_candidate_census.json
+            renderer-core/tools/v257/ptde_equipment_hemenvlerp_core.hpp
+            renderer-core/tools/v257/inventory_dsrll_sidecars.py
+          if-no-files-found: error
+
+          } | ForEach-Object {
+            '/D' + ($_.Split(':')[0])
+          })
+          $defs += '/DDSRRL_RELEASE_CLEANUP'
+          $include=@('/Irenderer-core/include','/Ibuild/generated')
+          $src=@(
+            'renderer-core/tools/v276/export_real_r19_final_dxbc.cpp',
+            'renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp',
+            'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp',
+            'renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp'
+          )
+          $lib='build/renderer-core-lib/Release/dsrrl_renderer_core.lib'
+          if(!(Test-Path $lib)){throw 'V276 core production static library absent'}
+          & cl.exe /nologo /std:c++17 /EHsc /W4 /WX @include @defs @src $lib /Fe:v276-real-r19-final-exporter.exe /link d3d11.lib d3dcompiler.lib
+          if($LASTEXITCODE -ne 0){throw 'V276 real materializer CLI compile failed'}
+          & ./v276-real-r19-final-exporter.exe --self-test
+          if($LASTEXITCODE -ne 0){throw 'V276 real R19 null-donor source gate failed'}
+          Write-Host "V276_EXACT_R19_COMPILE_FLAGS=$($defs -join ',')"
+          Write-Host "V276_REAL_R19_OFFLINE_EXPORTER_SHA256=$((Get-FileHash v276-real-r19-final-exporter.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host 'V276_REAL_PRODUCTION_R19_LINKED_EXPORTER_NATIVE_PASS'
+          Write-Host 'V276_FINAL_DONOR_DXBC_NOT_IN_PUBLIC_CI_OWNER_LOCAL_RE_REQUIRED'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V276_REAL_FINAL_R19_OFFLINE_EXPORTER_WIN64
+          path: |
+            v276-real-r19-final-exporter.exe
+            renderer-core/tools/v276/export_real_r19_final_dxbc.cpp
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL_V272_EQUIPMENT_PTDE_INTERIOR_BETA_ROUTING_ONE_ADDON
