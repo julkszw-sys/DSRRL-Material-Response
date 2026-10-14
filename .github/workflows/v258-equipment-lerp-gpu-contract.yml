@@ -187,10 +187,7 @@ jobs:
         with:
           name: DSRRL_V276_PORTABLE_R19_OFFLINE_SOURCE
           path: |
-            renderer-core/src/feature_registry.cpp
-            renderer-core/src/operators/material_response/material_response_diffuse_v1.cpp
-            renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp
-            renderer-core/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp
+            renderer-core/src/**
             renderer-core/include/**
             renderer-core/tools/v276/*.cpp
             renderer-core/tools/v276/*.py
