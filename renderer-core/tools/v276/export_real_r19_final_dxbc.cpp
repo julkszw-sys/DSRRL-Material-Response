@@ -11,6 +11,7 @@
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
+#include <initguid.h>
 #include <d3d11.h>
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
