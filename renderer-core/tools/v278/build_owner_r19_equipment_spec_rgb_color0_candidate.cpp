@@ -89,10 +89,10 @@ std::vector<std::uint8_t> make(const scope& rx,const std::vector<std::uint8_t>& 
   0x07000038u,0x00100072u,rx.reg,
   0x00100246u,rx.reg,0x00101246u,rx.color}};
  auto w=original;
- w.insert(w.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if),color.begin(),color.end());
+ w.insert(w.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if+4u),color.begin(),color.end());
  w[1]=static_cast<std::uint32_t>(w.size());
  const auto delta=static_cast<std::uint32_t>(color.size()*4);
- const auto where=pos+8u+rx.workflow_if*4u;
+ const auto where=pos+8u+(rx.workflow_if+4u)*4u;
  std::vector<std::uint8_t> out=b;
  out.insert(out.begin()+static_cast<std::ptrdiff_t>(where),delta,std::uint8_t{0});
  for(std::size_t i=0;i<w.size();++i)D::write_u32(out.data()+pos+8u+4u*i,w[i]);
@@ -108,10 +108,10 @@ std::vector<std::uint8_t> make(const scope& rx,const std::vector<std::uint8_t>& 
  std::size_t verify=0;const auto result=shex(out,verify);
  must(verify==pos&&result.size()==original.size()+7u&&
       result[0]==original[0]&&result[1]==original[1]+7u&&
-      std::equal(original.begin()+2,original.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if),result.begin()+2)&&
-      std::equal(color.begin(),color.end(),result.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if))&&
-      std::equal(original.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if),original.end(),
-                 result.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if+7u)),
+      std::equal(original.begin()+2,original.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if+4u),result.begin()+2)&&
+      std::equal(color.begin(),color.end(),result.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if+4u))&&
+      std::equal(original.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if+4u),original.end(),
+                 result.begin()+static_cast<std::ptrdiff_t>(rx.workflow_if+11u)),
       "any original R19 opcode changed outside the material-local COLOR0 insertion");
  for(std::uint32_t i=0;i<count;++i){
   auto at=32u+4u*i;
