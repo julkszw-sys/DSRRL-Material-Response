@@ -117,7 +117,9 @@ int main(int argc,char** argv){
            pmetal_rgba_lerp_materialize_result::applied &&
          outcome.semantic_receiver_id==rows[i].rx && !result.empty(),
          "actual production R19 materializer rejected donor");
-   auto a=shex(donor),b=shex(result),locations=starts(b);
+   auto a=shex(donor);
+   auto b=shex(result);
+   auto locations=starts(b);
    const auto fog=retained(a,b,locations,rows[i].fog,212);
    const auto glow=retained(a,b,locations,rows[i].glow,5);
    const auto alpha=retained(a,b,locations,rows[i].glow+10,5);
