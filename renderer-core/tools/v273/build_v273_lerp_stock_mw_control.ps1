@@ -16,7 +16,9 @@ $overlay=@'
  python renderer-core/tools/v273/apply_v273_lerp_stock_mw_control.py
  if($LASTEXITCODE -ne 0){throw 'V273 exact Lerp materializer oracle failed'}
 '@
-if($original.Split([string[]]@($anchor),[StringSplitOptions]::None).Count -ne 2){
+$anchorAt=$original.IndexOf($anchor,[StringComparison]::Ordinal)
+if($anchorAt -lt 0 -or
+   $original.IndexOf($anchor,$anchorAt+1,[StringComparison]::Ordinal) -ge 0){
     throw 'V273 preimage: original V271->V258 source insertion anchor is not unique'
 }
 $patched=$original.Replace($anchor,$anchor+[char]10+$overlay.TrimEnd())
