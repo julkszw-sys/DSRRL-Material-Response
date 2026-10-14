@@ -1,0 +1,23 @@
+{
+  "schema": "V305_ORIGINAL_DSR_DX11_HEMENVLERP_OPERATOR_DONOR_NEGATIVE_CENSUS",
+  "source_dcx_sha256": "ad180732ac79d5d98783aa504c789c2bab15e515c3b0f66b237d8b8c69113394",
+  "candidate_count": 24,
+  "unique_shader_sha": 15,
+  "r5_exact_43_dword_operator_found": 0,
+  "dsr_frontface_operator": 24,
+  "r7_nine_sample_comparison_176_word_same_sha_as_baseline": 16,
+  "unshadowed_plain": 8,
+  "r7_16_manual_ptde_style_operator": 0,
+  "r11_stock_sao_fullsurface": 18,
+  "r11_absent_different_material_semantics": 6,
+  "full_rdef_and_io_matches": 3,
+  "other_family_manual_s7_14_sample_four_rt": {
+    "Gst": 48,
+    "Phn": 48
+  },
+  "runtime": "OFF",
+  "pixel": "OPEN",
+  "fog": "stock DSR",
+  "latest_hook_source": "PROTECT",
+  "evidence_local_report_sha256": "1784bba7838cb1eeefff7601355773b749dfdfb9708b76dacd7569f91a12c115"
+}
