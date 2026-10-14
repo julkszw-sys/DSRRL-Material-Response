@@ -2,6 +2,7 @@
 """Atomic owner-local V286 final DXBC export; no shader assets shipped."""
 import hashlib,json,os,shutil,struct,subprocess,tempfile
 from pathlib import Path
+from dxbc_legacy_checksum import valid as checksum_valid
 
 RX=(33,34,35)
 PIN={
@@ -28,8 +29,8 @@ def export(executable,inputs,destination):
   rows=[]
   for rx,name in zip(RX,names):
    raw=(stage/name).read_bytes()
-   if len(raw)<1000 or raw[:4]!=b"DXBC" or struct.unpack_from("<I",raw,24)[0]!=len(raw):
-    raise ValueError("invalid DXBC RX"+str(rx))
+   if len(raw)<1000 or raw[:4]!=b"DXBC" or struct.unpack_from("<I",raw,24)[0]!=len(raw) or not checksum_valid(raw):
+    raise ValueError("invalid DXBC checksum or envelope RX"+str(rx))
    rows.append(dict(rx=rx,filename=name,size=len(raw),sha256=sha(raw),
                     stable_r17_sha256=PIN[rx][0],lerp_r19_sha256=PIN[rx][1]))
   manifest=dict(schema="DSRRL_V288_OWNER_FINAL_TRIPLET_V1",
