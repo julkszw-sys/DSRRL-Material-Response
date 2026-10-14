@@ -28,6 +28,13 @@ jobs:
         run: |
           & .\v311-warp-gate.exe --self-test
           if ($LASTEXITCODE -ne 0) { throw 'V311_SYNTHETIC_WARP_FAIL' }
+      - name: Upload signed-by-CI test executable (no proprietary DXBC)
+        uses: actions/upload-artifact@v4
+        with:
+          name: v311-warp-gate-x64
+          path: v311-warp-gate.exe
+          if-no-files-found: error
+          retention-days: 14
       - name: Provenance and scope
         shell: pwsh
         run: |
