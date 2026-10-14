@@ -27,6 +27,8 @@ try {
     # All tracked renderer source remains byte-identical to V272 in Git.
     git diff --quiet $baseline HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
     if($LASTEXITCODE -ne 0){throw 'Protected V272 renderer source changed in Git'}
+    git diff --quiet HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+    if($LASTEXITCODE -ne 0){throw 'V273 refused to overwrite pre-existing working tree renderer changes'}
     python renderer-core/tools/v273/test_v273_lerp_control.py
     if($LASTEXITCODE -ne 0){throw 'V273 source negative oracles failed'}
     [IO.File]::WriteAllText($builder,$patched,[Text.UTF8Encoding]::new($false))
@@ -53,6 +55,12 @@ try {
     if([IO.File]::ReadAllText($builder).Replace([string][char]13+[char]10,[string][char]10) -cne $original){
         throw 'V273 original tracked builder restore mismatch'
     }
-    git diff --exit-code -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
-    if($LASTEXITCODE -ne 0){throw 'V273 transient renderer source not restored'}
+    # The inherited V250/V253 cumulative build chain intentionally stages
+    # tracked code overlays and does not restore all of them. We verified the
+    # workspace was pristine before the build; restore only its own tracked
+    # temporary renderer sources here. Never touch the pinned V272 commit.
+    git restore --source=HEAD --worktree -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+    if($LASTEXITCODE -ne 0){throw 'V273 native overlay tracked-source restore command failed'}
+    git diff --exit-code HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+    if($LASTEXITCODE -ne 0){throw 'V273 transient renderer source not restored to byte-exact HEAD'}
 }
