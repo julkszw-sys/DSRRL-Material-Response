@@ -5,6 +5,7 @@
 #include "dsrrl/operators/legacy_plan/dxbc_checksum.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -50,6 +51,15 @@ inline bool load(std::uint32_t receiver,
     if(!input)return false;
     if(!operators::legacy_plan::dxbc::checksum_container_valid(
         candidate.data(),candidate.size()))return false;
+    // checksum_container_valid verifies only DXBC magic and declared size.
+    // Recompute the *actual* legacy DXBC checksum into a local copy and
+    // require the stored 128-bit checksum to match exactly. Fail open.
+    auto checksum_copy = candidate;
+    if(!operators::legacy_plan::dxbc::fix_checksum(
+           checksum_copy.data(),checksum_copy.size()) ||
+       !std::equal(checksum_copy.begin()+4u,checksum_copy.begin()+20u,
+                   candidate.begin()+4u))
+      return false;
     const auto sha=operators::legacy_plan::hashing::sha256(
         candidate.data(),candidate.size());
     bool authorized=false;
