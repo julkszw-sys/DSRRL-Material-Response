@@ -1,0 +1,32 @@
+name: V274D Cloth Leather Lerp Source Simulation
+on:
+  push:
+    branches: [agent/v274d-v272-cloth-leather-exhaustive-lerp-sim-20261014]
+  pull_request:
+    paths:
+      - "renderer-core/tools/v274d/**"
+      - ".github/workflows/v274d-cloth-leather-lerp-source-audit.yml"
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Exhaustive canonical MTD and 31-step R19 local beta simulation
+        run: python renderer-core/tools/v274d/audit_cloth_leather_lerp.py
+      - name: Validate no editing to V272 renderer sources
+        run: |
+          git diff --exit-code -- renderer-core/src renderer-core/include
+          test -f renderer-core/tools/v274d/out/cloth_leather_27_matrix.csv
+          test -f renderer-core/tools/v274d/out/summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v274d-source-material-matrix-and-beta-sweep
+          path: |
+            renderer-core/tools/v274d/out/cloth_leather_27_matrix.csv
+            renderer-core/tools/v274d/out/summary.json
