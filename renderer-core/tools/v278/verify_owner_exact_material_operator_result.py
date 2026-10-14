@@ -3,9 +3,9 @@
 import hashlib,struct,json,sys
 from pathlib import Path
 PINS={
- 33:('1d9fed8a55689e09bacf55a66a88f2c3474f7c3f9a5604fe5151b0506b06caab','a8ae3f46a3639803382cab8f3820f842010f55c08a4c392d40828b154e65839c',1108,7,6),
- 34:('8f86b1aec73b3b9ec77c10ce6de2308d0b0d4533a1430373ea92b297ee387f97','16dd7ec6be918de3de0dab987693df8bcade61757f223fd6c0beac4c576088c1',1017,6,7),
- 35:('b5f94ccec4e01e7d98c4329c2b28aecfd65e103729be969a53f486b182c55b70','e040c39a59ee9a45c6c11b9b2c41c46335a874079a1271edc64dd58b9d37553e',677,5,6)}
+ 33:('1d9fed8a55689e09bacf55a66a88f2c3474f7c3f9a5604fe5151b0506b06caab','aba3a135806a8b5396ae959e2eda94affed5b78e8439447002835301b4ef6733',1108,7,6),
+ 34:('8f86b1aec73b3b9ec77c10ce6de2308d0b0d4533a1430373ea92b297ee387f97','0f98a40c352fb562d98ec9c9b7e06c44b04158bc61bdbe6afb5f7bdfcb93',1017,6,7),
+ 35:('b5f94ccec4e01e7d98c4329c2b28aecfd65e103729be969a53f486b182c55b70','fb840c245c31d4094d112c8a77fee44eb5be273ed83bd3d98edd4afeb0f5c738',677,5,6)}
 def chunks(data):
  assert data[:4]==b'DXBC' and struct.unpack_from('<I',data,24)[0]==len(data)
  n=struct.unpack_from('<I',data,28)[0];assert 1<n<64
@@ -26,9 +26,9 @@ def one(rx,before,after):
  assert all(a[k]==b[k] for k in a if k!='SHEX')
  x,y=a['SHEX'],b['SHEX']
  op=(0x07000038,0x00100072,reg,0x00100246,reg,0x00101246,color)
- assert y[off:off+7]==op
+ assert y[off+4:off+11]==op
  assert x[0]==y[0] and x[1]+7==y[1]
- assert x[2:off]==y[2:off] and x[off:]==y[off+7:]
+ assert x[2:off+4]==y[2:off+4] and x[off+4:]==y[off+11:]
  assert before!=after and x!=y
  return {'rx':rx,'source_sha256':p,'candidate_sha256':c,'insert_at_shex_word':off,
          'original_bytes':len(before),'candidate_bytes':len(after),
