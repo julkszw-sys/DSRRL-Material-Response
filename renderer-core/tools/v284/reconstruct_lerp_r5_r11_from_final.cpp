@@ -168,7 +168,8 @@ static std::vector<std::uint8_t> port_r11(const receiver &x,
                  "fd364e4eaef350f2cbd86bb6fc4aa4b56a5e40f08e8e646b7951897174e772ca";
  need(S::matches_hex(S::sha256(r5.data(),r5.size()),expected),
       "V281 R5 candidate SHA not authorized");
- const auto sh=parse(r5), inst=starts(sh.w);
+ const auto sh=parse(r5);
+ const auto inst=starts(sh.w);
  std::size_t matched=0, sample=0, multiply=0;
  for(std::size_t j=0;j+1<inst.size();++j){
   const std::size_t at=inst[j], next=inst[j+1];
