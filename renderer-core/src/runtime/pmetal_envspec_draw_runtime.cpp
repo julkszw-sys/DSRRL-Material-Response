@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
+#include "dsrrl/runtime/hemenvlerp_v287_admission.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 
@@ -547,6 +550,16 @@ register_lerp_replacement(
             static_cast<const std::uint8_t *>(
                 dxbc),
             dxbc_size);
+
+#if defined(DSRRL_PMETAL_V287_LERP_CERTIFIED_ONLY)
+    if (!hemenvlerp_v287::permits(
+            outcome.semantic_receiver_id,
+            payload_sha256,
+            dxbc_size)) {
+        ++lerp_replacement_register_fail_;
+        return false;
+    }
+#endif
 
     std::lock_guard<std::mutex> lock(
         mutex_);
