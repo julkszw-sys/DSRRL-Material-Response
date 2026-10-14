@@ -61,7 +61,7 @@ jobs:
           if($LASTEXITCODE -ne 0){throw 'V300 real Stable R17 materializer compilation failed'}
           & ./v300-final-r17-exporter.exe --self-test
           if($LASTEXITCODE -ne 0){throw 'V300 Stable null source fail-open failed'}
-          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include @defs renderer-core/tools/v276/export_real_r19_final_dxbc.cpp renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp @common $lib /Fe:v300-final-r19-exporter.exe /link d3d11.lib d3dcompiler.lib
+          & cl.exe /nologo /std:c++17 /EHsc /MD /W4 /WX /Irenderer-core/include /Ibuild/generated @defs renderer-core/tools/v276/export_real_r19_final_dxbc.cpp renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp @common $lib /Fe:v300-final-r19-exporter.exe /link d3d11.lib d3dcompiler.lib
           if($LASTEXITCODE -ne 0){throw 'V300 real Lerp R19 materializer compilation failed'}
           & ./v300-final-r19-exporter.exe --self-test
           if($LASTEXITCODE -ne 0){throw 'V300 Lerp null source fail-open failed'}
