@@ -20,7 +20,7 @@ def test():
  out=execute([(2,0x38,[dst,temp,constant])],state)
  assert out[("r",1)]==[2.,6.,12.,9.]
  assert out[("r",2)]==[1.,2.,3.,4.]
- expect_error(lambda:decode_operand([0x00400072,0],0))
+ expect_error(lambda:decode_operand([0x00500072,0],0))
  expect_error(lambda:decode_instructions([0,0,0x010003ff],2,3))
  print("V295_DSR_TOKEN_OPERAND_AND_SCATTERING_CPU_GUARDS_PASS")
 if __name__=="__main__":test()
