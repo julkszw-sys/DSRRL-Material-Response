@@ -38,7 +38,7 @@ std::atomic<std::uint32_t> g_v298_reported_materials{0u};
 #endif
 
 #if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
-    // Full FLVER+slot+semantic match''',
+   // Full FLVER+slot+semantic match''',
  '''    }
 #endif
 
@@ -90,7 +90,7 @@ std::atomic<std::uint32_t> g_v298_reported_materials{0u};
 #endif
 
 #if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
-    // Full FLVER+slot+semantic match''')
+   // Full FLVER+slot+semantic match''')
 ]
 for a,b in patches:
     if s.count(b)==1: continue
