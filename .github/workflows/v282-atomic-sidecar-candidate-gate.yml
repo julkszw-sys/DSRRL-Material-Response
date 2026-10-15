@@ -23,7 +23,8 @@ jobs:
           assert d["counts"]["spec_name_records"]==769
           assert d["counts"]["diffuse_pairs"]==528
           assert d["counts"]["normal_triples"]==557
-          assert d["counts"]["ambiguous_spec_name_routes"]>=3
+          assert d["counts"]["ambiguous_unlisted_spec_hashes"]>=3
+          assert d["counts"]["diffuse_pairs_not_in_spec_name_table"]==10
           assert d["inputs"]["october10_inventory_supplied"] is False
           print("V282_OFFLINE_SOURCE_CANDIDATE_PASS_RUNTIME_PIXEL_OPEN")
           PY
