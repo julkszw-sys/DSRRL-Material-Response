@@ -5,7 +5,7 @@ $parent='renderer-core/tools/v275/build_v275_one_addon.ps1'
 $original=[IO.File]::ReadAllBytes($parent)
 $text=[Text.Encoding]::UTF8.GetString($original)
 $needle=" if(`$LASTEXITCODE -ne 0){throw 'V275 source overlay verification failed'}"
-if($text.Split($needle).Count -ne 2){throw 'V277 V275 parent anchor drift'}
+if($text.IndexOf($needle,[StringComparison]::Ordinal) -lt 0 -or $text.IndexOf($needle,$text.IndexOf($needle,[StringComparison]::Ordinal)+1,[StringComparison]::Ordinal) -ge 0){throw 'V277 V275 parent anchor drift'}
 $extra=@'
  python renderer-core/tools/v277/apply_v277_capture.py --apply
  if($LASTEXITCODE -ne 0){throw 'V277 shader source capture overlay failed'}
