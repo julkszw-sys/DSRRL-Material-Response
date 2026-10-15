@@ -29,9 +29,11 @@ for needle in (
     "if (latest_hook_source(out))",
 ):
     assert needle in src,needle
-a=src.index("if (v299::authored_slot0_source(material))",src.index("bool pmetal_env_source_runtime::latest("))
+a=src.index("#if defined(DSRRL_V300_DSR_ONLY_EXACT_DONORS)",src.index("bool pmetal_env_source_runtime::latest("))
+stop=src.index("return false;",a)
 b=src.index("if (latest_hook_source(out))",a)
-assert a<b, "new families may not reuse stale unkeyed PTDE global hook source"
+assert a<stop<b, "V301 may not reuse an unkeyed PTDE source after exact-key failure"
+assert "Do NOT reuse any stale global/TLS PTDE donor" in src
 assert "source_.latest(material, source)" in draw
 assert "v299::authored_slot0_draw(material, decision)" in draw
 assert "g_pmetal_envspec.prepare(" in integ
