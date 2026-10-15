@@ -28,7 +28,7 @@ static_assert(
 ),
 (
 ''' if(extension_match==nullptr)
-   return false;
+  return false;
 
  const auto combined_ordinal=''', 
 ''' if(extension_match==nullptr){
@@ -59,12 +59,12 @@ static_assert(
  const auto combined_ordinal='''
 ),
 (
-'''   if(extension_index>=
-          operators::material_response::generated::
-              k_exact_binding_mr_v1.size())
-    return false;
+'''  if(extension_index>=
+         operators::material_response::generated::
+             k_exact_binding_mr_v1.size())
+   return false;
 
-   const auto &route=''', 
+  const auto &route=''', 
 '''#if defined(DSRRL_V297_AUTHORED_SLOT0_DIAG)
    const auto ext_count=
        operators::material_response::generated::
@@ -99,9 +99,9 @@ static_assert(
    const auto &route='''
 ),
 (
-'''    const auto identity=
-        make_actual_material_identity(
-            observation);
+'''   const auto identity=
+       make_actual_material_identity(
+           observation);
 
 #if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)''',
 '''    auto identity=
