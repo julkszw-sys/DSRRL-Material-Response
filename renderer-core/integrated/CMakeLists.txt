@@ -88,7 +88,7 @@ option(
 
 option(
     DSRRL_V293_PARSER_EXACT_FLVER_ALIAS
-    "Experimental: recover missing FLVER owner only from an attested raw-parser model pointer and exact SHA+slot+MTD confirmation"
+    "Experimental: exact-parser FLVER owner recovery plus atomic homologous PTDE-SPX RoughCloth EnvSpec on full authenticated owner only"
     OFF)
 
 option(
