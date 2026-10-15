@@ -272,6 +272,12 @@ release_resources() noexcept
             shader->Release();
     }
     lerp_replacements_.clear();
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
+        if (shader != nullptr) shader->Release();
+    }
+    lerp_nonmetal_r8_replacements_.clear();
+#endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
 
@@ -390,6 +396,12 @@ on_destroy_device(
             shader->Release();
     }
     lerp_replacements_.clear();
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
+        if (shader != nullptr) shader->Release();
+    }
+    lerp_nonmetal_r8_replacements_.clear();
+#endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
 
@@ -637,6 +649,51 @@ register_lerp_replacement(
     ++lerp_replacement_register_ok_;
     return true;
 }
+
+
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+bool pmetal_envspec_draw_runtime::
+register_lerp_nonmetal_r8_candidate(
+    const operators::env_spec::
+        pmetal_rgba_lerp_materialize_outcome &outcome,
+    const void *r19_dxbc,
+    std::size_t r19_size) noexcept
+{
+    if (outcome.result != operators::env_spec::
+            pmetal_rgba_lerp_materialize_result::applied ||
+        outcome.semantic_receiver_id < 33u ||
+        outcome.semantic_receiver_id > 35u ||
+        !outcome.spec_rgb_consumer ||
+        r19_dxbc == nullptr || r19_size==0u)
+        return false;
+    std::vector<std::uint8_t> candidate;
+    if (!operators::env_spec::
+            materialize_nonmetal_lerp_r8_spec_linear_candidate(
+                static_cast<const std::uint8_t *>(r19_dxbc),
+                r19_size,
+                candidate) ||
+        candidate.empty())
+        return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (device_==nullptr || quarantined_.load())
+        return false;
+    if (lerp_replacements_.find(outcome.semantic_receiver_id) ==
+        lerp_replacements_.end())
+        return false;
+    if (lerp_nonmetal_r8_replacements_.find(
+            outcome.semantic_receiver_id) !=
+        lerp_nonmetal_r8_replacements_.end())
+        return true;
+    ID3D11PixelShader *shader=nullptr;
+    if (FAILED(device_->CreatePixelShader(
+            candidate.data(),candidate.size(),nullptr,&shader)) ||
+        shader==nullptr)
+        return false;
+    lerp_nonmetal_r8_replacements_[
+        outcome.semantic_receiver_id]=shader;
+    return true;
+}
+#endif
 
 bool pmetal_envspec_draw_runtime::prepare(
     reshade::api::command_list *cmd_list,
@@ -1047,6 +1104,19 @@ bool pmetal_envspec_draw_runtime::prepare(
             }
 
             shader = found->second;
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+            // Dedicated Lerp variant only; stock R19 remains P_Metal's.
+            if (material.route_index != 345u &&
+                v203_equipment::exact_envspec36_material(material)) {
+                const auto alternative =
+                    lerp_nonmetal_r8_replacements_.find(
+                        decision.receiver_id);
+                if (alternative !=
+                    lerp_nonmetal_r8_replacements_.end() &&
+                    alternative->second!=nullptr)
+                    shader=alternative->second;
+            }
+#endif
             shader->AddRef();
         } else {
             const auto found =
