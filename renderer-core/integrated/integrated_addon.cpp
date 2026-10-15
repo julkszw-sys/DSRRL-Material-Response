@@ -7183,6 +7183,12 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance)) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "atomic_indexed_native_armed",
+                material, decision, hemenvlerp_bound ? 1u : 0u);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade executes exactly one original
@@ -7230,6 +7236,15 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "atomic_indexed_draw_issued"
+                : "atomic_indexed_failopen",
+            material, decision, hemenvlerp_bound ? 1u : 0u);
+#endif
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
