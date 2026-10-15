@@ -412,6 +412,22 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     telemetry::hot_count(g_hits);
     return true;
 }
+bool flver_identity_lookup_direct_parser_model(
+    const void *candidate_model,
+    std::array<std::uint8_t,32> &sha256) noexcept
+{
+    if (candidate_model == nullptr)
+        return false;
+    // This map contains only exact hashes of raw FLVER payloads observed at
+    // the live retail parser. No candidate pointer arithmetic; never use a
+    // nearest-model / filename / slot-only fallback.
+    std::lock_guard<std::mutex> lock(g_mutex);
+    const auto it = g_by_model.find(candidate_model);
+    if (it == g_by_model.end())
+        return false;
+    sha256 = it->second;
+    return true;
+}
 bool flver_identity_enrich_owner(const void *selector_container,std::uint32_t material_slot,actual_material_owner_observation &observation) noexcept {
     std::array<std::uint8_t,32> sha{};
     if (!flver_identity_lookup(selector_container, sha)) {
