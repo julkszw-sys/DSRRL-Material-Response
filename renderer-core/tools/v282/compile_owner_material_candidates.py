@@ -24,8 +24,20 @@ def compile_owner_join(root):
     groups, mtd_hashes = load_payload(root / "renderer-core/data/census/dsr_flver_owner_tuple_corpus_v1.bin.z")
     donors = json.loads((root / "renderer-core/data/material_response_routes_v1.json").read_text(encoding="utf-8"))["routes"]
     power = constants_from_header(root / "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp")
+    extensions = json.loads((root / "renderer-core/data/census/ptde_mtd_semantic_exact_bindings_v1.json").read_text(encoding="utf-8"))["records"]
+    normalized = [dict(x, source_kind="main_route", raw_sha256=x["sha256"], receiver_ids=x["receiver_triplet"]) for x in donors]
+    for x in extensions:
+        normalized.append(dict(mtd_name=x["mtd_name"], raw_sha256=x["raw_sha256"],
+                              sha256=x["raw_sha256"], c101=x["c101"],
+                              receiver_ids=x["receiver_scope"],
+                              receiver_triplet=x["receiver_scope"],
+                              route_index=x["bridge_binding_id"],
+                              material_family=x["material_family"],
+                              lod_min=None,lod_max=None,
+                              gate_policy=x["gate_policy"],
+                              source_kind="exact_extension"))
     by_mtd = defaultdict(list)
-    for x in donors:
+    for x in normalized:
         raw = fnv64(x["mtd_name"])
         by_mtd[raw].append((x, "exact_case"))
         folded = fnv64(x["mtd_name"].lower())
@@ -59,15 +71,18 @@ def compile_owner_join(root):
                                           matches=len(cand)))
                 continue
             x, match_type = cand[0]
-            const = power[x["route_index"]]
+            const = power.get(x["route_index"]) if x["source_kind"]=="main_route" else None
             entries.append(dict(flver_sha256=flver.hex(), material_slot=slot,
                                 mtd_name=x["mtd_name"], mtd_name_hash=f"{mtd_hash:016x}",
                                 mtd_name_match=match_type,
                                 raw_mtd_sha256=x["sha256"], route_index=x["route_index"],
-                                receiver_ids=x["receiver_triplet"], c100=const["c100"],
-                                c101=x["c101"], ptde_specular_power=const["ptde_specular_power"],
+                                receiver_ids=x["receiver_ids"],
+                                c100=const["c100"] if const else None,
+                                c101=x["c101"],
+                                ptde_specular_power=const["ptde_specular_power"] if const else None,
                                 material_family=x["material_family"], lod_min=x["lod_min"],
-                                lod_max=x["lod_max"], status="CANDIDATE_NOT_GPU_AUTHORIZED"))
+                                lod_max=x["lod_max"], donor_source=x["source_kind"],
+                                status="PARTIAL_EXACT_EXTENSION_MISSING_OPERATOR" if const is None else "CANDIDATE_NOT_GPU_AUTHORIZED"))
     # DSR 19,985 owner tuples include models with same names but different
     # texture/receiver and non-homologous PTDE assets. They are metadata only.
     return {"schema":"dsrrl.v283.owner_material_candidates.v1",
