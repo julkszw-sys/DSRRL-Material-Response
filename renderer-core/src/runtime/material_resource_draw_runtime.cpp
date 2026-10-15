@@ -975,7 +975,7 @@ acquired_sidecar acquire_sidecar(
                 it->second.view != nullptr) {
                 it->second.view->AddRef();
                 ++it->second.live_stock_users;
-                hot_count(g_sidecar_shared_hits);
+                g_sidecar_shared_hits.fetch_add(1u, std::memory_order_relaxed);
                 return {{it->second.view, load_status::ready}, true};
             }
         }
@@ -995,7 +995,7 @@ acquired_sidecar acquire_sidecar(
                 ++it->second.live_stock_users;
                 ID3D11ShaderResourceView *winner = it->second.view;
                 loaded.view->Release();
-                hot_count(g_sidecar_shared_hits);
+                g_sidecar_shared_hits.fetch_add(1u, std::memory_order_relaxed);
                 return {{winner, load_status::ready}, true};
             }
 
@@ -1008,7 +1008,7 @@ acquired_sidecar acquire_sidecar(
                 return {loaded, false};
             }
             loaded.view->AddRef(); // independent cache ownership
-            hot_count(g_sidecar_shared_uploads);
+            g_sidecar_shared_uploads.fetch_add(1u, std::memory_order_relaxed);
             return {loaded, true};
         } catch (...) {
             // Allocation failure must never turn into a wrong association.
@@ -2679,7 +2679,9 @@ telemetry() const noexcept
         g_diffuse_requests.load(),
         g_normal_requests.load(),
         g_fail_open.load(),
-        g_quarantined.load()
+        g_quarantined.load(),
+        g_sidecar_shared_hits.load(),
+        g_sidecar_shared_uploads.load()
     };
 }
 
@@ -2692,6 +2694,8 @@ reset() noexcept
     g_sidecar_ready.store(0u);
     g_sidecar_missing.store(0u);
     g_sidecar_unsupported.store(0u);
+    g_sidecar_shared_hits.store(0u);
+    g_sidecar_shared_uploads.store(0u);
     g_spec_requests.store(0u);
     g_fixed_pointlight_spec_requests.store(0u);
     g_fixed_pointlight_diffuse_requests.store(0u);
