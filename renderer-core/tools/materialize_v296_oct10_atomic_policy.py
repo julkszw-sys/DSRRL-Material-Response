@@ -4,7 +4,9 @@ s=p.read_text("utf-8")
 needle='    const bool diffuse_mr_active =\n        decision.active &&\n'
 insert='''    bool v296_partial_material = false;
 #if defined(DSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID)
-    if (decision.active && context) {
+    // Manifest protection applies even when the legacy MR decision is INACTIVE.
+    // Otherwise raw normal-sidecar requests can leak through on route=0.
+    if (context) {
         const bool exact =
             dsrrl::runtime::exact_pmetal_envspec_candidate(material, decision);
         if (!exact) {
