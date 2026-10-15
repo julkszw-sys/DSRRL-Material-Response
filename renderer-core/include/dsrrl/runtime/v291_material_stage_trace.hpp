@@ -5,6 +5,7 @@
 // infer one from a texture view. Bounded dedup may lose logs, never draws.
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
+#include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #include <reshade.hpp>
 #include <array>
 #include <atomic>
