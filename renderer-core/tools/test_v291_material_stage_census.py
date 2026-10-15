@@ -26,5 +26,15 @@ for stage in ("native_draw_armed","indexed_native_armed",
     assert stage in addon,stage
 assert "draw_tx_issued(dispatch.transaction)" in addon
 assert "if (!g_pmetal_envspec.prepare(" in addon
+assert "DSRRL V291 LERP CUBEMAP" in header
+assert "diagnostic_probe_a" in header and "diagnostic_diff_b" in header
+assert addon.count("v291_material_trace::log_lerp_cubemaps(")==6
+lerp_header=(root/"renderer-core/include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp").read_text()
+lerp_runtime=(root/"renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp").read_text()
+assert "DSRRL_V291_LERP_CUBEMAP_CENSUS" in lerp_header
+assert "prepared.diagnostic_probe_a = prepared.env_resources.probe_a" in lerp_runtime
+assert "prepared.diagnostic_beta = source.beta" in lerp_runtime
+assert "prepared.diagnostic_diff_a = prepared.envdiffuse_resources.probe_a" in lerp_runtime
+assert "DSRRL_V291_LERP_CUBEMAP_CENSUS" in cmake
 print("V291_ALL_MATERIAL_STAGE_SOURCE_CONTRACT_PASS observer_only=1 pmetal_included=1")
 print("OWNER_RUNTIME_ALL_ASSET_COVERAGE_AND_PTDE_PIXEL_OPEN")
