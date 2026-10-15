@@ -5013,6 +5013,12 @@ void on_bind_pipeline(
             cmd_list,
             pixel_stage_bound,
             pipeline.handle);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    if (pixel_stage_bound)
+        dsrrl::runtime::v291_material_trace::log_pipeline_bind(
+            static_cast<std::uint64_t>(pipeline.handle),
+            static_cast<std::uint32_t>(route_mask));
+#endif
 
     if (pixel_stage_bound && route_mask != 0u) {
         if ((route_mask & k_route_stable) != 0u)
