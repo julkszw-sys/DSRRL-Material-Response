@@ -63,5 +63,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: V276-V272-Cloth-Leather-Balanced-Late-Lerp-One-Addon
-          path: DSRRL_V275_V272_CLOTH_LEATHER_EXACT_DRAW_DIAGNOSTIC.addon64
+          path: DSRRL_V276_V272_CLOTH_LEATHER_BALANCED_LERP_DIAGNOSTIC.addon64
           if-no-files-found: error
