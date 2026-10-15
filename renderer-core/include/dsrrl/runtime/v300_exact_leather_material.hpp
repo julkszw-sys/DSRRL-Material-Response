@@ -11,7 +11,7 @@ inline bool promote(const mr::material_identity&m,const mr::decision&host,
 unsigned rx,mr::decision&out) noexcept {
 out=host;
 if(host.active||!m.valid||!m.actual_material_exact||!m.owner_tuple_exact||
-!m.material_slot_valid||m.route_index!=0u||rx<33u||rx>35u||
+!m.material_slot_valid||rx<33u||rx>35u||
 m.material_family_hash!=mr::mtd_semantic_hash("DifSpcBmp")) return false;
 const row*match=nullptr;
 for(const auto&r:k_leather)
