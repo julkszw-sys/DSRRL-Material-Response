@@ -1075,6 +1075,9 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    bool r8_selected = false;
+#endif
 
     {
         std::lock_guard<std::mutex> lock(
@@ -1114,7 +1117,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 if (alternative !=
                     lerp_nonmetal_r8_replacements_.end() &&
                     alternative->second!=nullptr)
-                    shader=alternative->second;
+                    { shader=alternative->second; r8_selected=true; }
             }
 #endif
             shader->AddRef();
@@ -1146,6 +1149,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    if (r8_selected)
+        v287_nonmetal_trace::log("v289_r8_ps_selected",material,decision,1u);
+#endif
     effect_latch(effect_replacement_ready_);
 
     const bool probe_b_required =
