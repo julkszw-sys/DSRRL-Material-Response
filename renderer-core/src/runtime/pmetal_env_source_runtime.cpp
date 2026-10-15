@@ -991,7 +991,12 @@ inline bool exact_v285_or_pmetal_source(
     if (exact_pmetal_material_selection(material))
         return true;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    return v203_equipment::exact_envspec36_material(material) ||
+        v203_equipment::exact_spx_roughcloth_material(material);
+#else
     return v203_equipment::exact_envspec36_material(material);
+#endif
 #else
     return false;
 #endif
