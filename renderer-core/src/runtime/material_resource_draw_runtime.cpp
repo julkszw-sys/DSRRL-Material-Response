@@ -9,6 +9,7 @@
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#include "dsrrl/runtime/generated_spec_whitelist_20261010.hpp"
 #endif
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
@@ -42,6 +43,16 @@
 
 namespace dsrrl::runtime {
 namespace {
+
+inline bool spec_equipment_allowed(std::uint64_t hash) noexcept
+{
+    if (generated::spec_equipment_name_hash_allowed_v12(hash)) return true;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    return sidecar_20261010::spec_allowed(hash);
+#else
+    return false;
+#endif
+}
 
 enum class asset_class : std::uint8_t {
     specular = 0,
