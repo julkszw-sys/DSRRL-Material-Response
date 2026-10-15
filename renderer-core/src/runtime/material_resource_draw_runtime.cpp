@@ -9,6 +9,7 @@
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#include "dsrrl/runtime/generated_spec_whitelist_20261010.hpp"
 #endif
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
@@ -42,6 +43,16 @@
 
 namespace dsrrl::runtime {
 namespace {
+
+inline bool spec_equipment_allowed(std::uint64_t hash) noexcept
+{
+    if (generated::spec_equipment_name_hash_allowed_v12(hash)) return true;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    return sidecar_20261010::spec_allowed(hash);
+#else
+    return false;
+#endif
+}
 
 enum class asset_class : std::uint8_t {
     specular = 0,
@@ -1263,7 +1274,7 @@ void on_init_resource_view(
         exact_subsurface_body_spec_hash(
             logical_hash);
     const bool spec_member =
-        generated::spec_equipment_name_hash_allowed_v12(
+        spec_equipment_allowed(
             logical_hash) ||
         subsurface_body_spec;
     const bool diffuse_member =
@@ -1580,7 +1591,7 @@ probe_exact_specular_companion(
 
     out.logical_hash_allowed =
         out.logical_hash != 0u &&
-        generated::spec_equipment_name_hash_allowed_v12(
+        spec_equipment_allowed(
             out.logical_hash);
     out.companion_ready =
         companion != nullptr;
@@ -1705,16 +1716,13 @@ prepare_draw_requests_bound(
 
         bool exact_companion =
             h1 != 0u &&
-            generated::
-                spec_equipment_name_hash_allowed_v12(
+            spec_equipment_allowed(
                     h1) &&
             replacement != nullptr;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         // Full owner/slot/MTD + currently bound stock t1 logical identity.
         // SpecRGB existence alone never authorizes a nonmetal consumer.
-        if (v203_equipment::exact_envspec36_material(query.material))
-            exact_companion = exact_companion &&
-                v203_equipment::exact_proven_slot_spec_hash(query, h1);
+        // Full Oct10 resource allowlist + bound t1 identity: no static 36-slot veto.
 #endif
 
         operators::resource_bridges::
@@ -2047,14 +2055,14 @@ prepare_fixed_pointlight_material_requests(
     const bool endpoint_a_pair =
         h0 != 0u &&
         h1 != 0u &&
-        generated::spec_equipment_name_hash_allowed_v12(h1) &&
+        spec_equipment_allowed(h1) &&
         generated::diffuse_pair_allowed_v12(h1,h0);
 
     const bool endpoint_b_pair =
         !blended_material ||
         (h3 != 0u &&
          h4 != 0u &&
-         generated::spec_equipment_name_hash_allowed_v12(h4) &&
+         spec_equipment_allowed(h4) &&
          generated::diffuse_pair_allowed_v12(h4,h3));
 
     const bool endpoint_a_normal =
