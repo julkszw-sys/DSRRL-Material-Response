@@ -807,6 +807,17 @@ endif()
 
 if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(V286_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/dsrrl/runtime/generated_spec_whitelist_20261010.hpp")
+    execute_process(COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate_sidecar_spec_whitelist_20261010.py"
+        --input "${CMAKE_CURRENT_SOURCE_DIR}/../data/provenance/sidecar_specular_20261010_names.b85"
+        --output "${V286_HEADER}"
+        RESULT_VARIABLE V286_RESULT)
+    if(NOT V286_RESULT EQUAL 0)
+        message(FATAL_ERROR "V286 manifest generator failed")
+    endif()
+    target_include_directories(dsrrl_renderer_core_integrated PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/generated")
     if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
        NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
        NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE OR
