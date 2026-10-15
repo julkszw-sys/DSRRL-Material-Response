@@ -11,7 +11,7 @@ from generate_sidecar_spec_whitelist_20261010 import load_names,fnv1a_ascii_lowe
 PAT=re.compile(r'"([^"\n]+\.mtd)",[^\n]*\n\s*\{\{(.*?)\}\},\s*envspec_router_state::(\w+),\s*(\d+)u',re.S)
 KV=re.compile(r'(\w+)=([^\s]+)')
 KINDS=("DSRRL V290 SPEC DRAW CENSUS","DSRRL V287 MAT TRACE","DSRRL V291 MATERIAL STAGE")
-ISSUED=("atomic_indexed_draw_issued","atomic_replay_draw_issued","atomic_indexed_native_armed","atomic_native_draw_armed","indexed_issued","draw_issued","indexed_native_armed","native_draw_armed")
+ISSUED=("atomic_indexed_draw_issued","atomic_replay_draw_issued","indexed_issued","draw_issued")
 def write(path,rows):
     with path.open("w",newline="",encoding="utf-8") as f:
         if rows:
@@ -41,9 +41,11 @@ def run(logs,output):
             d["stage"]=d.get("stage","")
             d["cut"]=d.get("cut","")
             key=(log.name,)+tuple(d.get(x,"") for x in ("rx","family","route","slot","mtd","flver"))
-            rec=material_seen.setdefault(key,{"events":set(),"cuts":set(),"specs":set(),"log":log.name})
+            rec=material_seen.setdefault(key,{"events":set(),"cuts":set(),"specs":set(),"masks":set(),"log":log.name})
             if d["stage"]:rec["events"].add(d["stage"])
             if d["cut"]:rec["cuts"].add(d["cut"])
+            if d["stage"]=="batch_prepared":rec["masks"].add(int(d.get("island_mask","0")))
+
             if d.get("spec") in spec_by_hash:
                 rec["specs"].add(d["spec"])
     for key,rec in material_seen.items():
@@ -58,6 +60,8 @@ def run(logs,output):
         cuts=set().union(*(r["cuts"] for r in rows)) if rows else set()
         result.append({**m,"observed_tuples":len(rows),
           "issued_tuples":sum(bool(r["events"].intersection(ISSUED)) for r in rows),
+          "envspec_prepared_tuples":sum(any(mask & 1 for mask in r["masks"]) for r in rows),
+          "mr_only_prepared_tuples":sum(bool(r["masks"]) and all((mask & 1)==0 for mask in r["masks"]) for r in rows),
           "observed_events":"|".join(sorted(events)),
           "first_cuts":"|".join(sorted(cuts)),
           "status":"NOT_SEEN_IN_LOG" if not rows else
