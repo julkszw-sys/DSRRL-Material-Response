@@ -66,13 +66,14 @@ replacements=[
     // latest-hook fallback. A DSR-only / unmatched source row must keep
     // original DSR EnvDiffuse AND EnvSpec, not cached PTDE from last row.
 #if defined(DSRRL_V300_DSR_ONLY_EXACT_DONORS)
-    if (v299::authored_slot0_source(material)) {
-        telemetry::hot_count(g_consumer_fail);
-        return false;
-    }
+    // Exact source-key mismatch may indicate an unpaired DSR-only row.
+    // Do NOT reuse any stale global/TLS PTDE donor, including for P_Metal.
+    // The entire material/EnvSpec/EnvDiffuse draw reverts to stock DSR.
+    telemetry::hot_count(g_consumer_fail);
+    return false;
 #endif
-    // Existing P_Metal behavior is unchanged here; its separate unkeyed
-    // fallback issue remains independently tracked.
+    // Legacy unkeyed hook fallback is retained ONLY in builds without
+    // the opt-in V300 exact mixed-donor correctness gate.
     if (latest_hook_source(out)) {'''
 )
 ]
