@@ -55,6 +55,13 @@ struct prepared_pmetal_envspec_draw {
     ID3D11ShaderResourceView *native_dsr_envdiffuse_a = nullptr;
     ID3D11ShaderResourceView *native_dsr_envdiffuse_b = nullptr;
 
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    bool diagnostic_lerp = false;
+    float diagnostic_beta = 0.0f;
+    std::uint64_t diagnostic_serial = 0u;
+    std::uint16_t diagnostic_probe_a = 0u, diagnostic_probe_b = 0u;
+    std::uint16_t diagnostic_diff_a = 0u, diagnostic_diff_b = 0u;
+#endif
     bool ready = false;
 };
 
