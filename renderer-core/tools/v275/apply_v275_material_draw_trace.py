@@ -34,21 +34,17 @@ def patch_method(block:str,count:str,indexed:str)->str:
 '''
     block=block.replace(id_anchor,id_repl,1)
 
-    fail_end="""            decision.route_index);
-        return false;
-    }
-
-    if (prepared.clustered_neutral_noop"""
-    assert block.count(fail_end)==1
-    fail_repl=f'''            decision.route_index);
-        dsrrl::runtime::v275::observe(
+    # The nested V253/V272 overlay may add source operations AFTER a failed
+    # prepare; probe at the *exact entry* of its existing failure branch,
+    # rather than assuming a fixed trailing block layout from Git HEAD.
+    fail_start="""            prepared)) {
+"""
+    assert block.count(fail_start)==1, "V275 prepare branch preimage drift"
+    fail_repl=fail_start+f'''        dsrrl::runtime::v275::observe(
             cmd_list,material,decision,receiver_id,hemenvlerp_bound,
             "PREPARE_FAIL",2u,nullptr,{count},{indexed});
-        return false;
-    }}
-
-    if (prepared.clustered_neutral_noop'''
-    block=block.replace(fail_end,fail_repl,1)
+'''
+    block=block.replace(fail_start,fail_repl,1)
 
     batch_needle="""    if (k_pmetal_native_draw_runtime_enabled &&
 """
