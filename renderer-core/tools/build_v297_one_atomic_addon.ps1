@@ -10,6 +10,8 @@ python renderer-core/tools/materialize_v296_oct10_atomic_policy.py
 if ($LASTEXITCODE -ne 0) { throw "Source guard rejected; not building" }
 python renderer-core/tools/materialize_v297_authored_slot0.py
 if ($LASTEXITCODE -ne 0) { throw "V297 source drift; not building" }
+python renderer-core/tools/materialize_v297_retail_mtd_owner.py
+if ($LASTEXITCODE -ne 0) { throw "V297 retail MTD cache bridge construction failed" }
 $argsList = @(
     '-S','renderer-core/integrated','-B','build-v297','-A','x64',
     "-DRESHADE_INCLUDE_DIR=$ReShadeInclude",
