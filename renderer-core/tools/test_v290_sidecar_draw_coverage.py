@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory() as td:
     assert rows[0]["sidecar_name"]==names[0]
     assert rows[0]["draw_witness_for_tuple"]==1
     with path.open("a",encoding="utf-8") as file:
-        file.write(f"[DSRRL V290 UNROUTED SPEC DRAW] cut=NO_REGISTERED_SHADER_FAMILY rx=0 family=2 material=0 owner=0 spec={spec} stock_t1=1 logical=1 manifest=1 file=1\\n")
+        file.write(f"[DSRRL V290 UNROUTED SPEC DRAW] cut=NO_REGISTERED_SHADER_FAMILY rx=0 family=2 material=0 owner=0 spec={spec} stock_t1=1 logical=1 manifest=1 file=1\n")
     summary,rows=parse(path,sidecar)
     assert summary["unrouted_stock_t1_names_observed"]==1
     assert summary["unique_manifest_names_seen_bound_t1"]==1
