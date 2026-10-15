@@ -15,7 +15,7 @@ assert "route_index==345u" not in header
 assert "if(!first(" in header
 assert "DSRRL_V291_MATERIAL_STAGE_CENSUS" in cmake
 assert "NOT DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS" in cmake
-assert addon.count('v291_material_trace::log(')==16, addon.count('v291_material_trace::log(')
+assert addon.count('v291_material_trace::log(')==14, addon.count('v291_material_trace::log(')
 assert addon.count('v291_material_trace::log_unrouted(')==2
 for stage in ("identity_ok","identity_failopen","prepare_failopen",
               "batch_prepared","pointlight_inactive"):
