@@ -18,6 +18,20 @@ assert "direct_runtime_mtd.raw_mtd_sha256" in sel
 assert "if (!direct_parser_owner)" in sel
 assert "direct_alias_raw_mtd_conflict=FAILOPEN" in sel
 assert "route_index == 6" not in sel and "route_index == 7" not in sel
-assert "exact_parser_model_alias" not in sel or True
-print("V293_SOURCE_EXACT_ALIAS_CONTRACT_PASS no_guessed_owner=1 no_cloth_whitelist=1")
+gate=(root/"include/dsrrl/runtime/v203_equipment_envspec36_gate.hpp").read_text()
+draw=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text()
+source=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text()
+for name in ("P_RoughCloth[DSB].mtd","P_RoughCloth[DSB]_Edge.mtd",
+             "C_RoughCloth[DSB].mtd","C_RoughCloth[DSB]_Edge.mtd"):
+    assert name in gate, name
+assert "exact_spx_roughcloth_draw(material, decision)" in draw
+assert "exact_spx_roughcloth_material(material)" in draw
+assert "exact_spx_roughcloth_material(material)" in source
+assert "exact_spx_roughcloth_material(identity)" in sel
+assert "has_exact_flver_material_ownership(query)" in gate
+assert "env.envspc_slot == 0u" in gate
+assert "material.owner_tuple_exact" in gate
+assert "DSRRL_V293_PARSER_EXACT_FLVER_ALIAS" in gate
+
+print("V293_SOURCE_EXACT_ALIAS_CONTRACT_PASS no_guessed_owner=1 cloth_exact_homologous_spx_only=1")
 print("OWNER_RUNTIME_ACTIVATION_AND_PTDE_PIXEL_OPEN")
