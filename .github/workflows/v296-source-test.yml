@@ -1,0 +1,9 @@
+name: V296 source test
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 renderer-core/tools/materialize_v296_oct10_atomic_policy.py
