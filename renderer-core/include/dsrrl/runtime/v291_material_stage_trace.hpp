@@ -115,4 +115,86 @@ inline void log_pipeline_bind(std::uint64_t handle,
         }
     }
 }
+
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+inline std::array<std::atomic<std::uint64_t>,8192u> lerp_cubemap_seen{};
+inline void log_lerp_cubemaps(
+    const char *stage,
+    const operators::material_response::material_identity &m,
+    const operators::material_response::decision &d,
+    const prepared_pmetal_envspec_draw &p) noexcept
+{
+    if (!p.diagnostic_lerp || stage == nullptr) return;
+    const float beta=p.diagnostic_beta;
+    const unsigned band=beta<0.0f?6u:beta==0.0f?0u:
+        beta<0.1f?1u:beta<0.4f?2u:beta<0.7f?3u:beta<1.0f?4u:5u;
+    std::uint64_t hash=14695981039346656037ull;
+    const auto mix=[&](std::uint8_t x) noexcept {
+        hash=(hash^static_cast<std::uint64_t>(x))*1099511628211ull;
+    };
+    for(auto v:m.raw_mtd_sha256)mix(v);
+    for(auto v:m.flver_sha256)mix(v);
+    for(auto n:{d.receiver_id,m.route_index,m.material_slot,
+                static_cast<std::uint32_t>(band),
+                static_cast<std::uint32_t>(p.diagnostic_probe_a),
+                static_cast<std::uint32_t>(p.diagnostic_probe_b)})
+        for(unsigned k=0u;k<4u;k++)
+            mix(static_cast<std::uint8_t>(n>>(8u*k)));
+    for(auto ptr=stage;*ptr;++ptr)mix(static_cast<std::uint8_t>(*ptr));
+    if(hash==0u)hash=1u;
+    constexpr auto mask=8191u;
+    bool new_record=false;
+    for(unsigned i=0u;i<16u;++i) {
+        auto &v=lerp_cubemap_seen[(static_cast<std::size_t>(hash)+i*97u)&mask];
+        if(v.load(std::memory_order_relaxed)==hash)return;
+        std::uint64_t empty=0u;
+        if(v.compare_exchange_strong(empty,hash,std::memory_order_relaxed)) {
+            new_record=true;break;
+        }
+        if(empty==hash)return;
+    }
+    if(!new_record)return;
+    const bool pair_valid =
+        p.diagnostic_probe_a==p.diagnostic_diff_a &&
+        p.diagnostic_probe_b==p.diagnostic_diff_b &&
+        p.env_resources.ptde_a!=nullptr &&
+        p.env_resources.ptde_b!=nullptr &&
+        p.envdiffuse_resources.ptde_a!=nullptr &&
+        p.envdiffuse_resources.ptde_b!=nullptr &&
+        p.env_resources.sampler!=nullptr &&
+        p.envdiffuse_resources.sampler!=nullptr &&
+        p.b12!=nullptr;
+    char line[1152]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V291 LERP CUBEMAP] stage=%s rx=%u route=%u slot=%u "
+        "beta=%.9g beta_band=%u serial=%llu pair_join=%u "
+        "spec_a=%u spec_b=%u diffuse_a=%u diffuse_b=%u "
+        "t11=%016llx t13=%016llx t12=%016llx t14=%016llx "
+        "s_envspec=%u s_envdiffuse=%u b12=%u "
+        "mtd=%02x%02x%02x%02x%02x%02x%02x%02x "
+        "flver=%02x%02x%02x%02x%02x%02x%02x%02x",
+        stage,static_cast<unsigned>(d.receiver_id),
+        static_cast<unsigned>(m.route_index),
+        static_cast<unsigned>(m.material_slot),
+        static_cast<double>(beta),band,
+        static_cast<unsigned long long>(p.diagnostic_serial),
+        pair_valid?1u:0u,
+        static_cast<unsigned>(p.diagnostic_probe_a),
+        static_cast<unsigned>(p.diagnostic_probe_b),
+        static_cast<unsigned>(p.diagnostic_diff_a),
+        static_cast<unsigned>(p.diagnostic_diff_b),
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(p.envdiffuse_resources.ptde_a)),
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(p.envdiffuse_resources.ptde_b)),
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(p.env_resources.ptde_a)),
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(p.env_resources.ptde_b)),
+        p.env_resources.sampler!=nullptr?1u:0u,
+        p.envdiffuse_resources.sampler!=nullptr?1u:0u,
+        p.b12!=nullptr?1u:0u,
+        m.raw_mtd_sha256[0],m.raw_mtd_sha256[1],m.raw_mtd_sha256[2],m.raw_mtd_sha256[3],
+        m.raw_mtd_sha256[4],m.raw_mtd_sha256[5],m.raw_mtd_sha256[6],m.raw_mtd_sha256[7],
+        m.flver_sha256[0],m.flver_sha256[1],m.flver_sha256[2],m.flver_sha256[3],
+        m.flver_sha256[4],m.flver_sha256[5],m.flver_sha256[6],m.flver_sha256[7]);
+    reshade::log::message(reshade::log::level::info,line);
+}
+#endif
 } // namespace dsrrl::runtime::v291_material_trace
