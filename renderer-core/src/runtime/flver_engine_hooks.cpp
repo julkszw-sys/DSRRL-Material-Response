@@ -1051,6 +1051,9 @@ bool publish_exact_selector_identity(
     if (identity.route_index == 345u
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         || v203_equipment::exact_envspec36_material(identity)
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+        || v203_equipment::exact_spx_roughcloth_material(identity)
+#endif
 #endif
     ) {
         const auto pmetal_begin =
