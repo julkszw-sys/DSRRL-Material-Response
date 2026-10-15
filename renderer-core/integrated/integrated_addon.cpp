@@ -12,6 +12,9 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+#include "dsrrl/runtime/v291_material_stage_trace.hpp"
+#endif
 #if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
 #include "dsrrl/runtime/v290_spec_draw_census.hpp"
 #endif
@@ -6699,6 +6702,11 @@ bool on_draw(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "identity_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
@@ -6729,6 +6737,12 @@ bool on_draw(
     }
 #endif
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    // Every routed observed MTD, even without SpecRGB or EnvSpec authority.
+    dsrrl::runtime::v291_material_trace::log(
+        "identity_ok",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u);
+#endif
     // Direct PointLight routing is exclusive at this point. A material
     // decision that is not active can only fail open to stock DSR, so do not
     // enter the draw-time shader/resource preparation path. In PointLight
@@ -6737,8 +6751,14 @@ bool on_draw(
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
     if (direct_pointlight_route &&
-        !decision.active)
+        !decision.active) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "pointlight_inactive",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
@@ -6790,6 +6810,11 @@ bool on_draw(
             effect_probe_stage::fail_open,
             receiver_id,
             decision.route_index);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "prepare_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
     }
 
@@ -6812,6 +6837,14 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        "batch_prepared",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
+#endif
     if (k_pmetal_native_draw_runtime_enabled &&
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch) &&
@@ -6822,6 +6855,11 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance)) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "native_draw_armed",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (prepared.envspec_in_batch)
             dsrrl::runtime::v287_nonmetal_trace::log(
@@ -6923,6 +6961,12 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+            ? "draw_issued" : "draw_failopen",
+        material,decision,receiver_id,hemenvlerp_bound?1u:0u);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v287_nonmetal_trace::log(
@@ -7170,6 +7214,11 @@ bool on_draw_indexed(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "identity_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
@@ -7200,6 +7249,12 @@ bool on_draw_indexed(
     }
 #endif
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    // Every routed observed MTD, even without SpecRGB or EnvSpec authority.
+    dsrrl::runtime::v291_material_trace::log(
+        "identity_ok",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u);
+#endif
     // Direct PointLight routing is exclusive at this point. A material
     // decision that is not active can only fail open to stock DSR, so do not
     // enter the draw-time shader/resource preparation path. In PointLight
@@ -7208,8 +7263,14 @@ bool on_draw_indexed(
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
     if (direct_pointlight_route &&
-        !decision.active)
+        !decision.active) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "pointlight_inactive",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
@@ -7261,6 +7322,11 @@ bool on_draw_indexed(
             effect_probe_stage::fail_open,
             receiver_id,
             decision.route_index);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "prepare_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
     }
 
@@ -7283,6 +7349,14 @@ bool on_draw_indexed(
         receiver_id,
         decision.route_index);
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        "batch_prepared",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
+#endif
     if (k_pmetal_native_draw_runtime_enabled &&
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch) &&
@@ -7294,6 +7368,11 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance)) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "indexed_native_armed",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (prepared.envspec_in_batch)
             dsrrl::runtime::v287_nonmetal_trace::log(
@@ -7348,6 +7427,12 @@ bool on_draw_indexed(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+            ? "indexed_issued" : "indexed_failopen",
+        material,decision,receiver_id,hemenvlerp_bound?1u:0u);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v287_nonmetal_trace::log(
