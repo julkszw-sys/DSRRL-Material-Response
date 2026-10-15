@@ -9,4 +9,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: g++ -std=c++17 -pthread -Wall -Wextra -Werror -I renderer-core/include renderer-core/tests/v298_parser_mtd_witness_test.cpp -o /tmp/v298 && /tmp/v298
-      - run: python3 renderer-core/tools/materialize_v296_oct10_atomic_policy.py && python3 renderer-core/tools/materialize_v297_authored_slot0.py && python3 renderer-core/tools/materialize_v297_retail_mtd_owner.py && python3 renderer-core/tools/materialize_v298_live_mtd_witness.py && python3 renderer-core/tools/test_v297_authored_slot0_source.py
+      - run: python3 renderer-core/tools/materialize_v296_oct10_atomic_policy.py && python3 renderer-core/tools/materialize_v297_authored_slot0.py && python3 renderer-core/tools/materialize_v297_retail_mtd_owner.py && python3 renderer-core/tools/materialize_v298_live_mtd_witness.py && python3 renderer-core/tools/test_v297_authored_slot0_source.py && python3 renderer-core/tools/test_v298_live_mtd_source_contract.py
