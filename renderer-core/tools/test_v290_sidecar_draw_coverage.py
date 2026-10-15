@@ -11,7 +11,10 @@ header=read("renderer-core/include/dsrrl/runtime/v290_spec_draw_census.hpp")
 addon=read("renderer-core/integrated/integrated_addon.cpp")
 cmake=read("renderer-core/integrated/CMakeLists.txt")
 assert "first_seen" in header and "8192u" in header
-assert "NOT_IN_OCT10_OR_V12" in header\nassert "NO_REGISTERED_SHADER_FAMILY" in header\nassert "first_unrouted_view(" in header\nassert "unrouted_views" in header
+assert "NOT_IN_OCT10_OR_V12" in header
+assert "NO_REGISTERED_SHADER_FAMILY" in header
+assert "first_unrouted_view(" in header
+assert "unrouted_views" in header
 assert "SIDECAR_NOT_READY" in header
 assert "NO_EXACT_PTDE_CONSUMER" in header
 assert "ATOMIC_CANDIDATE" in header
@@ -19,7 +22,9 @@ assert "NO_FLVER_OWNER" in header
 assert 'DSRRL V290 SPEC DRAW CENSUS' in header
 assert addon.count("v290_spec_census::claim(")==2
 assert addon.count("probe_exact_specular_companion(")>=2
-assert addon.count("v290_spec_census::report(")==2\nassert addon.count("v290_spec_census::first_unrouted_view(")==2\nassert addon.count("v290_spec_census::report_unrouted(")==2
+assert addon.count("v290_spec_census::report(")==2
+assert addon.count("v290_spec_census::first_unrouted_view(")==2
+assert addon.count("v290_spec_census::report_unrouted(")==2
 assert "if (!g_pmetal_envspec.prepare(" in addon
 assert "DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS" in cmake
 assert "NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG" in cmake
