@@ -117,7 +117,7 @@ static_assert(
         lookup_exact_runtime_material(actual_material,parsed_mtd) &&
         parsed_mtd.valid &&
         parsed_mtd.actual_material_exact &&
-        parsed_mtd.route_index==0u &&
+        parsed_mtd.route_index==identity.route_index &&
         identity.owner_tuple_exact &&
         identity.raw_mtd_sha256==parsed_mtd.raw_mtd_sha256 &&
         identity.semantic_name_hash==parsed_mtd.semantic_name_hash) {
