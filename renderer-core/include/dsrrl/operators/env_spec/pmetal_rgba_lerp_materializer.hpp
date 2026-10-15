@@ -45,4 +45,12 @@ materialize_pmetal_rgba_lerp_receiver(
     std::size_t stock_size,
     std::vector<std::uint8_t> &output) noexcept;
 
+// V289 opt-in: nonmetal-only exact material ELSE first-consumer
+// diagnostic. Builds an alternative PS from an already-validated
+// RX33-35 R19 Lerp bridge; never changes the original P_Metal shader.
+bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
+    const std::uint8_t *r19_source,
+    std::size_t r19_size,
+    std::vector<std::uint8_t> &output) noexcept;
+
 } // namespace dsrrl::operators::env_spec
