@@ -87,6 +87,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V293_PARSER_EXACT_FLVER_ALIAS
+    "Experimental: recover missing FLVER owner only from an attested raw-parser model pointer and exact SHA+slot+MTD confirmation"
+    OFF)
+
+option(
     DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB
     "V289 opt-in nonmetal-only RX33-35 Lerp R8 SPEC-domain first consumer island A/B; P_Metal unchanged"
     OFF)
@@ -850,6 +855,15 @@ if(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_LERP_CUBEMAP_CENSUS>)
+endif()
+
+if(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    if(NOT DSRRL_V291_MATERIAL_STAGE_CENSUS OR
+       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V293 exact owner alias requires material census and nonmetal atomic gate")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V293_PARSER_EXACT_FLVER_ALIAS>)
 endif()
 
 if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
