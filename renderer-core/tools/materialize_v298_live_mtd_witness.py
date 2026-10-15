@@ -54,12 +54,14 @@ std::atomic<std::uint32_t> g_v298_reported_materials{0u};
                 operators::material_response::
                     mtd_semantic_hash(rows[i].name))
                 continue;
-            const auto bit=1u<<i;
-            if ((g_v298_reported_materials.fetch_or(bit) & bit)!=0u)
-                break;
             dsrrl::runtime::v298::parser_mtd_entry live{};
             const bool found=g_v298_live_parser_mtd.lookup(
                 actual_material,live);
+            // Two one-shot states per exact name: a missing early parser
+            // witness must not hide a later valid parser observation.
+            const auto bit=1u<<(i+(found?3u:0u));
+            if ((g_v298_reported_materials.fetch_or(bit) & bit)!=0u)
+                break;
             char digest_text[65]{};
             if (found) {
                 for (unsigned j=0u;j<32u;++j)
