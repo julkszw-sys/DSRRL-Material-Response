@@ -228,7 +228,12 @@ bool exact_pmetal_envspec_candidate(
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     // Experimental nonmetal island: independent exact FLVER/slot/MTD gate.
     // Never promote by shader family alone or use a generic MR/DSR PBL tail.
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    return v203_equipment::exact_envspec36_draw(material, decision) ||
+        v203_equipment::exact_spx_roughcloth_draw(material, decision);
+#else
     return v203_equipment::exact_envspec36_draw(material, decision);
+#endif
 #else
     return false;
 #endif
@@ -1110,7 +1115,12 @@ bool pmetal_envspec_draw_runtime::prepare(
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
             // Dedicated Lerp variant only; stock R19 remains P_Metal's.
             if (material.route_index != 345u &&
-                v203_equipment::exact_envspec36_material(material)) {
+                (
+                    v203_equipment::exact_envspec36_material(material)
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+                    || v203_equipment::exact_spx_roughcloth_material(material)
+#endif
+                )) {
                 const auto alternative =
                     lerp_nonmetal_r8_replacements_.find(
                         decision.receiver_id);
