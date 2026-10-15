@@ -1,0 +1,20 @@
+name: V275 Fast Exact Draw Hook Source Oracles
+on:
+  push:
+    branches: [agent/v275-v272-cloth-leather-exact-draw-state-20261015]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify both draw path hooks and negative source preimages without altering V272
+        run: |
+          python renderer-core/tools/v275/test_v275_source_oracles.py
+          python -m py_compile renderer-core/tools/v275/analyze_v275_draw_log.py
+          git diff --exit-code -- renderer-core/src renderer-core/include renderer-core/integrated
