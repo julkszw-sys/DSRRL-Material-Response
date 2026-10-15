@@ -16,6 +16,7 @@ from generate_sidecar_spec_whitelist_20261010 import (
 )
 
 RE_CENSUS=re.compile(r"\[DSRRL V290 SPEC DRAW CENSUS\] (.+)$")
+RE_UNROUTED=re.compile(r"\[DSRRL V290 UNROUTED SPEC DRAW\] (.+)$")
 RE_DRAW=re.compile(r"\[DSRRL V287 MAT TRACE\] (.+)$")
 KV=re.compile(r"(\w+)=([^\s]+)")
 DRAW_STAGES=("atomic_indexed_draw_issued","atomic_replay_draw_issued","atomic_native_draw_armed","atomic_indexed_native_armed")
