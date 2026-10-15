@@ -29,6 +29,17 @@ for tok in ["m.actual_material_exact", "m.owner_tuple_exact", "m.material_slot_v
             "classify_mtd_envspec_semantics", "env.envspc_slot!=0u"]:
     assert tok in gate,tok
 assert "effective_envspec_decision" in integrated
+parser = (ROOT/"renderer-core/src/runtime/flver_engine_hooks.cpp").read_text("utf-8")
+for token in (
+    "V297_AUTHORED_SLOT0_DIAG",
+    "dsrrl::runtime::v297::raw_sha_equal",
+    "const auto pilot_index=extension_index-ext_count",
+    "identity.actual_material_exact=true;",
+    "identity.owner_tuple_exact &&",
+    "identity.raw_mtd_sha256==parsed_mtd.raw_mtd_sha256",
+    "identity.semantic_name_hash==parsed_mtd.semantic_name_hash",
+):
+    assert token in parser, token
 assert "g_pmetal_envspec.prepare(" in integrated
 assert "!v296_partial_material" in integrated
 assert re.search(r'if \(context\) \{\s*const bool exact =',integrated), "V296 inactive MR route not guarded"
