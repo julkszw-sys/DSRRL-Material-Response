@@ -6592,6 +6592,10 @@ bool on_draw(
                 g_material_resources.probe_exact_specular_companion(
                     census_context);
             dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+            dsrrl::runtime::v291_material_trace::log_unrouted(
+                shadow_t1[0],probe);
+#endif
         }
 #endif
         hot_count(g_draw_fast_skip);
@@ -7122,6 +7126,10 @@ bool on_draw_indexed(
                 g_material_resources.probe_exact_specular_companion(
                     census_context);
             dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+            dsrrl::runtime::v291_material_trace::log_unrouted(
+                shadow_t1[0],probe);
+#endif
         }
 #endif
         hot_count(g_draw_fast_skip);
