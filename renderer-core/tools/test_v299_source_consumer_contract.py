@@ -9,7 +9,7 @@ f=(r/"src/runtime/flver_engine_hooks.cpp").read_text()
 a=(r/"integrated/integrated_addon.cpp").read_text()
 for token in (
     "promote_exact_slot0_source(", "decision.route_index != canonical.route_index",
-    "decision.ptde_specular_power != ", "decision.c100[i] != canonical.c100[i]",
+    "decision.ptde_specular_power !=", "decision.c100[i] != canonical.c100[i]",
     "material, inactive, 33u, candidate",
 ):
     assert token in g,token
