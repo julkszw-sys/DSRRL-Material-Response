@@ -32,6 +32,18 @@ assert "has_exact_flver_material_ownership(query)" in gate
 assert "env.envspc_slot == 0u" in gate
 assert "material.owner_tuple_exact" in gate
 assert "DSRRL_V293_PARSER_EXACT_FLVER_ALIAS" in gate
+import json
+source_records=json.loads((root/"data/census/ptde_mtd_envspec_router_v1.json").read_text())["records"]
+by_name={r["mtd_name"]:r for r in source_records}
+metal=by_name["P_Metal[DSB].mtd"]
+for name in ("P_RoughCloth[DSB].mtd","P_RoughCloth[DSB]_Edge.mtd",
+             "C_RoughCloth[DSB].mtd","C_RoughCloth[DSB]_Edge.mtd"):
+    row=by_name[name]
+    assert row["state"]=="PRESENT" and row["envspc_slot"]==0
+    assert row["homology_class"]=="HOMOLOGOUS_SPC"
+    assert row["delta_kind"]=="EXACT_SPX"
+    assert row["dsr_spx"]==row["ptde_spx"]==metal["dsr_spx"]
+
 
 print("V293_SOURCE_EXACT_ALIAS_CONTRACT_PASS no_guessed_owner=1 cloth_exact_homologous_spx_only=1")
 print("OWNER_RUNTIME_ACTIVATION_AND_PTDE_PIXEL_OPEN")
