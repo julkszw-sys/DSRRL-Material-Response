@@ -41,10 +41,10 @@ def load_labels(path):
 def prepare(rows,labels):
     groups=collections.defaultdict(list)
     for row in rows:
-        key=(row["full_mtd"],row["sem"],row["full_flver"],row["slot"],row["rx"])
+        key=(row["full_mtd"],row["sem"],row["full_flver"],row["slot"])
         groups[key].append(row)
     material_report=[]
-    for (mtd,sem,flver,slot,rx),samples in sorted(groups.items()):
+    for (mtd,sem,flver,slot),samples in sorted(groups.items()):
         phases=collections.defaultdict(list)
         for r in samples:phases[r["phase"]].append(r)
         events={phase:sorted({r["stage"] for r in rs}) for phase,rs in phases.items()}
@@ -94,7 +94,7 @@ def prepare(rows,labels):
                 if a[f]!=b[f]:problems.append("STABLE_LERP_"+f.upper()+"_DIFF")
         material_report.append({
             "mtd_name":samples[0]["name"],"full_mtd_sha256":mtd,"flver":flver,
-            "semantic_hash":sem,"slot":slot,"receiver":rx,
+            "semantic_hash":sem,"slot":slot,"receiver":"/".join(sorted({r["rx"] for r in samples})),
             "label":labels.get(mtd,"UNKNOWN"),"events":events,"fog12w_bins_not_beta":bins,
             "route_index":sorted({r["route"] for r in samples}),
             "route_signatures":pair_flags,
