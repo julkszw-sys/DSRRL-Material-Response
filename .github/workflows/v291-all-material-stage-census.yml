@@ -58,7 +58,8 @@ jobs:
             -DDSRRL_V285_ATOMIC_NONMETAL_DIAG=ON `
             -DDSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=ON `
             -DDSRRL_V290_FULL_SIDECAR_DRAW_CENSUS=ON `
-            -DDSRRL_V291_MATERIAL_STAGE_CENSUS=ON
+            -DDSRRL_V291_MATERIAL_STAGE_CENSUS=ON `
+            -DDSRRL_V291_LERP_CUBEMAP_CENSUS=ON
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build one integrated ReShade addon
         shell: pwsh
