@@ -460,8 +460,6 @@ bool selector_identity_cache_lookup(
         material_index < 0)
         return false;
 
-    const auto epoch =
-        flver_identity_epoch();
     const auto set =
         selector_identity_cache_set(
             container,
@@ -473,17 +471,24 @@ bool selector_identity_cache_lookup(
     for (std::size_t way = 0u;
          way < k_selector_identity_cache_ways;
          ++way) {
-        const auto &entry =
+        auto &entry =
             g_selector_identity_cache[
                 base + way];
 
         if (!entry.occupied ||
             entry.container != container ||
             entry.material_index !=
-                material_index ||
-            entry.epoch != epoch)
+                material_index)
             continue;
 
+        std::uint64_t current_epoch = 0u;
+        if (!flver_identity_cache_epoch_survives(
+                container,
+                entry.epoch,
+                current_epoch))
+            continue;
+
+        entry.epoch = current_epoch;
         identity = entry.identity;
         return identity.valid &&
             identity.owner_tuple_exact;

@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/key_invalidation_journal.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
@@ -33,6 +34,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace dsrrl::runtime {
@@ -55,6 +57,10 @@ enum class load_status : std::uint8_t {
 struct companion_set {
     ID3D11Device *device = nullptr;
     std::uint64_t logical_hash = 0;
+    // Exact loader-name identity, needed to release a shared sidecar without
+    // guessing by FNV alone (or retaining it beyond its final stock view).
+    std::wstring logical_name{};
+    std::uint8_t shared_mask = 0u;
     ID3D11ShaderResourceView *specular = nullptr;
     ID3D11ShaderResourceView *diffuse = nullptr;
     ID3D11ShaderResourceView *normal = nullptr;
@@ -119,11 +125,47 @@ constexpr std::uint32_t k_caps2_cubemap = 0x200u;
 core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
+
+// One sidecar GPU SRV may back multiple concurrently live stock SRVs with
+// exactly the same (device, class, name, logical hash). The cache retains one
+// reference *only while stock owners remain alive*. No blanket preload.
+struct sidecar_shared_key {
+    ID3D11Device *device = nullptr;
+    asset_class cls = asset_class::specular;
+    std::uint64_t logical_hash = 0u;
+    std::wstring logical_name;
+    bool operator==(const sidecar_shared_key &other) const noexcept
+    {
+        return device == other.device &&
+            cls == other.cls &&
+            logical_hash == other.logical_hash &&
+            logical_name == other.logical_name;
+    }
+};
+struct sidecar_shared_hash {
+    std::size_t operator()(const sidecar_shared_key &key) const noexcept
+    {
+        auto h = std::hash<std::wstring>{}(key.logical_name);
+        h ^= std::hash<ID3D11Device *>{}(key.device) +
+             0x9e3779b9u + (h << 6u) + (h >> 2u);
+        h ^= static_cast<std::size_t>(key.logical_hash) +
+             0x9e3779b9u + (h << 6u) + (h >> 2u);
+        h ^= static_cast<std::size_t>(key.cls) +
+             0x9e3779b9u + (h << 6u) + (h >> 2u);
+        return h;
+    }
+};
+struct sidecar_shared_entry {
+    ID3D11ShaderResourceView *view = nullptr; // owns one cache reference
+    std::size_t live_stock_users = 0u;
+};
+std::unordered_map<sidecar_shared_key, sidecar_shared_entry,
+                   sidecar_shared_hash> g_sidecar_shared;
 // A live native SRV handle observed under more than one exact logical texture
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
 std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
-std::atomic<std::uint64_t> g_cache_epoch{1u};
+key_invalidation_journal<512u> g_view_cache_journal;
 thread_local bool g_internal_create = false;
 
 struct companion_tls_entry {
@@ -196,6 +238,8 @@ std::atomic<std::uint64_t> g_named_views{0};
 std::atomic<std::uint64_t> g_sidecar_ready{0};
 std::atomic<std::uint64_t> g_sidecar_missing{0};
 std::atomic<std::uint64_t> g_sidecar_unsupported{0};
+std::atomic<std::uint64_t> g_sidecar_shared_hits{0};
+std::atomic<std::uint64_t> g_sidecar_shared_uploads{0};
 std::atomic<std::uint64_t> g_spec_requests{0};
 std::atomic<std::uint64_t> g_fixed_pointlight_spec_requests{0};
 std::atomic<std::uint64_t> g_fixed_pointlight_diffuse_requests{0};
@@ -296,18 +340,55 @@ void release_view(
     }
 }
 
+void release_shared_user(
+    ID3D11Device *device,
+    asset_class cls,
+    std::uint64_t logical_hash,
+    const std::wstring &name) noexcept
+{
+    ID3D11ShaderResourceView *last = nullptr;
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const sidecar_shared_key key{device, cls, logical_hash, name};
+        const auto found = g_sidecar_shared.find(key);
+        if (found == g_sidecar_shared.end() ||
+            found->second.live_stock_users == 0u)
+            return;
+        if (--found->second.live_stock_users == 0u) {
+            last = found->second.view;
+            g_sidecar_shared.erase(found);
+        }
+    } catch (...) {
+        // COM references owned directly by stock companion_set still release.
+        // A cache bookkeeping failure cannot authorize a wrong resource.
+    }
+    if (last != nullptr)
+        last->Release();
+}
+
 void release_set(companion_set &set) noexcept
 {
+    // Drop shared-cache user counts before relinquishing the stock-view
+    // references. Cache entries vanish once the last stock owner disappears.
+    if ((set.shared_mask & 1u) != 0u)
+        release_shared_user(set.device, asset_class::specular,
+                            set.logical_hash, set.logical_name);
+    if ((set.shared_mask & 2u) != 0u)
+        release_shared_user(set.device, asset_class::diffuse,
+                            set.logical_hash, set.logical_name);
+    if ((set.shared_mask & 4u) != 0u)
+        release_shared_user(set.device, asset_class::normal,
+                            set.logical_hash, set.logical_name);
     release_view(set.specular);
     release_view(set.diffuse);
     release_view(set.normal);
-
     if (set.device != nullptr) {
         set.device->Release();
         set.device = nullptr;
     }
-
     set.logical_hash = 0u;
+    set.shared_mask = 0u;
+    set.logical_name.clear();
 }
 
 void release_cache() noexcept
@@ -318,9 +399,7 @@ void release_cache() noexcept
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        g_cache_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
+        g_view_cache_journal.publish(0u);
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
     }
@@ -363,9 +442,7 @@ void release_cache_for_device(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(0u);
     }
 
     for (auto &set : dead)
@@ -873,6 +950,77 @@ void account_load(
     }
 }
 
+struct acquired_sidecar {
+    load_result result{};
+    bool shared = false;
+};
+
+// The heavy DDS read + immutable D3D11 texture creation happens only on a
+// cache miss, always outside g_mutex. Another concurrent loader may win the
+// publication race; in that case drop our duplicate and use the winner.
+// Both the cache and each stock companion_set retain independent COM refs.
+acquired_sidecar acquire_sidecar(
+    ID3D11Device *device,
+    asset_class cls,
+    std::uint64_t logical_hash,
+    const std::wstring &logical_name) noexcept
+{
+    try {
+        const sidecar_shared_key key{
+            device, cls, logical_hash, logical_name};
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto it = g_sidecar_shared.find(key);
+            if (it != g_sidecar_shared.end() &&
+                it->second.view != nullptr) {
+                it->second.view->AddRef();
+                ++it->second.live_stock_users;
+                g_sidecar_shared_hits.fetch_add(1u, std::memory_order_relaxed);
+                return {{it->second.view, load_status::ready}, true};
+            }
+        }
+
+        auto loaded = load_dds(
+            device, sidecar_path(cls, logical_name),
+            cls, logical_hash);
+        if (loaded.view == nullptr)
+            return {loaded, false};
+
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto it = g_sidecar_shared.find(key);
+            if (it != g_sidecar_shared.end() &&
+                it->second.view != nullptr) {
+                it->second.view->AddRef();
+                ++it->second.live_stock_users;
+                ID3D11ShaderResourceView *winner = it->second.view;
+                loaded.view->Release();
+                g_sidecar_shared_hits.fetch_add(1u, std::memory_order_relaxed);
+                return {{winner, load_status::ready}, true};
+            }
+
+            const bool inserted =
+                g_sidecar_shared.emplace(
+                    key,
+                    sidecar_shared_entry{loaded.view, 1u}).second;
+            if (!inserted) {
+                // No successful publication: retain the standalone SRV.
+                return {loaded, false};
+            }
+            loaded.view->AddRef(); // independent cache ownership
+            g_sidecar_shared_uploads.fetch_add(1u, std::memory_order_relaxed);
+            return {loaded, true};
+        } catch (...) {
+            // Allocation failure must never turn into a wrong association.
+            return {loaded, false};
+        }
+    } catch (...) {
+        // Fallback preserves previous single-view loader semantics.
+        return {load_dds(device, sidecar_path(cls, logical_name),
+                         cls, logical_hash), false};
+    }
+}
+
 bool snapshot_companion_cached(
     ID3D11ShaderResourceView *stock,
     asset_class cls,
@@ -891,8 +1039,7 @@ bool snapshot_companion_cached(
             reinterpret_cast<std::uintptr_t>(
                 stock));
     const auto epoch =
-        g_cache_epoch.load(
-            std::memory_order_acquire);
+        g_view_cache_journal.current_epoch();
     auto &cached =
         g_companion_tls[
             companion_tls_index(key)];
@@ -926,9 +1073,13 @@ bool snapshot_companion_cached(
             return true;
         };
 
+    std::uint64_t current_epoch = 0u;
     if (cached.key == key &&
-        cached.epoch == epoch)
+        g_view_cache_journal.survives(
+            key, cached.epoch, current_epoch)) {
+        cached.epoch = current_epoch;
         return publish_from_cache();
+    }
 
     std::uint64_t logical_hash = 0u;
     ID3D11ShaderResourceView *spec = nullptr;
@@ -942,8 +1093,7 @@ bool snapshot_companion_cached(
             g_mutex);
 
         snapshot_epoch =
-            g_cache_epoch.load(
-                std::memory_order_relaxed);
+            g_view_cache_journal.current_epoch();
 
         if (g_ambiguous_view_device.find(key) ==
                 g_ambiguous_view_device.end()) {
@@ -1145,49 +1295,49 @@ void on_init_resource_view(
     set.device->AddRef();
     set.logical_hash =
         logical_hash;
-
     if (spec_member) {
         const auto loaded =
-            load_dds(
+            acquire_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::specular,
-                    logical_name),
                 asset_class::specular,
-                logical_hash);
-        account_load(loaded.status);
-        set.specular = loaded.view;
+                logical_hash, logical_name);
+        account_load(loaded.result.status);
+        set.specular = loaded.result.view;
+        if (loaded.shared)
+            set.shared_mask |= 1u;
     }
 
     if (generated::
         diffuse_target_hash_allowed_v12(
             logical_hash)) {
         const auto loaded =
-            load_dds(
+            acquire_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::diffuse,
-                    logical_name),
                 asset_class::diffuse,
-                logical_hash);
-        account_load(loaded.status);
-        set.diffuse = loaded.view;
+                logical_hash, logical_name);
+        account_load(loaded.result.status);
+        set.diffuse = loaded.result.view;
+        if (loaded.shared)
+            set.shared_mask |= 2u;
     }
 
     if (generated::
         normal_target_hash_allowed_v12(
             logical_hash)) {
         const auto loaded =
-            load_dds(
+            acquire_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::normal,
-                    logical_name),
                 asset_class::normal,
-                logical_hash);
-        account_load(loaded.status);
-        set.normal = loaded.view;
+                logical_hash, logical_name);
+        account_load(loaded.result.status);
+        set.normal = loaded.result.view;
+        if (loaded.shared)
+            set.shared_mask |= 4u;
     }
+
+    // std::wstring move is noexcept: do not introduce allocations or
+    // exceptions on the ReShade resource-view callback path.
+    set.logical_name = std::move(logical_name);
 
     const auto key =
         static_cast<std::uint64_t>(
@@ -1212,27 +1362,25 @@ void on_init_resource_view(
                 // exact logical identity. Neither association is safe. Remove
                 // the previous record and quarantine this handle until its
                 // destroy_resource_view callback.
-                old = found->second;
+                old = std::move(found->second);
                 g_cache.erase(found);
                 g_ambiguous_view_device.emplace(
                     key,
                     native_device);
                 had_old = true;
             } else if (found != g_cache.end()) {
-                old = found->second;
-                found->second = set;
+                old = std::move(found->second);
+                found->second = std::move(set);
                 had_old = true;
                 accepted = true;
             } else {
                 g_cache.emplace(
                     key,
-                    set);
+                    std::move(set));
                 accepted = true;
             }
 
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(key);
         }
     }
 
@@ -1280,9 +1428,7 @@ void on_destroy_resource_view(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(key);
     }
 
     if (found)
@@ -2533,7 +2679,9 @@ telemetry() const noexcept
         g_diffuse_requests.load(),
         g_normal_requests.load(),
         g_fail_open.load(),
-        g_quarantined.load()
+        g_quarantined.load(),
+        g_sidecar_shared_hits.load(),
+        g_sidecar_shared_uploads.load()
     };
 }
 
@@ -2546,6 +2694,8 @@ reset() noexcept
     g_sidecar_ready.store(0u);
     g_sidecar_missing.store(0u);
     g_sidecar_unsupported.store(0u);
+    g_sidecar_shared_hits.store(0u);
+    g_sidecar_shared_uploads.store(0u);
     g_spec_requests.store(0u);
     g_fixed_pointlight_spec_requests.store(0u);
     g_fixed_pointlight_diffuse_requests.store(0u);
