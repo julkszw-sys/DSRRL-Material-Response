@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
@@ -979,6 +982,19 @@ bool exact_pmetal_material_selection(
         hashing::matches_hex(
             material.raw_mtd_sha256,
             k_pmetal_material_sha256);
+}
+
+// V285 nonmetal diagnostic: source remains keyed by the actual material.
+inline bool exact_v285_or_pmetal_source(
+    const operators::material_response::material_identity &material) noexcept
+{
+    if (exact_pmetal_material_selection(material))
+        return true;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    return v203_equipment::exact_envspec36_material(material);
+#else
+    return false;
+#endif
 }
 
 bool retail_lightbank_record_index(
@@ -2535,7 +2551,7 @@ void pmetal_env_source_selector_event(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_v285_or_pmetal_source(
             material) ||
         owner == nullptr ||
         return_address == nullptr)
@@ -2920,7 +2936,7 @@ bool pmetal_env_source_runtime::latest(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_v285_or_pmetal_source(
             material)) {
         telemetry::hot_count(
             g_consumer_fail);
@@ -2941,6 +2957,15 @@ bool pmetal_env_source_runtime::latest(
     // already-authenticated exact P_Metal draw. The retail packer is a state
     // producer: retain its latest generation until the next exact source
     // update, matching the validated V13 lifetime without exposing it to U/L.
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    // The unkeyed source fallback remains unchanged for P_Metal.
+    // Nonmetal must be proven from its own material source; a P_Metal
+    // LightBank record cannot be borrowed on load/selection failure.
+    if (!exact_pmetal_material_selection(material)) {
+        telemetry::hot_count(g_consumer_fail);
+        return false;
+    }
+#endif
     if (latest_hook_source(out)) {
         telemetry::hot_count(
             g_consumer_ok);
