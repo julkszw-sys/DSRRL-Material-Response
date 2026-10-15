@@ -6992,7 +6992,10 @@ bool on_draw(
     dsrrl::runtime::v291_material_trace::log(
         dsrrl::runtime::draw_tx_issued(dispatch.transaction)
             ? "draw_issued" : "draw_failopen",
-        material,decision,receiver_id,hemenvlerp_bound?1u:0u);
+        material,decision,receiver_id,hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
 #endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     if (prepared.envspec_in_batch)
@@ -7479,7 +7482,10 @@ bool on_draw_indexed(
     dsrrl::runtime::v291_material_trace::log(
         dsrrl::runtime::draw_tx_issued(dispatch.transaction)
             ? "indexed_issued" : "indexed_failopen",
-        material,decision,receiver_id,hemenvlerp_bound?1u:0u);
+        material,decision,receiver_id,hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
 #endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     if (prepared.envspec_in_batch)
