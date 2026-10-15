@@ -56,7 +56,7 @@ inline void report(
     const char *cut =
         !probe.stock_bound ? "NO_STOCK_T1" :
         !probe.snapshot_resolved ? "NO_LOGICAL_BIND" :
-        !probe.logical_hash_allowed ? "NOT_IN_1295" :
+        !probe.logical_hash_allowed ? "NOT_IN_OCT10_OR_V12" :
         !probe.companion_ready ? "SIDECAR_NOT_READY" :
         !m.valid ? "NO_MTD" :
         !m.owner_tuple_exact ? "NO_FLVER_OWNER" :
