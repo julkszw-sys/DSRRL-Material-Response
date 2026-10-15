@@ -25,5 +25,15 @@ before='#include "dsrrl/runtime/material_resource_draw_runtime.hpp"'
 after=before+'\n#include "dsrrl/runtime/v296_oct10_material_atomic_gate.hpp"'
 assert s.count(needle)==1 and s.count(before)==1
 s=s.replace(before,after,1).replace(needle,insert,1)
+# Normal substitution is a separate MR resource path. On an Oct10 draw
+# without certified PTDE SpecRGB consumer, neither t0/t2 companions nor
+# diffuse-only MR may leak into the stock DSR material operator.
+normal_anchor='''    if (context != nullptr) {
+        // MR reset invariant: generic stable MR is diffuse-v1 only.'''
+normal_guard='''    if (context != nullptr &&
+        !v296_partial_material) {
+        // MR reset invariant: generic stable MR is diffuse-v1 only.'''
+assert s.count(normal_anchor)==1
+s=s.replace(normal_anchor,normal_guard,1)
 p.write_text(s,"utf-8")
 print("V296_ATOMIC_POLICY_PATCH_PASS")
