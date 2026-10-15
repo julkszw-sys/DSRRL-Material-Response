@@ -25,7 +25,7 @@ for name,(sha,c102) in names.items():
     start=router.index(f'"{name}"')
     assert re.search(r'envspec_router_state::present,\s*0u,',router[start:start+430]),name
 for tok in ["m.actual_material_exact", "m.owner_tuple_exact", "m.material_slot_valid",
-            "m.route_index != 0u", "has_exact_flver_material_ownership",
+            "host_decision.active", "has_exact_flver_material_ownership",
             "classify_mtd_envspec_semantics", "env.envspc_slot!=0u"]:
     assert tok in gate,tok
 assert "effective_envspec_decision" in integrated
@@ -37,6 +37,7 @@ for token in (
     "identity.actual_material_exact=true;",
     "identity.owner_tuple_exact &&",
     "identity.raw_mtd_sha256==parsed_mtd.raw_mtd_sha256",
+    "parsed_mtd.route_index==identity.route_index",
     "identity.semantic_name_hash==parsed_mtd.semantic_name_hash",
 ):
     assert token in parser, token
