@@ -26,29 +26,43 @@ def compile_owner_join(root):
     power = constants_from_header(root / "renderer-core/include/dsrrl/operators/material_response/generated_material_constants_v1.hpp")
     by_mtd = defaultdict(list)
     for x in donors:
-        by_mtd[fnv64(x["mtd_name"])].append(x)
+        raw = fnv64(x["mtd_name"])
+        by_mtd[raw].append((x, "exact_case"))
+        folded = fnv64(x["mtd_name"].lower())
+        if folded != raw:
+            by_mtd[folded].append((x, "casefold_candidate"))
 
     # Do not disambiguate a shared basename hash with guesses: candidates
     # remain distinct unless all present semantic parameters agree exactly.
     entries = []
     mtd_ambiguous = []
+    anchors = {"eb3b77ee419f9e2997b7d427987c002411fdf08edda12834be4a9f51b3c4eb7b":[2,3],
+               "672e35606495f24e36c704f32fceda9b933563a64e03379375f47f9fe04a0a7d":[8,5]}
+    anchor_observations = []
     for flver, first, count in groups:
         for slot in range(count):
             mtd_hash = mtd_hashes[first + slot]
             cand = by_mtd.get(mtd_hash, [])
+            if flver.hex() in anchors and slot in anchors[flver.hex()]:
+                anchor_observations.append({
+                    "flver_sha256":flver.hex(), "slot":slot,
+                    "corpus_mtd_name_hash":f"{mtd_hash:016x}",
+                    "candidate_names":[x["mtd_name"] for x,_ in cand],
+                    "match_types":[kind for _,kind in cand]})
             if not cand:
                 continue
             if len(cand) > 1 and len({(x["sha256"], x["c101"], x["route_index"],
-                                         tuple(x["receiver_triplet"])) for x in cand}) > 1:
+                                         tuple(x["receiver_triplet"])) for x,_ in cand}) > 1:
                 mtd_ambiguous.append(dict(flver_sha256=flver.hex(),
                                           material_slot=slot,
                                           mtd_name_hash=f"{mtd_hash:016x}",
                                           matches=len(cand)))
                 continue
-            x = cand[0]
+            x, match_type = cand[0]
             const = power[x["route_index"]]
             entries.append(dict(flver_sha256=flver.hex(), material_slot=slot,
                                 mtd_name=x["mtd_name"], mtd_name_hash=f"{mtd_hash:016x}",
+                                mtd_name_match=match_type,
                                 raw_mtd_sha256=x["sha256"], route_index=x["route_index"],
                                 receiver_ids=x["receiver_triplet"], c100=const["c100"],
                                 c101=x["c101"], ptde_specular_power=const["ptde_specular_power"],
@@ -62,6 +76,7 @@ def compile_owner_join(root):
                       "material_candidate_slots":len(entries),
                       "ambiguous_mtd_hashes":len(mtd_ambiguous)},
             "entries":entries, "ambiguous_materials":mtd_ambiguous,
+            "anchor_observations":anchor_observations,
             "activation_authorized":False,
             "requires":["live model generation","live exact FLVER sha+slot",
                         "actual raw-MTD SHA", "exact t0/t1/t2 native resource identity",
