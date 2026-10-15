@@ -4,11 +4,14 @@
 // Unrouted stock pipelines have no authenticated FLVER/MTD owner: do not
 // infer one from a texture view. Bounded dedup may lose logs, never draws.
 #include "dsrrl/operators/material_response/material_response_island.hpp"
+#include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include <reshade.hpp>
 #include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <initializer_list>
+#include <cstddef>
 namespace dsrrl::runtime::v291_material_trace {
 inline std::array<std::atomic<std::uint64_t>,16384u> recorded{};
 inline bool first(const operators::material_response::material_identity &m,
@@ -65,6 +68,23 @@ inline void log(const char *stage,
         m.flver_sha256[2],m.flver_sha256[3],
         m.flver_sha256[4],m.flver_sha256[5],
         m.flver_sha256[6],m.flver_sha256[7]);
+    reshade::log::message(reshade::log::level::info,line);
+}
+// No-route pipelines have no authenticated MTD/FLVER. The bound stock t1
+// resource identity is diagnostic only and cannot authorize an operator.
+inline void log_unrouted(const void *stock_t1,
+                         const specular_companion_probe &probe) noexcept {
+    char line[320]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V291 UNROUTED MATERIAL] source=STOCK_T1_ONLY "
+        "mtd=UNKNOWN flver=UNKNOWN receiver=UNKNOWN "
+        "view=%016llx stock_t1=%u logical=%u manifest=%u file=%u "
+        "spec=%016llx",
+        static_cast<unsigned long long>(
+            reinterpret_cast<std::uintptr_t>(stock_t1)),
+        probe.stock_bound?1u:0u,probe.snapshot_resolved?1u:0u,
+        probe.logical_hash_allowed?1u:0u,probe.companion_ready?1u:0u,
+        static_cast<unsigned long long>(probe.logical_hash));
     reshade::log::message(reshade::log::level::info,line);
 }
 } // namespace dsrrl::runtime::v291_material_trace
