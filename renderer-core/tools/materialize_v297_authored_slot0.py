@@ -72,8 +72,8 @@ region_to='''    const auto envspec_family =
                         material.raw_mtd_sha256[i]));
             char line[320]{};
             std::snprintf(line,sizeof(line),
-                "[DSRRL V297] stage=raw_mtd_mismatch"
-                " mtd_name=%s sha256=%s rx=%u slot=%u"
+                "[DSRRL V297] stage=owner_mtd_not_authorized"
+                " mtd_name=%s source_owner_sha=%s rx=%u slot=%u"
                 " owner=%u parser_exact=%u action=stock_dsr",
                 rows[row].name,raw_sha,receiver_id,
                 material.material_slot,
