@@ -60,4 +60,53 @@ inline bool exact_envspec36_draw(
            decision.c101 >= 0.0f;
 }
 
+
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+// Source homology: EXACT_SPX FRPG_Phn_ColDifSpcBmp in both DSR and PTDE;
+// exact PTDE EnvSpec PRESENT slot0, not P_Metal's slot2. Scope is restricted
+// to these four raw-MTD identities, and requires full parser-authenticated
+// 256-bit FLVER + actual slot + MTD owner authentication. No basename-only,
+// inherited route, sidecar-only or generic shader-family admission.
+inline bool exact_spx_roughcloth_material(
+    const operators::material_response::material_identity &material) noexcept
+{
+    namespace mr = operators::material_response;
+    if (!material.valid || !material.owner_tuple_exact ||
+        !material.material_slot_valid)
+        return false;
+
+    const bool roughcloth =
+        material.semantic_name_hash ==
+            mr::mtd_semantic_hash("P_RoughCloth[DSB].mtd") ||
+        material.semantic_name_hash ==
+            mr::mtd_semantic_hash("P_RoughCloth[DSB]_Edge.mtd") ||
+        material.semantic_name_hash ==
+            mr::mtd_semantic_hash("C_RoughCloth[DSB].mtd") ||
+        material.semantic_name_hash ==
+            mr::mtd_semantic_hash("C_RoughCloth[DSB]_Edge.mtd");
+    if (!roughcloth)
+        return false;
+
+    const auto query = make_envspec36_query(material);
+    if (!mr::has_exact_flver_material_ownership(query))
+        return false;
+    const auto env = mr::classify_mtd_envspec_semantics(query);
+    return env.exact_identity_match &&
+        env.presence == mr::ptde_envspec_presence::present &&
+        env.router_state == mr::mtd_envspec_router_state::present &&
+        env.envspc_slot_valid && env.envspc_slot == 0u;
+}
+
+inline bool exact_spx_roughcloth_draw(
+    const operators::material_response::material_identity &material,
+    const operators::material_response::decision &decision) noexcept
+{
+    return exact_spx_roughcloth_material(material) &&
+        decision.active &&
+        decision.receiver_id >= 33u &&
+        decision.receiver_id <= 35u &&
+        std::isfinite(decision.c101) &&
+        decision.c101 >= 0.0f;
+}
+#endif
 } // namespace dsrrl::runtime::v203_equipment
