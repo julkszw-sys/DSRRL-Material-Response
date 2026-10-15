@@ -9,7 +9,7 @@ policy=(root/"renderer-core/include/dsrrl/runtime/v296_oct10_material_atomic_gat
 for needle in (
   "g_v298_live_parser_mtd.erase(material)",
   "g_v298_live_parser_mtd.publish(material,digest,len)",
-  "g_v298_live_parser_mtd.lookup(actual_material,live)",
+  "g_v298_live_parser_mtd.lookup(",
   "live.raw==identity.raw_mtd_sha256",
   "DSRRL V298 MTD",
   "stock_fail_open",
