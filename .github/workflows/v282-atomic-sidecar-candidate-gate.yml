@@ -1,0 +1,34 @@
+name: V282 Atomic Sidecar Candidate Gate
+on:
+  push:
+    branches:
+      - agent/v282-atomic-nonmetal-prebind-planner-20261015
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-only-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test exact route collisions, sidecar manifest validation and fail-open
+        run: python3 renderer-core/tools/v282/test_prebind_candidates.py
+      - name: Compile source candidate graph, never authorize draw without exact runtime joins
+        run: |
+          python3 renderer-core/tools/v282/compile_prebind_candidates.py --root . --output /tmp/v282_prebind.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/v282_prebind.json'))
+          assert d["activation_authorized"] is False
+          assert d["counts"]["spec_name_records"]==769
+          assert d["counts"]["diffuse_pairs"]==528
+          assert d["counts"]["normal_triples"]==557
+          assert d["counts"]["ambiguous_spec_name_routes"]>=3
+          assert d["inputs"]["october10_inventory_supplied"] is False
+          print("V282_OFFLINE_SOURCE_CANDIDATE_PASS_RUNTIME_PIXEL_OPEN")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V282-offline-source-candidates-NOT-ADDON
+          path: /tmp/v282_prebind.json
+          if-no-files-found: error
