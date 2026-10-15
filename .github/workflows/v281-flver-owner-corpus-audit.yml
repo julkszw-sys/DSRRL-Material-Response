@@ -1,0 +1,24 @@
+name: V281 Exact FLVER Owner-Slot Corpus Audit
+on:
+  push:
+    branches:
+      - agent/v281-flver-owner-corpus-abi-20261015
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v281-readonly-corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify exact owner tuples; no shader or addon mutation
+        run: |
+          python renderer-core/tools/v281/verify_v279_flver_owner_slots.py | tee v281_exact_flver_owner_results.json
+          python -m json.tool v281_exact_flver_owner_results.json > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V281-Exact-FLVER-Owner-Slot-Audit
+          path: v281_exact_flver_owner_results.json
