@@ -2957,15 +2957,9 @@ bool pmetal_env_source_runtime::latest(
     // already-authenticated exact P_Metal draw. The retail packer is a state
     // producer: retain its latest generation until the next exact source
     // update, matching the validated V13 lifetime without exposing it to U/L.
-#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-    // The unkeyed source fallback remains unchanged for P_Metal.
-    // Nonmetal must be proven from its own material source; a P_Metal
-    // LightBank record cannot be borrowed on load/selection failure.
-    if (!exact_pmetal_material_selection(material)) {
-        telemetry::hot_count(g_consumer_fail);
-        return false;
-    }
-#endif
+    // V286 owner request: identical to the working P_Metal fallback route,
+    // including for an already authenticated nonmetal EnvSpec consumer.
+    // The upstream material/receiver admission still gates the draw.
     if (latest_hook_source(out)) {
         telemetry::hot_count(
             g_consumer_ok);
