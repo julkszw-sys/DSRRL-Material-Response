@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/key_invalidation_journal.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
@@ -33,6 +34,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace dsrrl::runtime {
@@ -163,7 +165,7 @@ std::unordered_map<sidecar_shared_key, sidecar_shared_entry,
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
 std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
-std::atomic<std::uint64_t> g_cache_epoch{1u};
+key_invalidation_journal<512u> g_view_cache_journal;
 thread_local bool g_internal_create = false;
 
 struct companion_tls_entry {
@@ -397,9 +399,7 @@ void release_cache() noexcept
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        g_cache_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
+        g_view_cache_journal.publish(0u);
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
     }
@@ -442,9 +442,7 @@ void release_cache_for_device(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(0u);
     }
 
     for (auto &set : dead)
@@ -1041,8 +1039,7 @@ bool snapshot_companion_cached(
             reinterpret_cast<std::uintptr_t>(
                 stock));
     const auto epoch =
-        g_cache_epoch.load(
-            std::memory_order_acquire);
+        g_view_cache_journal.current_epoch();
     auto &cached =
         g_companion_tls[
             companion_tls_index(key)];
@@ -1076,9 +1073,13 @@ bool snapshot_companion_cached(
             return true;
         };
 
+    std::uint64_t current_epoch = 0u;
     if (cached.key == key &&
-        cached.epoch == epoch)
+        g_view_cache_journal.survives(
+            key, cached.epoch, current_epoch)) {
+        cached.epoch = current_epoch;
         return publish_from_cache();
+    }
 
     std::uint64_t logical_hash = 0u;
     ID3D11ShaderResourceView *spec = nullptr;
@@ -1092,8 +1093,7 @@ bool snapshot_companion_cached(
             g_mutex);
 
         snapshot_epoch =
-            g_cache_epoch.load(
-                std::memory_order_relaxed);
+            g_view_cache_journal.current_epoch();
 
         if (g_ambiguous_view_device.find(key) ==
                 g_ambiguous_view_device.end()) {
@@ -1295,8 +1295,6 @@ void on_init_resource_view(
     set.device->AddRef();
     set.logical_hash =
         logical_hash;
-    set.logical_name = logical_name;
-
     if (spec_member) {
         const auto loaded =
             acquire_sidecar(
@@ -1336,6 +1334,10 @@ void on_init_resource_view(
         if (loaded.shared)
             set.shared_mask |= 4u;
     }
+
+    // std::wstring move is noexcept: do not introduce allocations or
+    // exceptions on the ReShade resource-view callback path.
+    set.logical_name = std::move(logical_name);
 
     const auto key =
         static_cast<std::uint64_t>(
@@ -1378,9 +1380,7 @@ void on_init_resource_view(
                 accepted = true;
             }
 
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(key);
         }
     }
 
@@ -1428,9 +1428,7 @@ void on_destroy_resource_view(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(key);
     }
 
     if (found)
