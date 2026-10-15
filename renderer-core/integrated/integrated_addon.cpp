@@ -6094,32 +6094,35 @@ bool prepare_island_batch(
             decision);
 
     if (exact_pmetal_envspec) {
-        const bool envspec_prepared =
-            g_pmetal_envspec.prepare(
-                cmd_list,
-                material,
-                decision,
-                envspec_family,
-                prepared.envspec);
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
             static std::atomic_bool first_nonmetal_gate{false};
-            static std::atomic_bool first_nonmetal_prepared{false};
             if (!first_nonmetal_gate.exchange(true)) {
                 reshade::log::message(
                     reshade::log::level::info,
                     "[DSRRL V286 NONMETAL] stage=exact_material_candidate");
             }
-            if (envspec_prepared &&
-                !first_nonmetal_prepared.exchange(true)) {
+        }
+#endif
+        // Preserve the original exact audit-verified fail-open call.
+        if (!g_pmetal_envspec.prepare(
+                cmd_list,
+                material,
+                decision,
+                envspec_family,
+                prepared.envspec))
+            return false;
+
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (material.route_index != 345u) {
+            static std::atomic_bool first_nonmetal_prepared{false};
+            if (!first_nonmetal_prepared.exchange(true)) {
                 reshade::log::message(
                     reshade::log::level::info,
                     "[DSRRL V286 NONMETAL] stage=full_atomic_prepare_ready");
             }
         }
 #endif
-        if (!envspec_prepared)
-            return false;
 
         prepared.envspec_in_batch = true;
 
