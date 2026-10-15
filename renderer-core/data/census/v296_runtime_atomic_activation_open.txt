@@ -1,0 +1,1 @@
+V296 source code gate and patcher committed. A binary build and runtime receiver/pixel verification remain OPEN; no new material consumer family has been authorized.
