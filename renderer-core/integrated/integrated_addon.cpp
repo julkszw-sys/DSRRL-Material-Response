@@ -6850,6 +6850,16 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "atomic_replay_draw_issued"
+                : "atomic_replay_failopen",
+            material, decision,
+            hemenvlerp_bound ? 1u : 0u);
+#endif
+
     const bool mr_in_batch =
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
