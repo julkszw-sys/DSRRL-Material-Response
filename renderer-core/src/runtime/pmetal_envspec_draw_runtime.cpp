@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#include "dsrrl/runtime/v287_nonmetal_trace.hpp"
 #endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
@@ -65,6 +66,16 @@ void log_prepare_stage_once(
     const mr::decision &decision,
     pmetal_envspec_receiver_family family) noexcept
 {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (material.route_index != 345u) {
+        // Previous global stage bit masked Lerp family1 after Stable family0
+        // and also collapsed different FLVER/MTD failure sources. V287
+        // records a bounded per-owner+receiver+family+stage observation.
+        v287_nonmetal_trace::log(
+            stage, material, decision, static_cast<std::uint32_t>(family));
+        return;
+    }
+#endif
     const auto observed =
         g_prepare_stage_log_mask.load(
             std::memory_order_relaxed);
