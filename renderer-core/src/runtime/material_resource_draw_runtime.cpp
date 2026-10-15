@@ -7,6 +7,9 @@
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/normal_bridge.hpp"
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -1700,12 +1703,19 @@ prepare_draw_requests_bound(
             companions[1];
         companions[1] = nullptr;
 
-        const bool exact_companion =
+        bool exact_companion =
             h1 != 0u &&
             generated::
                 spec_equipment_name_hash_allowed_v12(
                     h1) &&
             replacement != nullptr;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        // Full owner/slot/MTD + currently bound stock t1 logical identity.
+        // SpecRGB existence alone never authorizes a nonmetal consumer.
+        if (v203_equipment::exact_envspec36_material(query.material))
+            exact_companion = exact_companion &&
+                v203_equipment::exact_proven_slot_spec_hash(query, h1);
+#endif
 
         operators::resource_bridges::
             spec_rgb_context context_spec{};
@@ -1722,6 +1732,14 @@ prepare_draw_requests_bound(
                 .state ==
             operators::material_response::
                 mtd_semantic_state::use;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (v203_equipment::exact_envspec36_material(query.material)) {
+            // Operator-local PTDE EnvSpec/SpecRGB shader owns this consumer;
+            // the generic MR -> DSR PBL route remains disabled.
+            context_spec.material_specular_consumer_verified =
+                exact_companion;
+        }
+#endif
         context_spec.exact_name_ptde_companion_verified =
             exact_companion;
         context_spec.ptde_sidecar_ready =
