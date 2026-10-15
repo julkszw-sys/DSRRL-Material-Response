@@ -1,0 +1,31 @@
+name: V297 Exact PTDE Slot0 Atomic
+on:
+  push:
+    branches: [agent/v294-all-sidecar-manifest-atomic-20261015]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Source exact PTDE donor and no-hybrid verification
+        shell: pwsh
+        run: |
+          python renderer-core/tools/materialize_v296_oct10_atomic_policy.py
+          python renderer-core/tools/materialize_v297_authored_slot0.py
+          python renderer-core/tools/test_v297_authored_slot0_source.py
+      - name: Build one addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v297_one_atomic_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V297-SLOT0-ATOMIC-SOURCE-ONLY-PIXEL-OPEN
+          path: out-v297/*.addon64
+          if-no-files-found: error
