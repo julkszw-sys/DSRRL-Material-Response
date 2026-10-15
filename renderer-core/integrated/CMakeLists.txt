@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS
+    "Diagnostic: exact t1 logical hash / physical PTDE sidecar / receiver and MTD cut sampled at draw without automatic speculative shader admission"
+    OFF)
+
+option(
     DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB
     "V289 opt-in nonmetal-only RX33-35 Lerp R8 SPEC-domain first consumer island A/B; P_Metal unchanged"
     OFF)
@@ -808,6 +813,14 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
+endif()
+
+if(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+    if(NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V290 SpecRGB full draw census requires full V286 loader and exact source bridges")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS>)
 endif()
 
 if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)

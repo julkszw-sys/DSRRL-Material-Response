@@ -12,6 +12,9 @@
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+#include "dsrrl/runtime/v290_spec_draw_census.hpp"
+#endif
 #endif
 #include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
@@ -6568,6 +6571,26 @@ bool on_draw(
                 cmd_list));
 
     if (route_mask == 0u) {
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,
+        // otherwise the 1295-name funnel misses the largest unknown class.
+        // Uses the existing TLS pixel binding shadow (no D3D calls in
+        // steady state); native readback only for first unique t1 view.
+        ID3D11ShaderResourceView *shadow_t1[1]{};
+        if (dsrrl::runtime::pixel_srv_shadow_snapshot(
+                cmd_list, 1u, 1u, shadow_t1) &&
+            shadow_t1[0] != nullptr &&
+            dsrrl::runtime::v290_spec_census::first_unrouted_view(
+                shadow_t1[0])) {
+            auto *census_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            const auto probe =
+                g_material_resources.probe_exact_specular_companion(
+                    census_context);
+            dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+        }
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -6681,6 +6704,30 @@ bool on_draw(
             effect_probe_stage::fail_open);
         return false;
     }
+
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+    // CENSUS ONLY: one optional t1 snapshot per first-seen exact material /
+    // slot / receiver / Stable-Lerp pair. No material gate is relaxed.
+    // Includes non-authorized receivers to identify the *actual* semantic
+    // cut preventing a sidecar item from reaching a supported PTDE shader.
+    if ((material.valid || receiver_id != 0u) &&
+        dsrrl::runtime::v290_spec_census::claim(
+            material, receiver_id, hemenvlerp_bound ? 1u : 0u)) {
+        auto *census_context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+        const auto probe =
+            g_material_resources.probe_exact_specular_companion(
+                census_context);
+        const bool authorized =
+            dsrrl::runtime::exact_pmetal_envspec_candidate(
+                material, decision);
+        dsrrl::runtime::v290_spec_census::report(
+            material, receiver_id,
+            hemenvlerp_bound ? 1u : 0u,
+            authorized, probe);
+    }
+#endif
 
     // Direct PointLight routing is exclusive at this point. A material
     // decision that is not active can only fail open to stock DSR, so do not
@@ -7013,6 +7060,26 @@ bool on_draw_indexed(
                 cmd_list));
 
     if (route_mask == 0u) {
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,
+        // otherwise the 1295-name funnel misses the largest unknown class.
+        // Uses the existing TLS pixel binding shadow (no D3D calls in
+        // steady state); native readback only for first unique t1 view.
+        ID3D11ShaderResourceView *shadow_t1[1]{};
+        if (dsrrl::runtime::pixel_srv_shadow_snapshot(
+                cmd_list, 1u, 1u, shadow_t1) &&
+            shadow_t1[0] != nullptr &&
+            dsrrl::runtime::v290_spec_census::first_unrouted_view(
+                shadow_t1[0])) {
+            auto *census_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            const auto probe =
+                g_material_resources.probe_exact_specular_companion(
+                    census_context);
+            dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+        }
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -7108,6 +7175,30 @@ bool on_draw_indexed(
             effect_probe_stage::fail_open);
         return false;
     }
+
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+    // CENSUS ONLY: one optional t1 snapshot per first-seen exact material /
+    // slot / receiver / Stable-Lerp pair. No material gate is relaxed.
+    // Includes non-authorized receivers to identify the *actual* semantic
+    // cut preventing a sidecar item from reaching a supported PTDE shader.
+    if ((material.valid || receiver_id != 0u) &&
+        dsrrl::runtime::v290_spec_census::claim(
+            material, receiver_id, hemenvlerp_bound ? 1u : 0u)) {
+        auto *census_context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+        const auto probe =
+            g_material_resources.probe_exact_specular_companion(
+                census_context);
+        const bool authorized =
+            dsrrl::runtime::exact_pmetal_envspec_candidate(
+                material, decision);
+        dsrrl::runtime::v290_spec_census::report(
+            material, receiver_id,
+            hemenvlerp_bound ? 1u : 0u,
+            authorized, probe);
+    }
+#endif
 
     // Direct PointLight routing is exclusive at this point. A material
     // decision that is not active can only fail open to stock DSR, so do not
