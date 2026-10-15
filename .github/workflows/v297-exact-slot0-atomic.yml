@@ -15,15 +15,12 @@ jobs:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
-      - name: Source exact PTDE donor and no-hybrid verification
-        shell: pwsh
-        run: |
-          python renderer-core/tools/materialize_v296_oct10_atomic_policy.py
-          python renderer-core/tools/materialize_v297_authored_slot0.py
-          python renderer-core/tools/test_v297_authored_slot0_source.py
       - name: Build one addon
         shell: pwsh
         run: ./renderer-core/tools/build_v297_one_atomic_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify exact authored profile and no-hybrid source
+        shell: pwsh
+        run: python renderer-core/tools/test_v297_authored_slot0_source.py
       - uses: actions/upload-artifact@v4
         with:
           name: V297-SLOT0-ATOMIC-SOURCE-ONLY-PIXEL-OPEN
