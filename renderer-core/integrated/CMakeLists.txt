@@ -82,6 +82,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V291_LERP_CUBEMAP_CENSUS
+    "Diagnostic only: exact prepared PTDE EnvSpec/EnvDiffuse cubemap A/B source beta with indexed draw confirmation"
+    OFF)
+
+option(
     DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB
     "V289 opt-in nonmetal-only RX33-35 Lerp R8 SPEC-domain first consumer island A/B; P_Metal unchanged"
     OFF)
@@ -835,6 +840,16 @@ if(DSRRL_V291_MATERIAL_STAGE_CENSUS)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_MATERIAL_STAGE_CENSUS>)
+endif()
+
+if(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if(NOT DSRRL_V291_MATERIAL_STAGE_CENSUS OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR "V291 Lerp cubemap observer needs V291 material census and exact R19 PTDE EnvDiffuse island")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_LERP_CUBEMAP_CENSUS>)
 endif()
 
 if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
