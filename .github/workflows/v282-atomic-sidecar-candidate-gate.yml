@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Compile and run native SRV per-key lifetime regression tests
+        run: |
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -Irenderer-core/include renderer-core/tests/key_invalidation_journal_tests.cpp -o /tmp/v284_svr_cache_journal
+          /tmp/v284_svr_cache_journal
+          echo V284_KEY_JOURNAL_NATIVE_TEST_PASS
       - name: Test exact route collisions, sidecar manifest validation and fail-open
         run: python3 renderer-core/tools/v282/test_prebind_candidates.py
       - name: Compile source candidate graph, never authorize draw without exact runtime joins
