@@ -6755,6 +6755,12 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance)) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "atomic_native_draw_armed", material, decision,
+                hemenvlerp_bound ? 1u : 0u);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade continues into its single original
