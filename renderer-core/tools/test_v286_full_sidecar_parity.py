@@ -32,6 +32,7 @@ assert "exact_envspec36_material(identity)" in read("renderer-core/src/runtime/f
 assert "exact_envspec36_draw(material, decision)" in draw
 assert "env.envspc_slot < 4u" in gate
 assert "g_pmetal_envspec.prepare(" in integration
+assert "[DSRRL V286 NONMETAL] stage=full_atomic_prepare_ready" in integration
 assert "prepared.envspec.material_resources.requests[i]" in integration
 assert "lerp_query,\n                true,\n                false," in integration
 assert "DSRRL_V285_ATOMIC_NONMETAL_DIAG" in cmake
