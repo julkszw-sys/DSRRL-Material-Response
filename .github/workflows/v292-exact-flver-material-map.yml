@@ -1,0 +1,41 @@
+name: V292 Exact Full FLVER Owner Material Map
+on:
+  push:
+    branches: [agent/v292-exact-flver-material-owner-map-20261015]
+  pull_request:
+    branches: [agent/v290-full-sidecar-draw-coverage-20261015]
+  workflow_dispatch:
+jobs:
+  exact-flver-source-census:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate exactly the SHA-pinned 19985 FLVER material slots
+        run: |
+          python3 renderer-core/tools/v292_exact_flver_owner_material_reverse_census.py --out v292-exact-owner-map
+          python3 - <<'PY'
+          import csv,json
+          from pathlib import Path
+          p=Path("v292-exact-owner-map")
+          summary=json.loads((p/"summary.json").read_text())
+          assert summary["source_owner_rows"]==19985
+          assert summary["source_flver_groups"]==3944
+          assert summary["runtime_allowlist_extended"] is False
+          with (p/"dsr_all_19985_owner_slots.csv").open() as f:
+              rows=list(csv.DictReader(f))
+          assert len(rows)==19985
+          assert len({(r["flver_sha256"],r["material_slot"]) for r in rows})==19985
+          assert all(len(r["flver_sha256"])==64 for r in rows)
+          print("V292_FULL_OWNER_MAPPING_CONSTRUCTION_PASS; RUNTIME_AND_PIXELS_OPEN")
+          PY
+      - name: Upload exact offline census — not runtime admission
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V292-full-19985-FLVER-slot-map-source-only
+          path: v292-exact-owner-map/
+          retention-days: 90
