@@ -72,6 +72,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V285_ATOMIC_NONMETAL_DIAG
+    "V285 experimental 36 exact FLVER/slot/MTD SpecRGB+EnvSpec PTDE atomic material island; OFF in releases"
+    OFF)
+
+option(
     DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG
     "Diagnostic: PR203 V13/native-DSR EnvSpec plus only PTDE SpecRGB*c101*COLOR0 modulation on the EnvSpec accumulator before the preserved common merge; stable HemEnv + paired HemEnvLerp"
     OFF)
@@ -798,6 +803,20 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
+endif()
+
+if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE OR
+       NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE OR
+       NOT DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL)
+        message(FATAL_ERROR
+            "V285 nonmetal diagnostic needs complete R19 PTDE operator and independent UL/PointLight cuts")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V285_ATOMIC_NONMETAL_DIAG>)
 endif()
 
 if(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)

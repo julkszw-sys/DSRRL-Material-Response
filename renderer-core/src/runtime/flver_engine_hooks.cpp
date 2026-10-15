@@ -15,6 +15,9 @@
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #endif
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -460,8 +463,6 @@ bool selector_identity_cache_lookup(
         material_index < 0)
         return false;
 
-    const auto epoch =
-        flver_identity_epoch();
     const auto set =
         selector_identity_cache_set(
             container,
@@ -473,17 +474,24 @@ bool selector_identity_cache_lookup(
     for (std::size_t way = 0u;
          way < k_selector_identity_cache_ways;
          ++way) {
-        const auto &entry =
+        auto &entry =
             g_selector_identity_cache[
                 base + way];
 
         if (!entry.occupied ||
             entry.container != container ||
             entry.material_index !=
-                material_index ||
-            entry.epoch != epoch)
+                material_index)
             continue;
 
+        std::uint64_t current_epoch = 0u;
+        if (!flver_identity_cache_epoch_survives(
+                container,
+                entry.epoch,
+                current_epoch))
+            continue;
+
+        entry.epoch = current_epoch;
         identity = entry.identity;
         return identity.valid &&
             identity.owner_tuple_exact;
@@ -1037,7 +1045,11 @@ bool publish_exact_selector_identity(
 
     // Route 345 is necessary but not sufficient. The isolated source runtime
     // retains exact semantic/raw-MTD validation before donor decode.
-    if (identity.route_index == 345u) {
+    if (identity.route_index == 345u
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        || v203_equipment::exact_envspec36_material(identity)
+#endif
+    ) {
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)
