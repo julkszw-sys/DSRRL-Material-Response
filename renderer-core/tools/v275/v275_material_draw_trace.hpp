@@ -49,7 +49,16 @@ inline constexpr std::array<std::uint16_t,27u> k_exact_cloth_leather_indices = {
 }};
 static_assert(mr::generated::k_envspec_router_record_count==325u,
               "V275 exact MTD router changed, census must be reverified");
-inline std::array<std::atomic<std::uint64_t>,768u> g_seen{};
+// V276: per-class fairness, not a global 768 event cutoff. 27 MTD classes
+// and the independent P_Metal control each get their own 1024 open-addressed
+// keys, allowing late Lerp beta bands even if a prior material is verbose.
+// Monotone, no background thread and no D3D state mutation.
+inline constexpr std::uint32_t k_family_count=28u;
+inline constexpr std::uint32_t k_slots_per_family=1024u;
+inline std::array<std::atomic<std::uint64_t>,
+    k_family_count*k_slots_per_family> g_seen{};
+inline std::array<std::atomic<std::uint32_t>, k_family_count> g_family_seen{};
+inline std::array<std::atomic<std::uint32_t>, k_family_count> g_family_exhausted{};
 inline std::atomic<std::uint32_t> g_count{0u};
 inline std::atomic<std::uint32_t> g_overflow{0u};
 inline void hex_digest(const dsrrl::core::sha256_digest &h, char (&out)[65]) noexcept {
@@ -106,18 +115,35 @@ inline std::uint64_t mix(std::uint64_t x) noexcept {
     x^=x>>33; x*=0xc4ceb9fe1a85ec53ull; x^=x>>33;
     return x;
 }
-inline bool reserve_key(std::uint64_t key) noexcept {
+inline std::uint32_t family_id(const match &matched) noexcept {
+    if (matched.control || matched.row==nullptr) return 27u;
+    const auto &a=mr::generated::k_envspec_router_v1;
+    for (std::uint32_t i=0u;i<27u;++i) {
+        if (&a[k_exact_cloth_leather_indices[i]] == matched.row)
+            return i;
+    }
+    return 27u; // unresolved is never admitted by classify() gate
+}
+inline bool reserve_key(std::uint64_t key, std::uint32_t family) noexcept {
+    if (family >= k_family_count) return false;
     key=mix(key)|1ull;
-    for (auto &entry:g_seen) {
+    const auto base=family*k_slots_per_family;
+    const auto start=static_cast<std::uint32_t>((key>>12u)
+                      & (k_slots_per_family-1u));
+    // Avoid a 768/28672-element linear scan on EVERY frequently repeated draw.
+    for (std::uint32_t attempt=0u; attempt<k_slots_per_family;++attempt) {
+        auto &entry=g_seen[base+((start+attempt)&(k_slots_per_family-1u))];
         auto prior=entry.load(std::memory_order_relaxed);
         if(prior==key) return false;
         if(prior==0ull &&
            entry.compare_exchange_strong(prior,key,std::memory_order_relaxed)) {
+            g_family_seen[family].fetch_add(1u,std::memory_order_relaxed);
             g_count.fetch_add(1u,std::memory_order_relaxed);
             return true;
         }
     }
     g_overflow.fetch_add(1u,std::memory_order_relaxed);
+    g_family_exhausted[family].fetch_add(1u,std::memory_order_relaxed);
     return false;
 }
 inline std::uint64_t ptr_id(const void *p) noexcept {
@@ -157,7 +183,20 @@ inline void observe(reshade::api::command_list *cmd,
         (static_cast<std::uint64_t>(decision.active)<<60u) ^
         (static_cast<std::uint64_t>(matched.sha_exact)<<59u) ^
         (static_cast<std::uint64_t>(decision.route_index)<<5u);
-    if(!reserve_key(key)) return;
+    const auto family=family_id(matched);
+    if(!reserve_key(key,family)) return;
+    const auto unique=g_count.load(std::memory_order_relaxed);
+    if((unique%256u)==0u) {
+        char progress[220]{};
+        std::snprintf(progress,sizeof(progress),
+            "[DSRRL V276 COVERAGE] unique=%u material_group=%u group_unique=%u "
+            "family_overflow=%u total_overflow=%u capacity=28x1024 "
+            "CB12W_ONLY_NOT_BETA", unique,family,
+            g_family_seen[family].load(std::memory_order_relaxed),
+            g_family_exhausted[family].load(std::memory_order_relaxed),
+            g_overflow.load(std::memory_order_relaxed));
+        reshade::log::message(reshade::log::level::info,progress);
+    }
     ID3D11PixelShader *ps=nullptr;
     ID3D11ShaderResourceView *srvs[3]{};
     ID3D11RenderTargetView *rtv[2]{};
@@ -190,7 +229,7 @@ inline void observe(reshade::api::command_list *cmd,
         matched.row->mtd_name;
     char line[2400]{};
     std::snprintf(line,sizeof(line),
-       "[DSRRL V275 MATERIAL DRAW] stage=%s phase=%s rx=%u "
+       "[DSRRL V275 MATERIAL DRAW] v276_balanced=1 stage=%s phase=%s rx=%u "
        "name=%s route=%u decision_active=%u reason=%u certified=0x%x "
        "full_mtd=%s full_flver=%s sem=%016llx "
        "tuple=%u mat_exact=%u slot=%u slot_valid=%u "
@@ -250,7 +289,7 @@ inline void observe(reshade::api::command_list *cmd,
 inline void summary() noexcept {
     char b[250]{};
     std::snprintf(b,sizeof(b),
-      "[DSRRL V275 SUMMARY] unique=%u overflow=%u "
+      "[DSRRL V276 SUMMARY] unique=%u overflow=%u "
       "DRAW_CLASSIFICATION_SOURCE_AUTHENTICATED_ONLY "
       "GPU_READBACK=NOT_IMPLEMENTED PIXEL=OPEN",
       g_count.load(std::memory_order_relaxed),

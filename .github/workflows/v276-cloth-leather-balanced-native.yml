@@ -1,0 +1,67 @@
+name: V276 V272 Cloth Leather Balanced Late Beta Draw Native Addon
+on:
+  push:
+    branches:
+      - agent/v276-v272-cloth-leather-balanced-beta-trace-20261015
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v276-windows-x64:
+    runs-on: windows-latest
+    env:
+      DSRRL_V203_EQUIPMENT_ENVSPEC36: 'ON'
+      DSRRL_V203_CONSTEXPR_OWNER_LOOKUP: 'ON'
+      DSRRL_V203_EXACT_LEATHER_MTD_INDEX: 'ON'
+      DSRRL_V203_OWNER_PATH_TRACE: 'ON'
+      DSRRL_V203_FULL_SIDECAR_SPECULAR: 'ON'
+      DSRRL_V206_NATIVE_T1_ADAPTER: 'ON'
+      DSRRL_V214_EXACT_RESOURCE_NAME_SRV: 'ON'
+      DSRRL_V216_BOUND_T1_NATIVE_ALIAS: 'ON'
+      DSRRL_V219_EXACT_NONMETAL_GATE_TRACE: 'ON'
+      DSRRL_V220_NONMETAL_SOURCE_JOIN: 'ON'
+      DSRRL_V221_NONMETAL_PROBE_CONTEXT_RETRY: 'ON'
+      DSRRL_V222_EXACT_PROBE_REJECT_FRONTIER: 'ON'
+      DSRRL_V223_EXACT_NONMETAL_SHARED_LIGHTBANK_FALLBACK: 'ON'
+      DSRRL_V224_EXACT_NATIVE_T12_RESOURCE_JOIN: 'ON'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Source integrity, negative route oracles and V275 injection source
+        shell: pwsh
+        run: |
+          git diff --exit-code ae9ac314d06ad8758e1aa7430cb236eef0eefe27 HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/shaders
+          if($LASTEXITCODE -ne 0){throw 'V275 frozen V272 source mutation'}
+          python -m py_compile renderer-core/tools/v275/apply_v275_material_draw_trace.py
+          if($LASTEXITCODE -ne 0){throw 'V275 patcher syntax failure'}
+          python renderer-core/tools/v274/test_v274_actual_cb85_witness.py
+          if($LASTEXITCODE -ne 0){throw 'V274 CB source test failed'}
+          python renderer-core/tools/v274b/test_v274b_deferred_cb0_shadow.py
+          if($LASTEXITCODE -ne 0){throw 'V274B CB source test failed'}
+          python renderer-core/tools/v274c/test_v274c_atmos_cb0_log.py
+          if($LASTEXITCODE -ne 0){throw 'V274C atmosphere source test failed'}
+      - name: Native single addon build and exact V272 source restoration
+        shell: pwsh
+        run: |
+          & ./renderer-core/tools/v276/build_v276_one_addon.ps1
+          if($LASTEXITCODE -ne 0){throw 'V275 native addon failed'}
+          $out='DSRRL_V276_V272_CLOTH_LEATHER_BALANCED_LERP_DIAGNOSTIC.addon64'
+          if(!(Test-Path $out)){throw 'V275 expected addon missing'}
+          Write-Host "V275_VERIFIED_SHA256=$((Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant())"
+          git diff --exit-code HEAD -- renderer-core/src renderer-core/include renderer-core/integrated renderer-core/tools/v274b/build_v274b_lerp_cpu_shadow.ps1
+          if($LASTEXITCODE -ne 0){throw 'Transient source modified after build'}
+          Write-Host 'V275_NATIVE_COMPATIBILITY_PASS_RUNTIME_MATERIAL_AND_PIXEL_OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V276-V272-Cloth-Leather-Balanced-Late-Lerp-One-Addon
+          path: DSRRL_V276_V272_CLOTH_LEATHER_BALANCED_LERP_DIAGNOSTIC.addon64
+          if-no-files-found: error
