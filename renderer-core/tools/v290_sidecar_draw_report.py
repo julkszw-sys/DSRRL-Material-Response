@@ -72,6 +72,7 @@ def parse(path:Path, sidecar:Path) -> tuple[dict,list[dict]]:
                      "first_observed_cut":cut,
                      "draw_witness_for_tuple":int(issued)})
     summary={
+        "unrouted_stock_t1_names_observed":len({r["spec_hash"] for r in rows if r["route"]=="UNROUTED"}),
         "scope":"OBSERVED_DRAW_SCOPE_ONLY",
         "sidecar_spec_names_total":len(names),
         "unique_manifest_names_seen_bound_t1":len(manifest_seen),
