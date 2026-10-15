@@ -47,10 +47,24 @@ jobs:
               assert by[(h,slot)]["mtd_name"]==mtd,(h,slot,by[(h,slot)]["mtd_name"])
           print("V283_EXACT_FLVER_LEATHER_METAL_4_OF_4_SOURCE_PASS")
           PY
+      - name: Reproduce exact Oct10 1295-name sidecar crosswalk
+        run: |
+          python3 renderer-core/tools/v282/join_sidecar_oct10.py --root . --output /tmp/v283_oct10_spec_names.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/v283_oct10_spec_names.json'))
+          assert j['activation_authorized'] is False
+          assert j['counts']['oct10_specular_names'] == 1295
+          assert j['counts']['oct10_v12_overlap'] > 700
+          assert j['counts']['oct10_not_in_v12'] > 400
+          assert all(x['physical_dds_sha256'] is None and x['ready_for_runtime'] is False for x in j['records'])
+          print("V283_OCT10_NAME_SOURCE_JOIN_PASS_NO_DDS_SHA_NO_PIXEL")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: V282-offline-source-candidates-NOT-ADDON
           path: |
             /tmp/v282_prebind.json
             /tmp/v283_owner_material.json
+            /tmp/v283_oct10_spec_names.json
           if-no-files-found: error
