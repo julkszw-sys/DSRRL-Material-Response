@@ -32,6 +32,8 @@ struct material_resource_telemetry {
     std::uint64_t normal_requests = 0;
     std::uint64_t fail_open = 0;
     bool quarantined = false;
+    std::uint64_t shared_srv_reuse = 0;
+    std::uint64_t shared_srv_upload = 0;
 };
 
 struct specular_companion_probe {
