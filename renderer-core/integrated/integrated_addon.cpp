@@ -10,6 +10,9 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v287_nonmetal_trace.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
@@ -6093,6 +6096,16 @@ bool prepare_island_batch(
             material,
             decision);
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (hemenvlerp_bound &&
+        material.valid && decision.active &&
+        !exact_pmetal_envspec) {
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            "lerp_generic_fallback",
+            material, decision, 1u);
+    }
+#endif
+
     if (exact_pmetal_envspec) {
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
@@ -6104,14 +6117,21 @@ bool prepare_island_batch(
             }
         }
 #endif
-        // Preserve the original exact audit-verified fail-open call.
+        // Preserve the exact audit-verified fail-open carrier.
         if (!g_pmetal_envspec.prepare(
                 cmd_list,
                 material,
                 decision,
                 envspec_family,
-                prepared.envspec))
+                prepared.envspec)) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "atomic_prepare_fail",
+                material, decision,
+                static_cast<std::uint32_t>(envspec_family));
+#endif
             return false;
+        }
 
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
@@ -6124,6 +6144,11 @@ bool prepare_island_batch(
         }
 #endif
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            "atomic_prepare_ready", material, decision,
+            static_cast<std::uint32_t>(envspec_family));
+#endif
         prepared.envspec_in_batch = true;
 
         if (dsrrl::runtime::append_island_draw_request(
@@ -6146,6 +6171,11 @@ bool prepare_island_batch(
             }
         }
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            "atomic_batch_ready", material, decision,
+            static_cast<std::uint32_t>(envspec_family));
+#endif
         return true;
     }
 
@@ -6208,6 +6238,10 @@ bool prepare_island_batch(
         }
 
         if (lerp_mr_prepared) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "lerp_diffuse_only_ready", material, decision, 1u);
+#endif
             prepared.mr_in_batch = true;
             prepared.lerp_mr_in_batch = true;
 
@@ -6721,6 +6755,12 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance)) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "atomic_native_draw_armed", material, decision,
+                hemenvlerp_bound ? 1u : 0u);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade continues into its single original
@@ -6815,6 +6855,16 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "atomic_replay_draw_issued"
+                : "atomic_replay_failopen",
+            material, decision,
+            hemenvlerp_bound ? 1u : 0u);
+#endif
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
