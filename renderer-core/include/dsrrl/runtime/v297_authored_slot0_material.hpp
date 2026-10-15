@@ -65,7 +65,7 @@ inline bool promote_exact_slot0_source(
     out=host_decision;
     // Only fill an INACTIVE retail route; do not replace an authorized MR
     // decision. No P_Metal/route345 or other light operator can be demoted.
-    if (host_decision.active || m.route_index != 0u ||
+    if (host_decision.active ||
         !m.valid || !m.actual_material_exact ||
         !m.owner_tuple_exact || !m.material_slot_valid ||
         (receiver < 33u || receiver > 35u))
