@@ -13,6 +13,39 @@
 
 namespace dsrrl::runtime::v290_spec_census {
 inline std::array<std::atomic<std::uint64_t>,8192u> first_seen{};
+inline std::array<std::atomic<std::uintptr_t>,8192u> unrouted_views{};
+inline bool first_unrouted_view(const void *view) noexcept
+{
+    const auto key=reinterpret_cast<std::uintptr_t>(view);
+    if(key==0u)return false;
+    constexpr auto mask=unrouted_views.size()-1u;
+    for(std::size_t i=0;i<16u;i++) {
+        auto &v=unrouted_views[((key>>4u)+i*127u)&mask];
+        const auto old=v.load(std::memory_order_relaxed);
+        if(old==key)return false;
+        if(old==0u) {
+            std::uintptr_t zero=0u;
+            if(v.compare_exchange_strong(zero,key,std::memory_order_relaxed))
+                return true;
+            if(zero==key)return false;
+        }
+    }
+    return false;
+}
+inline void report_unrouted(const specular_companion_probe &probe) noexcept
+{
+    if(!probe.logical_hash_allowed)return;
+    char buf[256]{};
+    std::snprintf(buf,sizeof(buf),
+        "[DSRRL V290 UNROUTED SPEC DRAW] cut=NO_REGISTERED_SHADER_FAMILY "
+        "rx=0 family=2 material=0 owner=0 spec=%016llx "
+        "stock_t1=%u logical=%u manifest=%u file=%u",
+        static_cast<unsigned long long>(probe.logical_hash),
+        probe.stock_bound?1u:0u,probe.snapshot_resolved?1u:0u,
+        probe.logical_hash_allowed?1u:0u,probe.companion_ready?1u:0u);
+    reshade::log::message(reshade::log::level::info,buf);
+}
+
 
 inline bool claim(
     const operators::material_response::material_identity &m,
