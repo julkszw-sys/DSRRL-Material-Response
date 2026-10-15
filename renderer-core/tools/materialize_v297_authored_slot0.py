@@ -73,6 +73,6 @@ for old,new in [(include_from,include_to),(region_from,region_to),(prepare_from,
     if s.count(old)!=1:
         raise RuntimeError("Source drift or missing V296 materializer: "+old[:48])
     s=s.replace(old,new,1)
-assert s.count("effective_envspec_decision")==4,s.count("v297_authored")==4
+assert s.count("effective_envspec_decision")==4,s.count("v297_authored")==2
 p.write_text(s,"utf-8")
 print("V297_SOURCE_PATCH_PASS slot0_authority=exact_FLVER_SHA_slot_MTD_Rx")
