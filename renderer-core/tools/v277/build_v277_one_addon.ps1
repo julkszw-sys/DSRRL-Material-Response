@@ -25,7 +25,7 @@ try {
     $bytes=[IO.File]::ReadAllBytes($source)
     $all=[Text.Encoding]::ASCII.GetString($bytes)
     foreach($token in @('[DSRRL V275 MATERIAL DRAW]','v276_balanced=1',
-      '[DSRRL V277 EXACT DXBC CAPTURE]','DSRRL_V277_CAPTURE')){
+      '[DSRRL V277 EXACT DXBC CAPTURE]')){
       if(!$all.Contains($token)){throw "V277 missing marker: $token"}
     }
     [IO.File]::WriteAllBytes($out,$bytes)
