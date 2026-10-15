@@ -999,10 +999,10 @@ acquired_sidecar acquire_sidecar(
                 return {{winner, load_status::ready}, true};
             }
 
-            const auto [inserted_at, inserted] =
+            const bool inserted =
                 g_sidecar_shared.emplace(
                     key,
-                    sidecar_shared_entry{loaded.view, 1u});
+                    sidecar_shared_entry{loaded.view, 1u}).second;
             if (!inserted) {
                 // No successful publication: retain the standalone SRV.
                 return {loaded, false};
@@ -1362,21 +1362,21 @@ void on_init_resource_view(
                 // exact logical identity. Neither association is safe. Remove
                 // the previous record and quarantine this handle until its
                 // destroy_resource_view callback.
-                old = found->second;
+                old = std::move(found->second);
                 g_cache.erase(found);
                 g_ambiguous_view_device.emplace(
                     key,
                     native_device);
                 had_old = true;
             } else if (found != g_cache.end()) {
-                old = found->second;
-                found->second = set;
+                old = std::move(found->second);
+                found->second = std::move(set);
                 had_old = true;
                 accepted = true;
             } else {
                 g_cache.emplace(
                     key,
-                    set);
+                    std::move(set));
                 accepted = true;
             }
 
