@@ -35,6 +35,15 @@ def parse(path:Path, sidecar:Path) -> tuple[dict,list[dict]]:
             key=tuple(d.get(k,"") for k in KEYS)
             if key not in first:first[key]=d
             continue
+        m=RE_UNROUTED.search(line)
+        if m:
+            d=dict(KV.findall(m.group(1)))
+            d.update({"route":"UNROUTED","slot":"0","mtd":"UNKNOWN",
+                      "flver":"UNKNOWN_"+d.get("spec","0"),
+                      "rx":"0","family":"2","cut":"NO_REGISTERED_SHADER_FAMILY"})
+            key=tuple(d.get(k,"") for k in KEYS)
+            if key not in first:first[key]=d
+            continue
         m=RE_DRAW.search(line)
         if m:
             d=dict(KV.findall(m.group(1)))
