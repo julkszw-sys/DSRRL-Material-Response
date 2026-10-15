@@ -87,4 +87,32 @@ inline void log_unrouted(const void *stock_t1,
         static_cast<unsigned long long>(probe.logical_hash));
     reshade::log::message(reshade::log::level::info,line);
 }
+// Bound PS pipeline handles are session-local evidence, NOT shader hashes.
+// This exposes unknown pixel receiver families even when stock t1 is absent.
+inline std::array<std::atomic<std::uint64_t>,8192u> pipelines_seen{};
+inline void log_pipeline_bind(std::uint64_t handle,
+                              std::uint32_t route_mask) noexcept {
+    if(handle==0u)return;
+    const std::size_t mask=pipelines_seen.size()-1u;
+    const auto h=(handle ^ (static_cast<std::uint64_t>(route_mask)<<32u)) | 1u;
+    for(std::size_t i=0;i<16u;++i) {
+        auto &cell=pipelines_seen[(static_cast<std::size_t>(h)+i*113u)&mask];
+        const auto old=cell.load(std::memory_order_relaxed);
+        if(old==h)return;
+        if(old==0u) {
+            std::uint64_t zero=0u;
+            if(cell.compare_exchange_strong(zero,h,std::memory_order_relaxed)) {
+                char line[272]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V291 SHADER PIPELINE] bound=%016llx route_mask=%u "
+                    "material=UNKNOWN flver=UNKNOWN shader_sha=UNKNOWN",
+                    static_cast<unsigned long long>(handle),
+                    static_cast<unsigned>(route_mask));
+                reshade::log::message(reshade::log::level::info,line);
+                return;
+            }
+            if(zero==h)return;
+        }
+    }
+}
 } // namespace dsrrl::runtime::v291_material_trace
