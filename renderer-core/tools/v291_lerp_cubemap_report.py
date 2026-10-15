@@ -13,7 +13,8 @@ from pathlib import Path
 
 MARKER = "[DSRRL V291 LERP CUBEMAP]"
 KV = re.compile(r"(\w+)=([^\s]+)")
-ISSUED = {"indexed_issued", "draw_issued", "native_armed"}
+ISSUED = {"indexed_issued", "draw_issued"}
+ARMED = {"native_armed"}
 COLUMNS = ("log", "stage", "rx", "route", "slot", "mtd", "flver",
            "beta", "beta_band", "serial", "spec_a", "spec_b",
            "diffuse_a", "diffuse_b", "pair_join", "t11", "t13",
@@ -32,6 +33,7 @@ def parse(logs):
             except ValueError:
                 beta = float("nan")
             row["is_issued"] = int(row["stage"] in ISSUED)
+            row["native_armed"] = int(row["stage"] in ARMED)
             row["nonzero_beta"] = int(0.0 < beta < 1.0)
             row["distinct_probe_pair"] = int(row["spec_a"] != row["spec_b"])
             row["resource_join_complete"] = int(
@@ -49,13 +51,14 @@ def main():
     args.output_dir.mkdir(parents=True,exist_ok=True)
     with (args.output_dir/"lerp_cube_draws.csv").open("w",newline="",encoding="utf-8") as f:
         writer=csv.DictWriter(f,fieldnames=[*COLUMNS,
-            "is_issued","nonzero_beta","distinct_probe_pair","resource_join_complete"])
+            "is_issued","native_armed","nonzero_beta","distinct_probe_pair","resource_join_complete"])
         writer.writeheader()
         writer.writerows(rows)
     issued=[r for r in rows if r["is_issued"]]
     summary={
         "events":len(rows),
         "issued_observations":len(issued),
+        "native_armed_observations":sum(r["native_armed"] for r in rows),
         "nonzero_beta_issued":sum(r["nonzero_beta"] for r in issued),
         "distinct_pair_nonzero_beta_issued":sum(
             r["nonzero_beta"] and r["distinct_probe_pair"] for r in issued),
