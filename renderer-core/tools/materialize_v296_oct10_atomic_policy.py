@@ -14,6 +14,15 @@ insert='''    bool v296_partial_material = false;
                     dsrrl::runtime::v296::decide_material_policy(
                         false, p.stock_bound, p.snapshot_resolved,
                         p.logical_hash_allowed));
+            if (v296_partial_material) {
+                static std::atomic_bool announced{false};
+                if (!announced.exchange(true))
+                    reshade::log::message(
+                        reshade::log::level::info,
+                        "[DSRRL V296] stage=non_atomic_spec_failopen"
+                        " material=stock_dsr"
+                        " independent_upper_lower=preserved");
+            }
         }
     }
 #endif
