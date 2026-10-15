@@ -6571,6 +6571,26 @@ bool on_draw(
                 cmd_list));
 
     if (route_mask == 0u) {
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,
+        // otherwise the 1295-name funnel misses the largest unknown class.
+        // Uses the existing TLS pixel binding shadow (no D3D calls in
+        // steady state); native readback only for first unique t1 view.
+        ID3D11ShaderResourceView *shadow_t1[1]{};
+        if (dsrrl::runtime::pixel_srv_shadow_snapshot(
+                cmd_list, 1u, 1u, shadow_t1) &&
+            shadow_t1[0] != nullptr &&
+            dsrrl::runtime::v290_spec_census::first_unrouted_view(
+                shadow_t1[0])) {
+            auto *census_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            const auto probe =
+                g_material_resources.probe_exact_specular_companion(
+                    census_context);
+            dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+        }
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -7040,6 +7060,26 @@ bool on_draw_indexed(
                 cmd_list));
 
     if (route_mask == 0u) {
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,
+        // otherwise the 1295-name funnel misses the largest unknown class.
+        // Uses the existing TLS pixel binding shadow (no D3D calls in
+        // steady state); native readback only for first unique t1 view.
+        ID3D11ShaderResourceView *shadow_t1[1]{};
+        if (dsrrl::runtime::pixel_srv_shadow_snapshot(
+                cmd_list, 1u, 1u, shadow_t1) &&
+            shadow_t1[0] != nullptr &&
+            dsrrl::runtime::v290_spec_census::first_unrouted_view(
+                shadow_t1[0])) {
+            auto *census_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            const auto probe =
+                g_material_resources.probe_exact_specular_companion(
+                    census_context);
+            dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+        }
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
