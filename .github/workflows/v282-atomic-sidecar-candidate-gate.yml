@@ -37,6 +37,7 @@ jobs:
           assert d['activation_authorized'] is False
           assert d['counts']['flver_groups']==3944
           assert d['counts']['owner_slots']==19985
+          print(d["anchor_observations"])
           by={(x["flver_sha256"],x["material_slot"]):x for x in d["entries"]}
           a="eb3b77ee419f9e2997b7d427987c002411fdf08edda12834be4a9f51b3c4eb7b"
           b="672e35606495f24e36c704f32fceda9b933563a64e03379375f47f9fe04a0a7d"
