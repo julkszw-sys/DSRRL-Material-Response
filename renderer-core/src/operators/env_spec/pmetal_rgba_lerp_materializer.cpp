@@ -2145,4 +2145,112 @@ materialize_pmetal_rgba_lerp_receiver(
     return outcome;
 }
 
+
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
+    const std::uint8_t *r19_source,
+    std::size_t r19_size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    output.clear();
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = static_cast<std::size_t>(-1);
+    if (!parse_dxbc(r19_source, r19_size, chunks, code_index, words))
+        return false;
+
+    std::vector<instruction_view> ins;
+    if (!decode(words, ins))
+        return false;
+
+    // The exact R19 Lerp receiver contains IF b0[85].x. Only its ELSE
+    // branch has this 5/10/5 LOG-MUL(2.2)-EXP SPEC-domain transfer.
+    // Stable R8 already removes this very operator in RX33/34/35.
+    constexpr std::uint32_t k_f22 = 0x400ccccdu;
+    constexpr std::uint32_t k_nop = 0x0100003au;
+    std::size_t matches = 0u;
+    std::size_t gamma_log = 0u;
+    std::size_t gamma_exp = 0u;
+    std::size_t material_if_matches = 0u;
+
+    for (std::size_t i=0u; i<ins.size(); ++i) {
+        const auto &branch = ins[i];
+        if (branch.opcode != 0x1fu || branch.length != 4u ||
+            branch.offset + 3u >= words.size() ||
+            words[branch.offset+1u] != 0x0020800au ||
+            words[branch.offset+2u] != 0u ||
+            words[branch.offset+3u] != 85u)
+            continue;
+        ++material_if_matches;
+        std::size_t depth = 0u;
+        bool in_else = false;
+        for (std::size_t j=i+1u; j<ins.size(); ++j) {
+            const auto &cur = ins[j];
+            if (cur.opcode == 0x1fu) {++depth;continue;}
+            if (cur.opcode == 0x15u) {
+                if (depth == 0u) break;
+                --depth;continue;
+            }
+            if (cur.opcode == 0x12u && depth==0u) {
+                in_else = true;
+                continue;
+            }
+            if (!in_else || depth!=0u || cur.opcode!=0x2fu ||
+                cur.length!=5u || j+2u >= ins.size())
+                continue;
+            const auto &mul=ins[j+1u];
+            const auto &exp=ins[j+2u];
+            if (mul.offset!=cur.offset+cur.length ||
+                exp.offset!=mul.offset+mul.length ||
+                mul.opcode!=0x38u || mul.length!=10u ||
+                exp.opcode!=0x19u || exp.length!=5u ||
+                exp.offset+5u > words.size())
+                continue;
+            const auto reg = words[cur.offset+2u];
+            if (words[cur.offset+1u]!=0x00100072u ||
+                words[cur.offset+3u]!=0x00100246u ||
+                words[cur.offset+4u]!=reg ||
+                words[mul.offset+1u]!=0x00100072u ||
+                words[mul.offset+2u]!=reg ||
+                words[mul.offset+3u]!=0x00100246u ||
+                words[mul.offset+4u]!=reg ||
+                words[mul.offset+5u]!=0x00004002u ||
+                words[mul.offset+6u]!=k_f22 ||
+                words[mul.offset+7u]!=k_f22 ||
+                words[mul.offset+8u]!=k_f22 ||
+                words[mul.offset+9u]!=0u ||
+                words[exp.offset+1u]!=0x00100072u ||
+                words[exp.offset+3u]!=0x00100246u ||
+                words[exp.offset+4u]!=reg)
+                continue;
+            ++matches;
+            gamma_log=cur.offset;
+            gamma_exp=exp.offset;
+        }
+    }
+    if (material_if_matches!=1u || matches!=1u ||
+        gamma_exp<=gamma_log)
+        return false;
+
+    // Exact Stable R8 semantic topology, not an arbitrary gain:
+    // keep the already-computed SPEC carrier register, NOP LOG and MUL,
+    // MOV it into the original EXP live-out. Every other instruction,
+    // register, RDEF, CB and resource slot remains unchanged.
+    std::fill(words.begin()+static_cast<std::ptrdiff_t>(gamma_log),
+              words.begin()+static_cast<std::ptrdiff_t>(gamma_exp),
+              k_nop);
+    words[gamma_exp]=(words[gamma_exp]&~0x7ffu)|0x36u;
+    std::vector<instruction_view> after;
+    if (!decode(words, after))
+        return false;
+    if (!rebuild(r19_source,r19_size,std::move(chunks),
+                 code_index,words,output)) {
+        output.clear();
+        return false;
+    }
+    return legacy_plan::dxbc::checksum_container_valid(
+        output.data(),output.size());
+}
+#endif
+
 } // namespace dsrrl::operators::env_spec
