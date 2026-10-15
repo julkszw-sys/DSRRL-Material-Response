@@ -6855,6 +6855,11 @@ bool on_draw(
         (prepared.mr_in_batch?2u:0u) |
         (prepared.clustered_in_batch?4u:0u));
 #endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            "prepared",material,decision,prepared.envspec);
+#endif
     if (k_pmetal_native_draw_runtime_enabled &&
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch) &&
@@ -6875,6 +6880,11 @@ bool on_draw(
             dsrrl::runtime::v287_nonmetal_trace::log(
                 "atomic_native_draw_armed", material, decision,
                 hemenvlerp_bound ? 1u : 0u);
+#endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+                "native_armed",material,decision,prepared.envspec);
 #endif
         release_prepared_island_batch(
             prepared);
@@ -6971,6 +6981,13 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "draw_issued" : "draw_failopen",
+            material,decision,prepared.envspec);
+#endif
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
     dsrrl::runtime::v291_material_trace::log(
         dsrrl::runtime::draw_tx_issued(dispatch.transaction)
@@ -7371,6 +7388,11 @@ bool on_draw_indexed(
         (prepared.mr_in_batch?2u:0u) |
         (prepared.clustered_in_batch?4u:0u));
 #endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            "prepared",material,decision,prepared.envspec);
+#endif
     if (k_pmetal_native_draw_runtime_enabled &&
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch) &&
@@ -7392,6 +7414,11 @@ bool on_draw_indexed(
             dsrrl::runtime::v287_nonmetal_trace::log(
                 "atomic_indexed_native_armed",
                 material, decision, hemenvlerp_bound ? 1u : 0u);
+#endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+                "native_armed",material,decision,prepared.envspec);
 #endif
         release_prepared_island_batch(
             prepared);
@@ -7441,6 +7468,13 @@ bool on_draw_indexed(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "indexed_issued" : "indexed_failopen",
+            material,decision,prepared.envspec);
+#endif
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
     dsrrl::runtime::v291_material_trace::log(
         dsrrl::runtime::draw_tx_issued(dispatch.transaction)
