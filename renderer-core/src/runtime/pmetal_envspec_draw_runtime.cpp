@@ -1995,6 +1995,17 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (family == pmetal_envspec_receiver_family::hemenvlerp) {
+        prepared.diagnostic_lerp = true;
+        prepared.diagnostic_beta = source.beta;
+        prepared.diagnostic_serial = source.serial;
+        prepared.diagnostic_probe_a = prepared.env_resources.probe_a;
+        prepared.diagnostic_probe_b = prepared.env_resources.probe_b;
+        prepared.diagnostic_diff_a = prepared.envdiffuse_resources.probe_a;
+        prepared.diagnostic_diff_b = prepared.envdiffuse_resources.probe_b;
+    }
+#endif
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
