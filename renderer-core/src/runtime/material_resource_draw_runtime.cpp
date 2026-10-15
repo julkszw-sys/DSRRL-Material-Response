@@ -1749,11 +1749,24 @@ prepare_draw_requests_bound(
         context_spec.stock_t1_preserved =
             true;
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        const bool exact_nonmetal =
+            v203_equipment::exact_envspec36_material(query.material);
+        // Only exact 36-owner dedicated PTDE PS may bypass the generic
+        // MTD census, which intentionally blocks PTDE RGB -> DSR PBL.
+        const auto decision =
+            exact_nonmetal
+                ? operators::resource_bridges::
+                    evaluate_spec_rgb_route(context_spec)
+                : operators::resource_bridges::
+                    evaluate_spec_rgb_route(context_spec, query);
+#else
         const auto decision =
             operators::resource_bridges::
                 evaluate_spec_rgb_route(
                     context_spec,
                     query);
+#endif
 
         if (decision.action ==
                 operators::resource_bridges::
