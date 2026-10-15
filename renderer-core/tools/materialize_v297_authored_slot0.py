@@ -46,6 +46,43 @@ region_to='''    const auto envspec_family =
                 reshade::log::level::info,
                 "[DSRRL V297] stage=ptde_slot0_source_authorized"
                 " note=not_runtime_atomic_or_pixel_pass");
+    } else if (!decision.active &&
+               material.route_index == 0u &&
+               receiver_id >= 33u && receiver_id <= 35u) {
+        // V291 logged only the first 8 bytes of the live MTD SHA. The
+        // owner's observed DullLeather/Body raw SHA prefixes do not exist
+        // in the vanilla source MTD binder. Record the complete SHA rather
+        // than silently relaxing a material identity or reusing P_Metal.
+        static std::atomic<std::uint32_t> logged_mask{0u};
+        const auto &rows=dsrrl::runtime::v297::k_authored_slot0;
+        for (std::uint32_t row=0u; row<3u; ++row) {
+            if (material.semantic_name_hash !=
+                    dsrrl::operators::material_response::
+                        mtd_semantic_hash(rows[row].name) ||
+                dsrrl::runtime::v297::raw_sha_equal(
+                    material.raw_mtd_sha256,
+                    rows[row].dsr_raw_mtd_sha256))
+                continue;
+            const std::uint32_t bit=1u<<row;
+            if ((logged_mask.fetch_or(bit)&bit)!=0u) break;
+            char raw_sha[65]{};
+            for (std::uint32_t i=0u;i<32u;++i)
+                std::snprintf(raw_sha+2u*i,3u,"%02x",
+                    static_cast<unsigned>(
+                        material.raw_mtd_sha256[i]));
+            char line[320]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V297] stage=raw_mtd_mismatch"
+                " mtd_name=%s sha256=%s rx=%u slot=%u"
+                " owner=%u parser_exact=%u action=stock_dsr",
+                rows[row].name,raw_sha,receiver_id,
+                material.material_slot,
+                material.owner_tuple_exact?1u:0u,
+                material.actual_material_exact?1u:0u);
+            reshade::log::message(
+                reshade::log::level::warning,line);
+            break;
+        }
     }
 #endif
 
