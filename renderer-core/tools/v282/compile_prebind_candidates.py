@@ -90,13 +90,19 @@ def compile_index(root: Path, inventory: Path | None):
             raise ValueError("bad / repeated spec logical hash: " + key)
         by_spec[key] = dict(logical_name=name, diffuse=[], normal=[])
 
+    diffuse_without_spec = []
     for row in diffuse:
         key, dh = row["spec_hash"].lower(), row["diffuse_hash"].lower()
-        if key not in by_spec or not HEX16.fullmatch(dh):
-            raise ValueError("diffuse pair lacks authorized spec name")
-        by_spec[key]["diffuse"].append(dict(diffuse_hash=dh,
-                                             logical_names=row["logical_names"],
-                                             row_uses=int(row["row_uses"])))
+        if not HEX16.fullmatch(key) or not HEX16.fullmatch(dh):
+            raise ValueError("malformed diffuse pair")
+        record = dict(diffuse_hash=dh, logical_names=row["logical_names"],
+                      row_uses=int(row["row_uses"]))
+        if key not in by_spec:
+            # Legitimate pair-source row but NO matching approved name lookup.
+            # Preserve the evidence and block its early identity admission.
+            diffuse_without_spec.append(dict(spec_hash=key, **record))
+            continue
+        by_spec[key]["diffuse"].append(record)
     normal_without_spec = []
     for row in normal:
         key = row["spec_hash"].lower()
@@ -138,6 +144,16 @@ def compile_index(root: Path, inventory: Path | None):
                  for key, entry in by_spec.items()
                  if len(entry["diffuse"]) > 1 or len(entry["normal"]) > 1]
 
+    unresolved_groups = collections.defaultdict(lambda: [0, 0])
+    for entry in diffuse_without_spec:
+        unresolved_groups[entry["spec_hash"]][0] += 1
+    for entry in normal_without_spec:
+        unresolved_groups[entry["spec_hash"]][1] += 1
+    ambiguous_missing = [
+        dict(spec_hash=k, diffuse_candidates=v[0], normal_candidates=v[1])
+        for k, v in unresolved_groups.items() if v[0] > 1 or v[1] > 1
+    ]
+
     return dict(
         schema="dsrrl.v282.source_candidate_prebind.v1",
         status="OFFLINE_SOURCE_CANDIDATES_ONLY_NOT_GPU_AUTHORIZED",
@@ -146,12 +162,16 @@ def compile_index(root: Path, inventory: Path | None):
         counts=dict(spec_name_records=len(spec), diffuse_pairs=len(diffuse),
                     normal_triples=len(normal), mtd_donors=len(materials),
                     ambiguous_spec_name_routes=len(anomalies),
+                    diffuse_pairs_not_in_spec_name_table=len(diffuse_without_spec),
                     normal_triples_not_in_spec_name_table=len(normal_without_spec),
+                    ambiguous_unlisted_spec_hashes=len(ambiguous_missing),
                     inventory_entries=len(inv) if inv is not None else None,
                     inventory_spec_matches=sum(
                         bool(x.get("inventory_present")) for x in by_spec.values())
                         if inv is not None else None),
         ambiguous_spec_names=anomalies,
+        ambiguous_unlisted_spec_hashes=ambiguous_missing,
+        diffuse_without_spec_name_route=diffuse_without_spec,
         normal_without_spec_name_route=normal_without_spec,
         texture_candidate_index=by_spec,
         independent_mtd_donors=materials,
