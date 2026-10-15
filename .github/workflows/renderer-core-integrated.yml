@@ -2252,3 +2252,22 @@ jobs:
           name: DSRRL_Core_Islands_PMETAL_PTDE_OP_DSR_CUBEMAP_DIAG
           path: DSRRL_Core_Islands_PMETAL_PTDE_OP_DSR_CUBEMAP_DIAG.addon64
           if-no-files-found: error
+
+  v300-leather-atomic-pr:
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/v294-all-sidecar-manifest-atomic-20261015' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Materialize and compile single V300 atomic addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v300_one_atomic_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V300-PR-One-Addon-SourceVerified-RuntimePixelOpen
+          path: out-v300/DSRRL_V300_PTDE_LEATHER_ATOMIC_DIAG.addon64
+          if-no-files-found: error
