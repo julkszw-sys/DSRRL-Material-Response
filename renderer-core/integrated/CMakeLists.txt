@@ -77,6 +77,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V291_MATERIAL_STAGE_CENSUS
+    "Diagnostic only: track every routed MTD draw (including P_Metal and materials with no SpecRGB) through identity, prepared, issued/failopen stages"
+    OFF)
+
+option(
     DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB
     "V289 opt-in nonmetal-only RX33-35 Lerp R8 SPEC-domain first consumer island A/B; P_Metal unchanged"
     OFF)
@@ -821,6 +826,15 @@ if(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS>)
+endif()
+
+if(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    if(NOT DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS OR
+       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V291 global material stage census requires V290 and V285 diagnostics")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_MATERIAL_STAGE_CENSUS>)
 endif()
 
 if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
