@@ -30,7 +30,7 @@ assert "latest_hook_source(out)" in source
 assert "if (!exact_pmetal_material_selection(material)) {" not in source
 assert "exact_envspec36_material(identity)" in read("renderer-core/src/runtime/flver_engine_hooks.cpp")
 assert "exact_envspec36_draw(material, decision)" in draw
-assert "env_semantics.envspc_slot < 4u" in gate
+assert "env.envspc_slot < 4u" in gate
 assert "g_pmetal_envspec.prepare(" in integration
 assert "prepared.envspec.material_resources.requests[i]" in integration
 assert "lerp_query,\n                true,\n                false," in integration
