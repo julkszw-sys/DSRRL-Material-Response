@@ -77,6 +77,21 @@ option(
     OFF)
 
 option(
+    DSRRL_V291_MATERIAL_STAGE_CENSUS
+    "Diagnostic only: track every routed MTD draw (including P_Metal and materials with no SpecRGB) through identity, prepared, issued/failopen stages"
+    OFF)
+
+option(
+    DSRRL_V291_LERP_CUBEMAP_CENSUS
+    "Diagnostic only: exact prepared PTDE EnvSpec/EnvDiffuse cubemap A/B source beta with indexed draw confirmation"
+    OFF)
+
+option(
+    DSRRL_V293_PARSER_EXACT_FLVER_ALIAS
+    "Experimental: exact-parser FLVER owner recovery plus atomic homologous PTDE-SPX RoughCloth EnvSpec on full authenticated owner only"
+    OFF)
+
+option(
     DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB
     "V289 opt-in nonmetal-only RX33-35 Lerp R8 SPEC-domain first consumer island A/B; P_Metal unchanged"
     OFF)
@@ -821,6 +836,34 @@ if(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS>)
+endif()
+
+if(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    if(NOT DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS OR
+       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V291 global material stage census requires V290 and V285 diagnostics")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_MATERIAL_STAGE_CENSUS>)
+endif()
+
+if(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if(NOT DSRRL_V291_MATERIAL_STAGE_CENSUS OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR "V291 Lerp cubemap observer needs V291 material census and exact R19 PTDE EnvDiffuse island")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_LERP_CUBEMAP_CENSUS>)
+endif()
+
+if(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    if(NOT DSRRL_V291_MATERIAL_STAGE_CENSUS OR
+       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V293 exact owner alias requires material census and nonmetal atomic gate")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V293_PARSER_EXACT_FLVER_ALIAS>)
 endif()
 
 if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)

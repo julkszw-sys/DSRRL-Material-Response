@@ -26,6 +26,15 @@ bool flver_identity_lookup(
     const void *selector_container,
     std::array<std::uint8_t, 32> &sha256) noexcept;
 
+// Fallback for a differently laid-out selector container. Authenticate the
+// pointer against an *actual FLVER parser registration* (no address guessing,
+// scanning, or basename-based authorization). Must be checked against the full
+// FLVER+slot+semantic owner corpus by its caller. Does not affect the original
+// selector-to-model offset path or its caches.
+bool flver_identity_lookup_direct_parser_model(
+    const void *candidate_model,
+    std::array<std::uint8_t, 32> &sha256) noexcept;
+
 bool flver_identity_enrich_owner(
     const void *selector_container,
     std::uint32_t material_slot,

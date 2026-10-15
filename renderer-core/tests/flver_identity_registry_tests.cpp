@@ -26,6 +26,16 @@ int main()
     assert(dsrrl::runtime::flver_identity_lookup(container,second));
     assert(first==second);
 
+    // The direct parser model lookup is a distinct, exact registered model
+    // key. An arbitrary selector_container alias is NOT accepted without a
+    // parser registration at that address.
+    std::array<std::uint8_t,32> parser_direct{},arbitrary{};
+    assert(dsrrl::runtime::flver_identity_lookup_direct_parser_model(
+        model_key,parser_direct));
+    assert(parser_direct==first);
+    assert(!dsrrl::runtime::flver_identity_lookup_direct_parser_model(
+        container,arbitrary));
+
     // Guard the actual SHA-256 algorithm, not just internal consistency.
     // A single corrupted K constant changes every owner digest while the old
     // self-consistency assertions still pass, silently disabling all exact
@@ -94,6 +104,8 @@ int main()
         epoch_after_self_destroy));
     std::array<std::uint8_t,32> stale{};
     assert(!dsrrl::runtime::flver_identity_lookup(container,stale));
+    assert(!dsrrl::runtime::flver_identity_lookup_direct_parser_model(
+        model_key,stale));
     assert(!dsrrl::runtime::flver_identity_enrich_owner(container, 7u, owner));
     assert(!owner.material_slot_valid);
 

@@ -1,0 +1,87 @@
+name: V293 Parser-Certified Atomic Owner
+on:
+  push:
+    branches:
+      - agent/v293-parser-certified-flver-owner-alias-20261015
+  pull_request:
+    branches:
+      - agent/v290-full-sidecar-draw-coverage-20261015
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full 1295 asset and nonmetal parity source test
+        run: python3 renderer-core/tools/test_v290_sidecar_draw_coverage.py
+          python3 renderer-core/tools/test_v291_material_stage_census.py
+          python3 renderer-core/tools/test_v293_parser_alias_source_contract.py
+  windows-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin actual source commit
+        shell: pwsh
+        run: |
+          $sha = (git rev-parse HEAD).Trim()
+          "DSRRL_V290_SOURCE_COMMIT=$sha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Configure exact PTDE R19 with V285 nonmetal owner gates
+        shell: pwsh
+        run: |
+          cmake -S renderer-core/integrated -B build-v293 -A x64 `
+            -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include" `
+            -DDSRRL_SOURCE_COMMIT="$env:DSRRL_V290_SOURCE_COMMIT" `
+            -DDSRRL_BUILD_FLAVOR="v293_parser_exact_owner_alias" `
+            -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON `
+            -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON `
+            -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON `
+            -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON `
+            -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON `
+            -DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON `
+            -DDSRRL_V285_ATOMIC_NONMETAL_DIAG=ON `
+            -DDSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=ON `
+            -DDSRRL_V290_FULL_SIDECAR_DRAW_CENSUS=ON `
+            -DDSRRL_V291_MATERIAL_STAGE_CENSUS=ON `
+            -DDSRRL_V291_LERP_CUBEMAP_CENSUS=ON `
+            -DDSRRL_V293_PARSER_EXACT_FLVER_ALIAS=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build one integrated ReShade addon
+        shell: pwsh
+        run: |
+          cmake --build build-v293 --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-v293 -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon" }
+          Copy-Item $addons[0].FullName DSRRL_V293_EXACT_OWNER_ATOMIC_AND_LERP.addon64
+      - name: Attest binary source and opt-in build
+        shell: pwsh
+        run: |
+          $file = "DSRRL_V293_EXACT_OWNER_ATOMIC_AND_LERP.addon64"
+          $bytes = [System.IO.File]::ReadAllBytes($file)
+          $string = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $string.Contains($env:DSRRL_V290_SOURCE_COMMIT)) { throw "Source SHA absent" }
+          if (-not $string.Contains("v293_parser_exact_owner_alias")) { throw "Build flavor absent" }
+          (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V293-parser-owner-atomic-single-addon-pixel-open
+          path: DSRRL_V293_EXACT_OWNER_ATOMIC_AND_LERP.addon64
+          if-no-files-found: error
