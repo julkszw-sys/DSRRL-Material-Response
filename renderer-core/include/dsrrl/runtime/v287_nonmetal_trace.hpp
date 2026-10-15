@@ -8,10 +8,14 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 namespace dsrrl::runtime::v287_nonmetal_trace {
 
 inline std::array<std::atomic<std::uint64_t>, 512> seen{};
+// Dispatch-result signals must not be evicted by initial per-slot
+// preparation chatter. A separate bounded diagnostic bank preserves them.
+inline std::array<std::atomic<std::uint64_t>, 512> seen_dispatch{};
 
 inline bool claim(const operators::material_response::material_identity &m,
                   std::uint32_t rx, std::uint32_t family,
@@ -34,10 +38,15 @@ inline bool claim(const operators::material_response::material_identity &m,
     if (hash==0u) hash=1u;
     // No false-positive authorization is possible: collision only suppresses
     // a diagnostic line. Existing 4-hop bounded independent hash probes.
+    const bool dispatch_stage =
+        std::strncmp(stage, "atomic_replay_", 14u) == 0 ||
+        std::strncmp(stage, "atomic_native_", 14u) == 0 ||
+        std::strncmp(stage, "atomic_indexed_", 15u) == 0;
+    auto &bank = dispatch_stage ? seen_dispatch : seen;
     constexpr auto mask=seen.size()-1u;
     for (std::size_t n=0;n<8u;n++) {
         const auto idx=(static_cast<std::size_t>(hash)+n*73u)&mask;
-        auto &entry=seen[idx];
+        auto &entry=bank[idx];
         const auto old=entry.load(std::memory_order_relaxed);
         if (old==hash) return false;
         if (old==0u) {
