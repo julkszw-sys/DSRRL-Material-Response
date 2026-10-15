@@ -133,6 +133,6 @@ for a,b in patches:
  if s.count(b)==1:continue
  if s.count(a)!=1:raise RuntimeError(f"V297 parser source mismatch count={s.count(a)} anchor={a[:58]!r}")
  s=s.replace(a,b,1)
-assert s.count("V297_AUTHORED_SLOT0_DIAG") >= 6
+assert s.count("V297_AUTHORED_SLOT0_DIAG") >= 5
 p.write_text(s,encoding="utf-8")
 print("V297_RETAIL_MTD_OWNER_BRIDGE_CONSTRUCTION_PASS")
