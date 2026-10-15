@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - agent/v291-universal-material-stage-census-20261015
+  pull_request:
+    branches:
+      - agent/v290-full-sidecar-draw-coverage-20261015
   workflow_dispatch:
 permissions:
   contents: read
