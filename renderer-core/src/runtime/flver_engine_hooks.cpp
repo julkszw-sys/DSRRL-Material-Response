@@ -15,6 +15,9 @@
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #endif
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -1042,7 +1045,11 @@ bool publish_exact_selector_identity(
 
     // Route 345 is necessary but not sufficient. The isolated source runtime
     // retains exact semantic/raw-MTD validation before donor decode.
-    if (identity.route_index == 345u) {
+    if (identity.route_index == 345u
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        || v203_equipment::exact_envspec36_material(identity)
+#endif
+    ) {
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)
