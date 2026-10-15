@@ -4681,14 +4681,34 @@ bool on_create_pipeline(
 
             if (envspec_lerp.result ==
                     envspec_lerp_result::applied) {
-                if (g_pmetal_envspec.
-                        register_lerp_replacement(
-                            envspec_lerp,
-                            envspec_lerp_payload.data(),
-                            envspec_lerp_payload.size()))
+                const bool r19_registered =
+                    g_pmetal_envspec.register_lerp_replacement(
+                        envspec_lerp,
+                        envspec_lerp_payload.data(),
+                        envspec_lerp_payload.size());
+                if (r19_registered)
                     ++g_envspec_payload_materialize_ok;
                 else
                     ++g_envspec_payload_materialize_fail;
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+                if (r19_registered) {
+                    const bool candidate =
+                        g_pmetal_envspec.
+                            register_lerp_nonmetal_r8_candidate(
+                                envspec_lerp,
+                                envspec_lerp_payload.data(),
+                                envspec_lerp_payload.size());
+                    char line[192]{};
+                    std::snprintf(line,sizeof(line),
+                        "[DSRRL V289 R8 NONMETAL] rx=%u create=%s metal_ps=V288",
+                        static_cast<unsigned>(envspec_lerp.semantic_receiver_id),
+                        candidate ? "ready" : "failopen");
+                    reshade::log::message(
+                        candidate ? reshade::log::level::info :
+                            reshade::log::level::warning,
+                        line);
+                }
+#endif
             } else if (
                 envspec_lerp.result !=
                     envspec_lerp_result::pass_not_candidate &&
