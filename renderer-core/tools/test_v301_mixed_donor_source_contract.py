@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V301 strict original-source donor routing contract, not runtime/pixel PASS."""
+"""V303 donor census plus owner-protected R43 fallback; row64 draw routing OPEN."""
 from pathlib import Path
 import csv
 r=Path(__file__).resolve().parents[1]
@@ -24,21 +24,25 @@ for needle in (
     "read_exact_source(",          # PTDE EnvSpec same row authority
     "v300::classify_dsr_only(",    # DSR-only exact source class
     "v300::donor_provenance::dsr_only",
-    "action=stock_dsr_operator",
+    "live_stock_routing=UNVERIFIED",
     "v299::authored_slot0_source(material)",
     "if (latest_hook_source(out))",
 ):
     assert needle in src,needle
-a=src.index("#if defined(DSRRL_V300_DSR_ONLY_EXACT_DONORS)",src.index("bool pmetal_env_source_runtime::latest("))
-stop=src.index("return false;",a)
-b=src.index("if (latest_hook_source(out))",a)
-assert a<stop<b, "V301 may not reuse an unkeyed PTDE source after exact-key failure"
-assert "Do NOT reuse any stale global/TLS PTDE donor" in src
+# Owner PROTECT rev13040: preserve the R43 producer fallback on exact-key miss.
+# DSR-only static classification is not proof of a current draw/receiver route.
+latest=src.split("bool pmetal_env_source_runtime::latest(",1)[1].split("pmetal_env_source_runtime_telemetry",1)[0]
+assert latest.count("if (latest_hook_source(out))")==1
+assert "DSRRL_V300_DSR_ONLY_EXACT_DONORS" not in latest
+between=latest.split("if (pmetal_producer_state_latest(",1)[1].split("if (latest_hook_source(out))",1)[0]
+assert "return false;" not in between, "R43 producer fallback disabled before the protected call"
+assert "live_stock_routing=UNVERIFIED" in src
+assert "action=stock_dsr_operator" not in src
 assert "source_.latest(material, source)" in draw
 assert "v299::authored_slot0_draw(material, decision)" in draw
 assert "g_pmetal_envspec.prepare(" in integ
 assert "!v296_partial_material" in integ
 assert "1500u" in hdr and "500u" in hdr and "150u" in hdr
 assert "DSRRL_V300_DSR_ONLY_EXACT_DONORS" in src
-print("V301_MIXED_DONOR_CONTRACT_PASS 1246 PTDE + 3 DSR_ONLY")
+print("V303_PROTECTED_R43_SOURCE_CENSUS_PASS 1246 PTDE + 3 DSR_ONLY; DRAW_ROUTING_OPEN")
 print("V301_RUNTIME_AND_PIXEL_OPEN")
