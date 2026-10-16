@@ -6688,6 +6688,12 @@ bool on_draw(
     const bool direct_pointlight_route =
         fixed_pointlight_bound ||
         clustered_pointlight_bound;
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    dsrrl::runtime::v317_lerp_diagnostic::draw_profile v317_profile(
+        !direct_pointlight_route &&
+            (route_mask & (k_route_stable | k_route_hemenvlerp)) != 0u,
+        (route_mask & k_route_hemenvlerp) != 0u);
+#endif
     const bool draw_identity_ready =
         direct_pointlight_route
             ? observe_pointlight_draw_identity(
@@ -6714,6 +6720,9 @@ bool on_draw(
                 material,
                 decision);
 
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.identity_done();
+#endif
     if (!draw_identity_ready) {
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
@@ -6804,7 +6813,7 @@ bool on_draw(
         decision.route_index);
 
     prepared_island_batch prepared{};
-    if (!prepare_island_batch(
+    const bool v317_batch_prepared = prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
             clustered_pointlight_bound,
@@ -6817,7 +6826,11 @@ bool on_draw(
             upper_lower_identity,
             material,
             decision,
-            prepared)) {
+            prepared);
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.prepare_done();
+#endif
+    if (!v317_batch_prepared) {
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
