@@ -1,5 +1,8 @@
 name: V335 Native
-on: workflow_dispatch
+on:
+  push:
+    branches: [agent/v335-mr-exact-owner-route-recovery-20261017]
+  workflow_dispatch
 jobs:
   test:
     runs-on: windows-latest
