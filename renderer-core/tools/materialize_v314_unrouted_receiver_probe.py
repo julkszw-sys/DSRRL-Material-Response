@@ -13,6 +13,10 @@ def replace(a,b,label):
     global s
     assert s.count(a)==1, (label,s.count(a))
     s=s.replace(a,b,1)
+def replace_twice(a,b,label):
+    global s
+    assert s.count(a)==2,(label,s.count(a))
+    s=s.replace(a,b)
 replace('#include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"',
 '''#include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
 #if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)
@@ -58,7 +62,7 @@ replace('''    if (!k_drawtime_islands_runtime_enabled)
 #endif
     auto route_mask =
         observe_integrated_draw_route_bind(''',"bind real PS pipeline")
-replace('''    if (route_mask == 0u) {
+replace_twice('''    if (route_mask == 0u) {
 #if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)''',
 '''    if (route_mask == 0u) {
 #if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)
