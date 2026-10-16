@@ -1,0 +1,23 @@
+name: V330 Wanderer 9530 Exact Material Pairwise Source Contract
+
+on:
+  push:
+    branches:
+      - agent/v330-wanderer-9530-pairwise-source-20261017
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-router-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pinned V326 descendant
+        uses: actions/checkout@v4
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check original 325-row router and exact PTDE slot cut
+        run: python renderer-core/tools/v330_wanderer_9530_pairwise_source.py
