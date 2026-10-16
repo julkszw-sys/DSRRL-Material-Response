@@ -93,6 +93,7 @@ jobs:
           if-no-files-found: error
       - name: Publish V326 native addon construction result and immutable run link
         if: success()
+        continue-on-error: true
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
