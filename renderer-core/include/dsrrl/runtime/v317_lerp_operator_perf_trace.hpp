@@ -140,6 +140,8 @@ inline void operator_event(
     reshade::log::message(reshade::log::level::info,line);
 }
 inline std::atomic<std::uint64_t> sampled[2]{};
+inline std::atomic<std::uint64_t> prepared_samples[2]{};
+inline std::atomic<std::uint64_t> dispatched_samples[2]{};
 inline std::atomic<std::uint64_t> identity_ticks[2]{};
 inline std::atomic<std::uint64_t> prepare_ticks[2]{};
 inline std::atomic<std::uint64_t> dispatch_ticks[2]{};
@@ -185,8 +187,14 @@ struct draw_profile {
         const auto end=static_cast<std::uint64_t>(qpc().QuadPart);
         sampled[bucket].fetch_add(1u,std::memory_order_relaxed);
         identity_ticks[bucket].fetch_add((identity?identity:end)-start,std::memory_order_relaxed);
-        if(identity)prepare_ticks[bucket].fetch_add((prepared?prepared:end)-identity,std::memory_order_relaxed);
-        if(prepared)dispatch_ticks[bucket].fetch_add((dispatch?dispatch:end)-prepared,std::memory_order_relaxed);
+        if(identity && prepared) {
+            prepared_samples[bucket].fetch_add(1u,std::memory_order_relaxed);
+            prepare_ticks[bucket].fetch_add(prepared-identity,std::memory_order_relaxed);
+        }
+        if(prepared && dispatch) {
+            dispatched_samples[bucket].fetch_add(1u,std::memory_order_relaxed);
+            dispatch_ticks[bucket].fetch_add(dispatch-prepared,std::memory_order_relaxed);
+        }
         callback_ticks[bucket].fetch_add(end-start,std::memory_order_relaxed);
         peak(callback_peak[bucket],end-start);
     }
@@ -223,6 +231,8 @@ inline void on_present(std::uint64_t frame) noexcept {
     reshade::log::message(reshade::log::level::info,line);
     for(unsigned b=0;b<2u;++b) {
         const auto n=sampled[b].exchange(0u,std::memory_order_relaxed);
+        const auto pn=prepared_samples[b].exchange(0u,std::memory_order_relaxed);
+        const auto dn=dispatched_samples[b].exchange(0u,std::memory_order_relaxed);
         const auto id=identity_ticks[b].exchange(0u,std::memory_order_relaxed);
         const auto pr=prepare_ticks[b].exchange(0u,std::memory_order_relaxed);
         const auto di=dispatch_ticks[b].exchange(0u,std::memory_order_relaxed);
@@ -230,14 +240,16 @@ inline void on_present(std::uint64_t frame) noexcept {
         const auto mx=callback_peak[b].exchange(0u,std::memory_order_relaxed);
         char stage[460]{};
         std::snprintf(stage,sizeof(stage),
-            "[DSRRL V317 PERF_STAGE] phase=%s samples=%llu identity_avg_us=%.4f "
+            "[DSRRL V317 PERF_STAGE] phase=%s samples=%llu prepare_samples=%llu dispatch_samples=%llu identity_avg_us=%.4f "
             "prepare_avg_us=%.4f dispatch_restore_avg_us=%.4f "
             "callback_avg_us=%.4f callback_max_us=%.4f QPC_SAMPLED=1 "
             "excludes_gpu_time_and_external_hooks=1",
             b?"LERP":"STABLE",static_cast<unsigned long long>(n),
+            static_cast<unsigned long long>(pn),
+            static_cast<unsigned long long>(dn),
             n?static_cast<double>(id)*micros_per_tick/n:0.0,
-            n?static_cast<double>(pr)*micros_per_tick/n:0.0,
-            n?static_cast<double>(di)*micros_per_tick/n:0.0,
+            pn?static_cast<double>(pr)*micros_per_tick/pn:0.0,
+            dn?static_cast<double>(di)*micros_per_tick/dn:0.0,
             n?static_cast<double>(total)*micros_per_tick/n:0.0,
             static_cast<double>(mx)*micros_per_tick);
         reshade::log::message(reshade::log::level::info,stage);
