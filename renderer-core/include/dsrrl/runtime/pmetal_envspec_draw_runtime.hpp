@@ -195,6 +195,10 @@ private:
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_nonmetal_r8_replacements_;
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+    std::unordered_map<std::uint32_t,ID3D11PixelShader *>
+        lerp_nonmetal_r8_v333_schlick_replacements_;
+#endif
 #endif
     std::unordered_map<std::uint32_t,core::sha256_digest>
         lerp_replacement_sha256_;
