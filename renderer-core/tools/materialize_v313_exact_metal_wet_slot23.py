@@ -57,7 +57,14 @@ def xrow(name,slot):
     assert c>0
     sha=x["dsr_mtd_sha256"]
     assert re.fullmatch(r"[0-9a-f]{64}",sha)
-    assert sum(y["dsr_mtd_sha256"]==sha for y in db["records"])==1,(name,"ambiguous full SHA")
+    # Raw MTD bytes can be shared by multiple semantic MTD names in the
+    # original database (P_Metal_Edge and S_Metal_Edge). Do not equate
+    # those semantic identities! This route is authorized only after the
+    # independent exact FLVER SHA+slot->MTD basename proof and raw SHA.
+    # Reject any duplicate (name, SHA) source record, not other names
+    # sharing bytewise-identical original material payloads.
+    assert sum(y["mtd_name"]==name and
+               y["dsr_mtd_sha256"]==sha for y in db["records"])==1
     return x,a,b,c
 rows=[];report=[]
 for slot in (2,3):
