@@ -97,6 +97,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V334_WANDERER_9530_DULLLEATHER_MR_OWNER_FIX
+    "V334 isolated owner-material SHA correction: only BD_M_9530_M slot9 P_DullLeather exact source identity; does not alter shaders"
+    OFF)
+
+option(
     DSRRL_V285_ATOMIC_NONMETAL_DIAG
     "V285 experimental 36 exact FLVER/slot/MTD SpecRGB+EnvSpec PTDE atomic material island; OFF in releases"
     OFF)
@@ -875,6 +880,14 @@ if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB>)
+endif()
+
+if(DSRRL_V334_WANDERER_9530_DULLLEATHER_MR_OWNER_FIX)
+    if(NOT DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+        message(FATAL_ERROR "V334 must retain V326 nonmetal R8 control branch")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V334_WANDERER_9530_DULLLEATHER_MR_OWNER_FIX>)
 endif()
 
 if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
