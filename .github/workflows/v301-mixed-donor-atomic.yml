@@ -1,7 +1,7 @@
 name: V301 Mixed PTDE-DSR Donor Source
 on:
   push:
-    branches: [agent/v294-all-sidecar-manifest-atomic-20261015]
+    branches: [agent/v294-all-sidecar-manifest-atomic-20261015, agent/v302-v301-ci-source-repair-20261016]
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Python materializer syntax gate
+        run: python3 -m py_compile renderer-core/tools/materialize_v300_retail_leather_owner.py
       - name: Validate original PTDE plus DSR-only donor index
         run: python3 renderer-core/tools/test_v300_mixed_lightbank_donors.py
       - name: Compile exact donor row policy C++17
