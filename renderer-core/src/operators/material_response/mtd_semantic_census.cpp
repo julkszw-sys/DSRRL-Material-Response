@@ -63,87 +63,87 @@ static mtd_envspec_semantics ptde_exact_envspec_slot_v320(
     // Hash is the SHA-attested exact MTD semantic name, not a material family.
     switch (q.material.semantic_name_hash) {
         case 0x11e72450c49be97aull: // A10_Wet[DSB]_Alp.mtd | DSR 3 -> PTDE 0
-            if (s.envspc_slot == 3u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 3u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "4c311ce6f9eacc52368d638218d548cc1c308187176577de32a49c5e287663c1")) out.envspc_slot=0u;
             break;
         case 0xa029373f0e23bc7bull: // A15_Chain_tex_scroll.mtd | DSR 1 -> PTDE 3
-            if (s.envspc_slot == 1u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 1u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "fa2877419a2340209fb8ff9b18f3ad9aed10a6168bc9cc86c0a177d53fc5891d")) out.envspc_slot=3u;
             break;
         case 0x6f69b9f8fa1da974ull: // A17_Alarm[DSB]_DetB.mtd | DSR 2 -> PTDE 3
-            if (s.envspc_slot == 2u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 2u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "ed021b35829728e012f39501a24ce7eb65c08cea763b69eac10920ed5b9fac3a")) out.envspc_slot=3u;
             break;
         case 0xd15fc87c3118fbc0ull: // C_2231_Body[DSB].mtd | DSR 0 -> PTDE 2
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "f0a73db801b91298531f7ebfcfc30b6d738af3d9d3337e13ea26151b27f4397b")) out.envspc_slot=2u;
             break;
         case 0xd9dd372226a5f07eull: // C_2320_Metal[DSB].mtd | DSR 2 -> PTDE 0
-            if (s.envspc_slot == 2u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 2u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "03d46faee57fd70c3af82939802bb1c2115aa62f80003346512276d1b9bd5e0a")) out.envspc_slot=0u;
             break;
         case 0xbf35b49c796975a8ull: // C_3500_Slime[DSB].mtd | DSR 2 -> PTDE 3
-            if (s.envspc_slot == 2u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 2u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "3a9d511ca4c1452d617b055a55dfe4b8f76761df4529e8db2b35f27f7a31a095")) out.envspc_slot=3u;
             break;
         case 0x321c23f48240775cull: // C_5260_Leather[DSB].mtd | DSR 0 -> PTDE 3
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "0c27e030221fad13efe963cd162ec40f48f2ce7952fcb150a131cca22dc483f8")) out.envspc_slot=3u;
             break;
         case 0xe792ac9ec044628bull: // C_5290_Body[DSB][M].mtd | DSR 3 -> PTDE 1
-            if (s.envspc_slot == 3u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 3u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "791145a213c2791140934d2c78bd2d6582af0458c2e8fc7c4165dde11cab0e84")) out.envspc_slot=1u;
             break;
         case 0xba68ee604cd2ce87ull: // C_5290_Wing[DSB]_Alp.mtd | DSR 1 -> PTDE 0
-            if (s.envspc_slot == 1u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 1u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "b3553ca598b25799aa132fa369956dd70bd38bb65681dd68b36fc6421ce92618")) out.envspc_slot=0u;
             break;
         case 0x2626b379ca38d7bfull: // C_DullLeather[DSB]_Edge.mtd | DSR 0 -> PTDE 1
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "e2d819b90e8201a93e67e84e1179e9c3bf3f57988d5f86b44c5e024d05dee1a1")) out.envspc_slot=1u;
             break;
         case 0x0d31f8d7d59d3d9aull: // C_Leather[DSB]_Edge.mtd | DSR 1 -> PTDE 2
-            if (s.envspc_slot == 1u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 1u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "25ffd8635203147f291c8f8af945dbad1898a1b5dfdcf31bb4136083fbda4d39")) out.envspc_slot=2u;
             break;
         case 0xbf9481216b3dac0cull: // C_Metal[DSB]_Edge.mtd | DSR 2 -> PTDE 0
-            if (s.envspc_slot == 2u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 2u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "f797c63ac4f476ab7ebb7bc150ecc2a9c61851999f5051ceb864b62c95d924d9")) out.envspc_slot=0u;
             break;
         case 0xc51d6e900d2da68eull: // C_RoughCloth[DSB]_Edge.mtd | DSR 0 -> PTDE 3
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "0a29732f36dc7ba939bd0114c02af09e5b72a11745c76f90e9ed4991752994bd")) out.envspc_slot=3u;
             break;
         case 0xc97ad01bcb92ba5full: // C_Wet[DSB]_Edge.mtd | DSR 3 -> PTDE 0
-            if (s.envspc_slot == 3u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 3u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "94fb44042dee45d9b022b51ee5a030382ad7d4b7b10d7ec44e213f06fa1f377a")) out.envspc_slot=0u;
             break;
         case 0x8662271c7340fcb8ull: // M_1Wood[DS][M].mtd | DSR 0 -> PTDE 1
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "b83732268f7332a3888b20e8eb16a2fb03bd4fb46bab25365254ff778228bdf7")) out.envspc_slot=1u;
             break;
         case 0x1fbe36236f5451aeull: // P_Wet[DSB]_Edge.mtd | DSR 3 -> PTDE 0
-            if (s.envspc_slot == 3u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 3u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "a7f73fd656797fea6eeb59131a5bd5c25198ad5c654524dadf76798c57aebb86")) out.envspc_slot=0u;
             break;
         case 0xf20160463b8cbc9bull: // Ps_Body[DSB]_Alp.mtd | DSR 0 -> PTDE 2
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "024f15bad3c22cd7476c82229b429eb81c3ea01626c18f8887e98f802f390aab")) out.envspc_slot=2u;
             break;
         case 0x46c08fa8a2090615ull: // S_A17_Crystal[DSB].mtd | DSR 0 -> PTDE 2
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "88c09eaa91590bd1c46ba2efc86edbf8fbac2ffb1f62371f0481f63178b3d31f")) out.envspc_slot=2u;
             break;
         case 0x0a1c9f00f399ee37ull: // S_Wet[DS].mtd | DSR 2 -> PTDE 0
-            if (s.envspc_slot == 2u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 2u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "c0de14b722e6fb40b601f18a9268d7176d34aebd4754cc29305b14cf2e0a357a")) out.envspc_slot=0u;
             break;
         case 0xe3d219814a0bd57eull: // P_DullLeather[DSB]_Edge.mtd | DSR 0 -> PTDE 1
-            if (s.envspc_slot == 0u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 0u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "44e1188bafa99d49349883dcc2052c13365f196e341ca5e7c788cbad0a4e058d")) out.envspc_slot=1u;
             break;
         case 0xa854f3b1d7200e39ull: // P_Metal[DSB]_Edge.mtd | DSR 2 -> PTDE 0
-            if (s.envspc_slot == 2u && hashing::matches_hex(q.material.raw_mtd_sha256,
+            if (s.envspc_slot == 2u && digest_matches_hex(q.material.raw_mtd_sha256,
                     "8b730ce8655401c5cae694ba5535efb088d9d67db2a157d8f142cb5629293485")) out.envspc_slot=0u;
             break;
         default: break;
