@@ -1,0 +1,25 @@
+name: V316 Strict 744 No-Low SpecRGB
+on:
+  push:
+    branches: [agent/v316-strict-744-nonlow-sidecar-gate-20261016]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build and source-contract test single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v316_strict_744_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V316-strict-744-no-low-atomic-sidecar-one-addon
+          path: out-v316/*.addon64
+          if-no-files-found: error
