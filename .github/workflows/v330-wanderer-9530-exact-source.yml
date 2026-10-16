@@ -21,3 +21,5 @@ jobs:
           python-version: '3.11'
       - name: Check original 325-row router and exact PTDE slot cut
         run: python renderer-core/tools/v330_wanderer_9530_pairwise_source.py
+      - name: Verify full Wanderer model owner SHA, 14 slots and shared texture triad
+        run: python renderer-core/tools/test_v331_wanderer_9530_exact_owner_witness.py
