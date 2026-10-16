@@ -12,3 +12,5 @@ jobs:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
+      - name: Validate source
+        run: python renderer-core/tools/apply_v335_exact_mr_route.py --check
