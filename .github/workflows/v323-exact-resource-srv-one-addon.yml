@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  statuses: write
 jobs:
   donor-contract:
     runs-on: ubuntu-latest
@@ -90,3 +91,13 @@ jobs:
           name: V326-swizzle-R8-runtime-one-addon
           path: out-v326/*.addon64
           if-no-files-found: error
+      - name: Publish V326 native addon construction result and immutable run link
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          $commit = "${{ github.sha }}"
+          $repo = "${{ github.repository }}"
+          gh api --method POST "repos/$repo/statuses/$commit" -f state=success -f context=DSRRL-V326-WIN64-ONE-ADDON -f description="V326 native Win64 addon artifact upload PASS; no runtime/pixel claim" -f target_url="$runUrl"
