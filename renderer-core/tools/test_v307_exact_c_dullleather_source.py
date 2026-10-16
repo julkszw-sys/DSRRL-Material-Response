@@ -10,7 +10,7 @@ hooks=(r/"src/runtime/flver_engine_hooks.cpp").read_text("utf-8")
 draw=(r/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text("utf-8")
 producer=(r/"src/runtime/pmetal_env_source_runtime.cpp").read_text("utf-8")
 addon=(r/"integrated/integrated_addon.cpp").read_text("utf-8")
-assert slot.count('.mtd')==6 and "k_authored_slot0_count==6u" in slot
+assert slot.count('    {"')==6 and "k_authored_slot0_count==6u" in slot
 assert leather.count('.mtd')==5 and "k_leather_count==5u" in leather
 for name in ("C_DullLeather[DSB].mtd",
              "C_DullLeather[DSB]_Alp.mtd","C_DullLeather[DSB]_Edge.mtd"):
