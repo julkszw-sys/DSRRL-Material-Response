@@ -53,7 +53,7 @@ for name in names:
     assert provenance<65535
     source_rows.append(
         '    {"'+name+'",\n     "'+sha+'",\n     '
-        +f"{a:.8g}f,{b:.8g}f,{c:.8g}f,{provenance}u"+'}')
+        +f"{repr(a)}f,{repr(b)}f,{repr(c)}f,{provenance}u"+'}')
 h=root/"include/dsrrl/runtime/v297_authored_slot0_material.hpp"
 s=h.read_text("utf-8")
 needle='};\ninline constexpr std::size_t k_authored_slot0_count='
