@@ -53,4 +53,14 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     std::size_t r19_size,
     std::vector<std::uint8_t> &output) noexcept;
 
+// V333 witness only: from the independently validated V326 nonmetal R8,
+// remove the exact DSR-only late Schlick/MAD composite R=G+a*(1-G)*w.
+// This builds a second shader. Runtime selects it solely for exact
+// Wanderer Coat BD_M_9530_M material slot9 + raw P_DullLeather MTD SHA.
+// This is NOT a replacement for the default R8 or a pixel-equivalence claim.
+bool materialize_v333_nonmetal_r8_schlick_isolation_candidate(
+    const std::uint8_t *r8_source,
+    std::size_t r8_size,
+    std::vector<std::uint8_t> &output) noexcept;
+
 } // namespace dsrrl::operators::env_spec
