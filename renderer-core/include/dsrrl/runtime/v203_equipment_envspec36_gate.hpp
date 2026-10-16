@@ -63,7 +63,7 @@ inline bool exact_envspec36_draw(
 
 #if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
 // Source homology: EXACT_SPX FRPG_Phn_ColDifSpcBmp in both DSR and PTDE;
-// exact PTDE EnvSpec PRESENT: core slot0, Edge slot3. Scope is restricted
+// exact PTDE EnvSpec PRESENT slot0, not P_Metal's slot2. Scope is restricted
 // to these four raw-MTD identities, and requires full parser-authenticated
 // 256-bit FLVER + actual slot + MTD owner authentication. No basename-only,
 // inherited route, sidecar-only or generic shader-family admission.
@@ -94,19 +94,7 @@ inline bool exact_spx_roughcloth_material(
     return env.exact_identity_match &&
         env.presence == mr::ptde_envspec_presence::present &&
         env.router_state == mr::mtd_envspec_router_state::present &&
-        env.envspc_slot_valid &&
-#if defined(DSRRL_V320_PTDE_ALL_EXACT_ENVSPEC_SLOTS)
-        // PTDE raw MTD: P/C RoughCloth core slot0, P/C Edge slot3.
-        // Exact full FLVER+material slot+raw MTD matching precedes this cut.
-        env.envspc_slot ==
-            ((material.semantic_name_hash ==
-                mr::mtd_semantic_hash("P_RoughCloth[DSB]_Edge.mtd") ||
-              material.semantic_name_hash ==
-                mr::mtd_semantic_hash("C_RoughCloth[DSB]_Edge.mtd"))
-                ? 3u : 0u);
-#else
-        env.envspc_slot == 0u;
-#endif
+        env.envspc_slot_valid && env.envspc_slot == 0u;
 }
 
 inline bool exact_spx_roughcloth_draw(
