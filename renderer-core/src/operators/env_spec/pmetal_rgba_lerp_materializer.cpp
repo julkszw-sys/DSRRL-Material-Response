@@ -2240,6 +2240,35 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
               words.begin()+static_cast<std::ptrdiff_t>(gamma_exp),
               k_nop);
     words[gamma_exp]=(words[gamma_exp]&~0x7ffu)|0x36u;
+
+    // V326 nonmetal-only PTDE SpecRGB cut. The base R19 t10 sample is a
+    // clone of native DSR t1 and inherits wxyz from stock SpecTex encoding.
+    // The exact PTDE sidecar requires direct RGB, as Stable P_Metal R4 does.
+    // Preserve R19 for P_Metal, native t1 alpha/roughness, UV/sampler and
+    // every unrelated renderer operator. Fail open on unknown ABI.
+    constexpr std::size_t no_t10 = static_cast<std::size_t>(-1);
+    std::size_t exact_t10 = no_t10;
+    std::size_t native_t1_count = 0u;
+    for (const auto &sample : ins) {
+        if (sample.opcode < 0x45u || sample.opcode > 0x4au ||
+            sample.length != 11u || sample.offset + 10u >= words.size())
+            continue;
+        const auto slot = words[sample.offset + 8u];
+        if (slot == 1u)
+            ++native_t1_count;
+        if (slot != 10u)
+            continue;
+        if (exact_t10 != no_t10)
+            return false;
+        exact_t10 = sample.offset;
+    }
+    if (native_t1_count != 1u || exact_t10 == no_t10 ||
+        words[exact_t10 + 3u] != 0x001000e2u ||
+        words[exact_t10 + 7u] != 0x00107936u)
+        return false;
+    // Only resource operand source swizzle changes, DSR wxyz -> PTDE xyzw.
+    words[exact_t10 + 7u] = 0x00107e46u;
+
     std::vector<instruction_view> after;
     if (!decode(words, after))
         return false;
