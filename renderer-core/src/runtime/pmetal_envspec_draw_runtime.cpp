@@ -282,6 +282,12 @@ release_resources() noexcept
         if (shader != nullptr) shader->Release();
     }
     lerp_nonmetal_r8_replacements_.clear();
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+    for (auto &[_, shader] : lerp_nonmetal_r8_v333_schlick_replacements_) {
+        if (shader != nullptr) shader->Release();
+    }
+    lerp_nonmetal_r8_v333_schlick_replacements_.clear();
+#endif
 #endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
@@ -406,6 +412,12 @@ on_destroy_device(
         if (shader != nullptr) shader->Release();
     }
     lerp_nonmetal_r8_replacements_.clear();
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+    for (auto &[_, shader] : lerp_nonmetal_r8_v333_schlick_replacements_) {
+        if (shader != nullptr) shader->Release();
+    }
+    lerp_nonmetal_r8_v333_schlick_replacements_.clear();
+#endif
 #endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
@@ -696,6 +708,22 @@ register_lerp_nonmetal_r8_candidate(
         return false;
     lerp_nonmetal_r8_replacements_[
         outcome.semantic_receiver_id]=shader;
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+    // Create a distinct diagnostic island from the verified V326 R8
+    // bytecode. If it cannot be built, retain the original R8 unchanged.
+    std::vector<std::uint8_t> witness;
+    if (operators::env_spec::
+            materialize_v333_nonmetal_r8_schlick_isolation_candidate(
+                candidate.data(), candidate.size(), witness) &&
+        !witness.empty()) {
+        ID3D11PixelShader *witness_shader=nullptr;
+        if (SUCCEEDED(device_->CreatePixelShader(
+                witness.data(),witness.size(),nullptr,&witness_shader)) &&
+            witness_shader!=nullptr)
+            lerp_nonmetal_r8_v333_schlick_replacements_[
+                outcome.semantic_receiver_id]=witness_shader;
+    }
+#endif
     return true;
 }
 #endif
@@ -1082,6 +1110,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     core::operator_mask composed_owners = 0u;
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     bool r8_selected = false;
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+    bool v333_schlick_selected = false;
+#endif
 #endif
 
     {
@@ -1128,6 +1159,37 @@ bool pmetal_envspec_draw_runtime::prepare(
                     lerp_nonmetal_r8_replacements_.end() &&
                     alternative->second!=nullptr)
                     { shader=alternative->second; r8_selected=true; }
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+                // Full 256-bit live FLVER owner and raw-MTD proof; NEVER
+                // use a 16-byte diagnostic prefix or MTD-only fallthrough.
+                // Mesh4 P_Leather and every other nonmetal retain V326 R8.
+                static constexpr core::sha256_digest k_wanderer_flver = {
+                    0x13u,0x98u,0xeeu,0xc9u,0xe1u,0x54u,0x5fu,0xb5u,0x26u,0x88u,0xc6u,0x91u,0xd1u,0xffu,0x3cu,0xaau,0x04u,0x2du,0xe3u,0x75u,0x0bu,0xccu,0xc6u,0xb2u,0x67u,0x16u,0x5au,0x13u,0x6cu,0x3cu,0xa8u,0x45u
+                };
+                static constexpr core::sha256_digest k_dull_raw_mtd = {
+                    0x7eu,0xa7u,0xd6u,0xceu,0x9bu,0xb7u,0x14u,0x8du,0xb6u,0x2eu,0x8cu,0x27u,0xeeu,0x45u,0xedu,0xefu,0xb9u,0x54u,0x70u,0x18u,0xd0u,0xb7u,0x23u,0xddu,0x47u,0x53u,0xd4u,0xc3u,0x7eu,0x29u,0xf2u,0x93u
+                };
+                if (r8_selected &&
+                    material.valid && material.owner_tuple_exact &&
+                    material.material_slot_valid &&
+                    material.actual_material_exact &&
+                    material.material_slot == 9u &&
+                    material.flver_sha256 == k_wanderer_flver &&
+                    material.raw_mtd_sha256 == k_dull_raw_mtd &&
+                    material.semantic_name_hash ==
+                        operators::material_response::mtd_semantic_hash(
+                            "P_DullLeather[DSB].mtd")) {
+                    const auto witness =
+                        lerp_nonmetal_r8_v333_schlick_replacements_.find(
+                            decision.receiver_id);
+                    if (witness !=
+                            lerp_nonmetal_r8_v333_schlick_replacements_.end() &&
+                        witness->second!=nullptr) {
+                        shader=witness->second;
+                        v333_schlick_selected=true;
+                    }
+                }
+#endif
             }
 #endif
             shader->AddRef();
@@ -1162,6 +1224,10 @@ bool pmetal_envspec_draw_runtime::prepare(
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     if (r8_selected)
         v287_nonmetal_trace::log("v289_r8_ps_selected",material,decision,1u);
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+    if (v333_schlick_selected)
+        v287_nonmetal_trace::log("v333_slot9_schlick_selected",material,decision,1u);
+#endif
 #endif
     effect_latch(effect_replacement_ready_);
 
