@@ -418,14 +418,37 @@ bool flver_identity_lookup_direct_parser_model(
 {
     if (candidate_model == nullptr)
         return false;
-    // This map contains only exact hashes of raw FLVER payloads observed at
-    // the live retail parser. No candidate pointer arithmetic; never use a
-    // nearest-model / filename / slot-only fallback.
+
+    // V328: exact parser-registered owner SHA remains unchanged during its
+    // model lifetime. V293 may consult this on every selector miss: reuse
+    // the existing TLS SHA and per-model invalidation journal to avoid a
+    // global mutex on a verified hit. Do not cache material/slot authority.
+    if (auto *cached = lookup_tls_cache_hit(candidate_model);
+        cached != nullptr && cached->present) {
+        std::uint64_t current_epoch = 0u;
+        if (cached_epoch_survives_for_model(
+                candidate_model, cached->epoch, current_epoch)) {
+            cached->epoch = current_epoch;
+            sha256 = cached->sha;
+            return true;
+        }
+    }
+
+    // Fallback remains a parser-registered *exact* map lookup. Same-model
+    // destroy/reparse, reset and journal overflow invalidate the fast path;
+    // neither guessed model offsets nor basename/MTD inference is allowed.
     std::lock_guard<std::mutex> lock(g_mutex);
+    auto &cached = lookup_tls_cache_slot(candidate_model);
     const auto it = g_by_model.find(candidate_model);
-    if (it == g_by_model.end())
+    const auto epoch = g_epoch.load(std::memory_order_relaxed);
+    const auto insert_epoch = g_insert_epoch.load(
+        std::memory_order_relaxed);
+    if (it == g_by_model.end()) {
+        cached = { candidate_model, epoch, insert_epoch, {}, false };
         return false;
+    }
     sha256 = it->second;
+    cached = { candidate_model, epoch, insert_epoch, sha256, true };
     return true;
 }
 bool flver_identity_enrich_owner(const void *selector_container,std::uint32_t material_slot,actual_material_owner_observation &observation) noexcept {
