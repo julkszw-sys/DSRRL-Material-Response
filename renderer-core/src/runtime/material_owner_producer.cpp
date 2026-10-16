@@ -15,6 +15,32 @@
 namespace dsrrl::runtime {
 namespace {
 
+#if defined(DSRRL_V334_WANDERER_9530_DULLLEATHER_MR_OWNER_FIX)
+// Source-attested exact owner of the one non-metal regression comparator.
+// The old generic DSR MTD registry maps this same semantic name to
+// stale digest 8a577e8e..., which does NOT match the retail 7ea7d6ce...
+// and therefore silently loses certified Material Response route 160.
+// Only this complete owner+slot+semantic tuple may bypass that stale row;
+// other P_DullLeather owners, all P_Leather and all PointLight remain stock.
+constexpr core::sha256_digest k_v334_wanderer_model_sha = {
+    0x13u, 0x98u, 0xeeu, 0xc9u, 0xe1u, 0x54u, 0x5fu, 0xb5u, 0x26u, 0x88u, 0xc6u, 0x91u, 0xd1u, 0xffu, 0x3cu, 0xaau, 0x04u, 0x2du, 0xe3u, 0x75u, 0x0bu, 0xccu, 0xc6u, 0xb2u, 0x67u, 0x16u, 0x5au, 0x13u, 0x6cu, 0x3cu, 0xa8u, 0x45u
+};
+constexpr core::sha256_digest k_v334_retail_dullleather_sha = {
+    0x7eu, 0xa7u, 0xd6u, 0xceu, 0x9bu, 0xb7u, 0x14u, 0x8du, 0xb6u, 0x2eu, 0x8cu, 0x27u, 0xeeu, 0x45u, 0xedu, 0xefu, 0xb9u, 0x54u, 0x70u, 0x18u, 0xd0u, 0xb7u, 0x23u, 0xddu, 0x47u, 0x53u, 0xd4u, 0xc3u, 0x7eu, 0x29u, 0xf2u, 0x93u
+};
+bool v334_exact_wanderer_dullleather(
+    const actual_material_owner_observation &observation,
+    std::uint64_t semantic_hash) noexcept
+{
+    return observation.material_slot_valid &&
+        observation.material_slot == 9u &&
+        observation.flver_sha256 == k_v334_wanderer_model_sha &&
+        semantic_hash ==
+            operators::material_response::mtd_semantic_hash(
+                "P_DullLeather[DSB].mtd");
+}
+#endif
+
 bool zero_digest(const core::sha256_digest &digest) noexcept
 {
     return std::all_of(
@@ -215,6 +241,14 @@ bool enrich_exact_owner_mtd_identity(
     const auto *exact_extension =
         find_exact_binding_extension(
             semantic_hash);
+#if defined(DSRRL_V334_WANDERER_9530_DULLLEATHER_MR_OWNER_FIX)
+    if (v334_exact_wanderer_dullleather(observation, semantic_hash)) {
+        // An exact source owner and exact retail MTD are independently
+        // attested. Restore the existing certified P_DullLeather profile;
+        // do not copy P_Leather parameters or modify shader/resource paths.
+        raw_mtd_sha = k_v334_retail_dullleather_sha;
+    } else
+#endif
     if (exact_extension != nullptr) {
         raw_mtd_sha =
             exact_extension->raw_mtd_sha256;
