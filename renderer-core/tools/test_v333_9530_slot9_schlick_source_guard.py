@@ -60,7 +60,7 @@ original = {
 shape_match=re.search(r"constexpr site_shape shapes\[3\]\s*=\s*\{([\s\S]*?)\};",SRC)
 assert shape_match
 numbers=[tuple(int(v[:-1],16) if v.startswith("0x") else int(v[:-1])
-    for v in xs.split(","))
+    for v in (part.strip() for part in xs.split(",")))
     for xs in re.findall(r"\{([^{}]+)\}",shape_match.group(1))]
 assert len(numbers)==3
 assert numbers==list(original.values()),numbers
