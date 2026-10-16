@@ -46,8 +46,9 @@ patch(addon,
     '#include "dsrrl/runtime/texture_identity_transport.hpp"',
     '#include "dsrrl/runtime/texture_identity_transport.hpp"\n#if defined(DSRRL_V315_DIRECT_749_RUNTIME_LEDGER)\n#include "dsrrl/runtime/v315_direct_749_sidecar_ledger.hpp"\n#endif')
 patch(addon,
-    'void on_destroy_device(reshade::api::device *device) {\n',
-    '''void on_destroy_device(reshade::api::device *device) {
+    'void on_destroy_device(reshade::api::device *device)\n{\n',
+    '''void on_destroy_device(reshade::api::device *device)
+{
 #if defined(DSRRL_V315_DIRECT_749_RUNTIME_LEDGER)
     dsrrl::runtime::v315::summary();
 #endif
