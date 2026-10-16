@@ -1,5 +1,6 @@
 param([Parameter(Mandatory=$true)][string]$ReShadeInclude)
 $ErrorActionPreference='Stop'
+$ReShadeInclude = (Resolve-Path $ReShadeInclude).Path
 python renderer-core/tools/apply_v335_exact_mr_route.py --apply
 if ($LASTEXITCODE -ne 0) { throw 'V335 patch rejected' }
 $env:CL='/DDSRRL_V335_MR_EXACT_OWNER_ROUTE'
