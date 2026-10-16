@@ -1,0 +1,158 @@
+{
+  "schema": "dsrrl.v331_9530_exact_source_owner_witness.v1",
+  "scope": "READ_ONLY_SOURCE_AND_RUNTIME_LOG_NO_PIXEL_ASSERTION",
+  "dsr_source_compact_zip_sha256": "a9a2e0eb48625fc735dfe18f7f375105cc5f56be005022969300c778489d0891",
+  "ptde_source_fixed_zip_sha256": "6651acb4fe995a69f1c84e5761b3d6bdcadeb39e1fc4d1087c3b82794f4d7281",
+  "dsr_owner_jsonl_sha256": "0be97e628b52b74896697bd641c23347d532dd4a0d42d9158b783f22f9d191a5",
+  "dsr_source": "parts\\BD_M_9530_M.partsbnd.dcx::DCX::BND[id=200]::N:\\FRPG\\data\\INTERROOT_x64\\parts\\BD_M_9530\\BD_M_9530_M.flver",
+  "dsr_manifest_full_flver_sha256": "1398eec9e1545fb52688c691d1ff3caa042de3750bccc6b267165a136c3ca845",
+  "dsr_manifest_struct_sha256": "cace6cc90014bd99739ba1b716749e0b6f93635f1b0692a2cdded95d9634df8d",
+  "full_sha_authentication_scope": "PINNED_SOURCE_MANIFEST_PLUS_SHA256_VERIFIED_FLVER_STRUCTURE_ONLY_RAW_BODY_NOT_IN_COMPACT",
+  "ptde_source": "BD_M_9530_M.flver",
+  "source_material_textures_match_all_14_slots": true,
+  "material_slots": [
+    {
+      "slot": 0,
+      "mesh": 0,
+      "dsr_mtd": "Ps_Body[DSB].mtd",
+      "ptde_mtd": "Ps_Body[DSB].mtd",
+      "spec_logical_both": "BD_M_body_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 1,
+      "mesh": 1,
+      "dsr_mtd": "Ps_Body[DSB].mtd",
+      "ptde_mtd": "Ps_Body[DSB].mtd",
+      "spec_logical_both": "BD_M_body_M_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 2,
+      "mesh": 2,
+      "dsr_mtd": "Ps_Body[DSB].mtd",
+      "ptde_mtd": "Ps_Body[DSB].mtd",
+      "spec_logical_both": "BD_M_body_M_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 3,
+      "mesh": 3,
+      "dsr_mtd": "P_DullLeather[DSB].mtd",
+      "ptde_mtd": "P_DullLeather[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_1_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 4,
+      "mesh": 4,
+      "dsr_mtd": "P_Leather[DSB].mtd",
+      "ptde_mtd": "P_Leather[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_2_s.tga",
+      "runtime_specrgb_id": "254fbaf3a67ccd46"
+    },
+    {
+      "slot": 5,
+      "mesh": 5,
+      "dsr_mtd": "P_Metal[DSB].mtd",
+      "ptde_mtd": "P_Metal[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_1_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 6,
+      "mesh": 6,
+      "dsr_mtd": "P_Metal[DSB].mtd",
+      "ptde_mtd": "P_Metal[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_2_s.tga",
+      "runtime_specrgb_id": "254fbaf3a67ccd46"
+    },
+    {
+      "slot": 7,
+      "mesh": 7,
+      "dsr_mtd": "P_DullLeather[DSB]_Edge.mtd",
+      "ptde_mtd": "P_DullLeather[DSB]_Edge.mtd",
+      "spec_logical_both": "BD_M_9530_1_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 8,
+      "mesh": 8,
+      "dsr_mtd": "P_DullLeather[DSB].mtd",
+      "ptde_mtd": "P_DullLeather[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_1_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 9,
+      "mesh": 9,
+      "dsr_mtd": "P_DullLeather[DSB].mtd",
+      "ptde_mtd": "P_DullLeather[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_2_s.tga",
+      "runtime_specrgb_id": "254fbaf3a67ccd46"
+    },
+    {
+      "slot": 10,
+      "mesh": 10,
+      "dsr_mtd": "P_DullLeather[DSB]_Edge.mtd",
+      "ptde_mtd": "P_DullLeather[DSB]_Edge.mtd",
+      "spec_logical_both": "BD_M_9530_2_s.tga",
+      "runtime_specrgb_id": "254fbaf3a67ccd46"
+    },
+    {
+      "slot": 11,
+      "mesh": 11,
+      "dsr_mtd": "P_Leather[DSB]_Edge.mtd",
+      "ptde_mtd": "P_Leather[DSB]_Edge.mtd",
+      "spec_logical_both": "BD_M_9530_1_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 12,
+      "mesh": 12,
+      "dsr_mtd": "P_DullLeather[DSB].mtd",
+      "ptde_mtd": "P_DullLeather[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_1_s.tga",
+      "runtime_specrgb_id": null
+    },
+    {
+      "slot": 13,
+      "mesh": 13,
+      "dsr_mtd": "P_DullLeather[DSB].mtd",
+      "ptde_mtd": "P_DullLeather[DSB].mtd",
+      "spec_logical_both": "BD_M_9530_2_s.tga",
+      "runtime_specrgb_id": "254fbaf3a67ccd46"
+    }
+  ],
+  "comparisons": [
+    {
+      "a": 4,
+      "b": 9,
+      "mt_family": "NONMETAL_R8",
+      "shared_spec_id": "254fbaf3a67ccd46",
+      "spec_texture": "BD_M_9530_2_s.tga",
+      "ptde_envspec_slots": [
+        1,
+        0
+      ],
+      "matched_lerp_new_log": 14,
+      "matched_lerp_prior_log": 12
+    },
+    {
+      "a": 4,
+      "b": 6,
+      "mt_family": "CROSS_OPERATOR_R8_VS_R19",
+      "shared_spec_id": "254fbaf3a67ccd46",
+      "spec_texture": "BD_M_9530_2_s.tga",
+      "ptde_envspec_slots": [
+        1,
+        2
+      ],
+      "matched_lerp_new_log": 14,
+      "matched_lerp_prior_log": 12
+    }
+  ],
+  "positive_wanderer_skin_submesh": "OWNER_VISUAL_POSITIVE_BUT_WHICH_SLOT_OPEN",
+  "causal_pixel_operator": "OPEN",
+  "safe_patch_claim": false
+}

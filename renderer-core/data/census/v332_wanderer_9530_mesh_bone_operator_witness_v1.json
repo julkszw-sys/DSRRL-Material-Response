@@ -1,0 +1,78 @@
+{
+  "schema": "dsrrl.v332_9530_bone_palette_source_summary.v1",
+  "provenance": {
+    "dsr_source_zip_sha256": "a9a2e0eb48625fc735dfe18f7f375105cc5f56be005022969300c778489d0891",
+    "full_sha_scope": "PINNED_ORIGINAL_COMPACT_MANIFEST",
+    "struct_byte_sha_scope": "INDEPENDENT_STRUCT_SHA256_CHECKED_FROM_ORIGINAL_LIBRARY_ARCHIVE",
+    "parser": "FLVER2 version 0x2000C: mesh header material idx +4, bone palette size +0x14, bone offset +0x1c, bone name UTF16LE at bone+0x0C"
+  },
+  "runtime": {
+    "model": "BD_M_9530_M.flver",
+    "manifest_full_flver_sha256": "1398eec9e1545fb52688c691d1ff3caa042de3750bccc6b267165a136c3ca845",
+    "struct_sha256": "cace6cc90014bd99739ba1b716749e0b6f93635f1b0692a2cdded95d9634df8d",
+    "torso": {
+      "mesh": 4,
+      "slot": 4,
+      "mtd": "P_Leather[DSB].mtd",
+      "bone_names": [
+        "Pelvis",
+        "R_Thigh",
+        "Spine",
+        "Spine1",
+        "R_Clavicle",
+        "R_UpperArm",
+        "RUpArmTwist",
+        "L_Clavicle",
+        "LUpArmTwist",
+        "Neck"
+      ],
+      "envspec_slot": 1,
+      "c101": 1.5,
+      "c102": 4
+    },
+    "sleeves": {
+      "mesh": 9,
+      "slot": 9,
+      "mtd": "P_DullLeather[DSB].mtd",
+      "bone_names": [
+        "R_UpperArm",
+        "R_Forearm",
+        "R_ForeTwist",
+        "L_UpperArm",
+        "L_Forearm",
+        "L_ForeTwist"
+      ],
+      "envspec_slot": 0,
+      "c101": 1,
+      "c102": 2
+    },
+    "same_logical_specular": "BD_M_9530_2_s.tga",
+    "same_logical_diffuse": "BD_M_9530_2.tga",
+    "V326_log_r8_draws": "PASS_BOTH_WITH_MATCHED_BETA_AND_PROBE"
+  },
+  "variants": [
+    {
+      "name": "BD_M_9530.flver",
+      "torso_mesh": 3,
+      "arms_only_mesh": 8
+    },
+    {
+      "name": "BD_F_9530_M.flver",
+      "torso_mesh": 2,
+      "arms_only_mesh": 7
+    },
+    {
+      "name": "BD_F_9530.flver",
+      "torso_mesh": 1,
+      "arms_only_mesh": 6
+    }
+  ],
+  "limits": {
+    "bone_palette_not_mesh_screen_coverage": true,
+    "geometry_vertex_and_uv_unavailable_in_compact": true,
+    "visually_good_owner_submesh": "HYPOTHESIS_MESH4_NOT_CONFIRMED",
+    "pixel_equivalence": "OPEN",
+    "operator_cause": "OPEN",
+    "native_build": "UNCHANGED"
+  }
+}
