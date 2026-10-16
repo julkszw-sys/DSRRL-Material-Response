@@ -87,6 +87,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V317_LERP_TELEMETRY
+    "Bounded read-only actual indexed HemEnvLerp SpecRGB/cubemap joins plus sampled CPU draw costs and Present pacing"
+    OFF)
+
+option(
     DSRRL_V293_PARSER_EXACT_FLVER_ALIAS
     "Experimental: exact-parser FLVER owner recovery plus atomic homologous PTDE-SPX RoughCloth EnvSpec on full authenticated owner only"
     OFF)
@@ -855,6 +860,15 @@ if(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_LERP_CUBEMAP_CENSUS>)
+endif()
+
+if(DSRRL_V317_LERP_TELEMETRY)
+    if(NOT DSRRL_V291_LERP_CUBEMAP_CENSUS OR
+       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V317 requires exact V291 A/B source fields and material owner join")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V317_LERP_TELEMETRY>)
 endif()
 
 if(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)

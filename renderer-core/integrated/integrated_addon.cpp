@@ -61,6 +61,9 @@
 
 #include <reshade.hpp>
 #include <d3d11.h>
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+#include "dsrrl/runtime/v317_lerp_operator_perf_trace.hpp"
+#endif
 
 #if RESHADE_API_VERSION != 20
 #error DSRRL Core+Islands requires ReShade Add-on API 20
@@ -6685,6 +6688,12 @@ bool on_draw(
     const bool direct_pointlight_route =
         fixed_pointlight_bound ||
         clustered_pointlight_bound;
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    dsrrl::runtime::v317_lerp_diagnostic::draw_profile v317_profile(
+        !direct_pointlight_route &&
+            (route_mask & (k_route_stable | k_route_hemenvlerp)) != 0u,
+        (route_mask & k_route_hemenvlerp) != 0u);
+#endif
     const bool draw_identity_ready =
         direct_pointlight_route
             ? observe_pointlight_draw_identity(
@@ -6711,6 +6720,9 @@ bool on_draw(
                 material,
                 decision);
 
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.identity_done();
+#endif
     if (!draw_identity_ready) {
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
@@ -6801,7 +6813,7 @@ bool on_draw(
         decision.route_index);
 
     prepared_island_batch prepared{};
-    if (!prepare_island_batch(
+    const bool v317_batch_prepared = prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
             clustered_pointlight_bound,
@@ -6814,7 +6826,11 @@ bool on_draw(
             upper_lower_identity,
             material,
             decision,
-            prepared)) {
+            prepared);
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.prepare_done();
+#endif
+    if (!v317_batch_prepared) {
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -6980,6 +6996,15 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.dispatch_done();
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v317_lerp_diagnostic::operator_event(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "issued" : "dispatch_failopen",
+            hemenvlerp_bound,material,decision,prepared.envspec,
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction));
+#endif
 
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
@@ -7221,6 +7246,13 @@ bool on_draw_indexed(
     const bool direct_pointlight_route =
         fixed_pointlight_bound ||
         clustered_pointlight_bound;
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    // Sampling begins before the exact per-draw identity lookup.
+    dsrrl::runtime::v317_lerp_diagnostic::draw_profile v317_profile(
+        !direct_pointlight_route &&
+            (route_mask & (k_route_stable | k_route_hemenvlerp)) != 0u,
+        (route_mask & k_route_hemenvlerp) != 0u);
+#endif
     const bool draw_identity_ready =
         direct_pointlight_route
             ? observe_pointlight_draw_identity(
@@ -7247,6 +7279,9 @@ bool on_draw_indexed(
                 material,
                 decision);
 
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.identity_done();
+#endif
     if (!draw_identity_ready) {
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
@@ -7337,7 +7372,7 @@ bool on_draw_indexed(
         decision.route_index);
 
     prepared_island_batch prepared{};
-    if (!prepare_island_batch(
+    const bool v317_batch_prepared = prepare_island_batch(
             cmd_list,
             fixed_pointlight_bound,
             clustered_pointlight_bound,
@@ -7350,7 +7385,11 @@ bool on_draw_indexed(
             upper_lower_identity,
             material,
             decision,
-            prepared)) {
+            prepared);
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.prepare_done();
+#endif
+    if (!v317_batch_prepared) {
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7470,6 +7509,15 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.dispatch_done();
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v317_lerp_diagnostic::operator_event(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "issued" : "dispatch_failopen",
+            hemenvlerp_bound,material,decision,prepared.envspec,
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction));
+#endif
 
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
@@ -7590,6 +7638,9 @@ void on_present(
             1u,
             std::memory_order_relaxed) + 1u;
     g_clustered_pnts.frame_event(present);
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    dsrrl::runtime::v317_lerp_diagnostic::on_present(present);
+#endif
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
@@ -8178,6 +8229,12 @@ bool AddonInit(
             build_identity);
     }
 
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL V317 TELEMETRY] read_only=1 qpc_stride=64 "
+        "operator_first16_then_stride16=1 operator_log_limit=256 "
+        "present_period_frames=240 gpu_readback=OFF pixel=UNVERIFIED");
+#endif
     reshade::log::message(
         reshade::log::level::info,
         "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
