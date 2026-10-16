@@ -1,0 +1,12 @@
+name: V335 Native Build
+on:
+  push:
+    branches: [agent/v335-mr-exact-owner-route-recovery-20261017]
+  workflow_dispatch:
+jobs:
+  native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source
+        run: python --version
