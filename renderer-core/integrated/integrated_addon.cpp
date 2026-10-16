@@ -6996,6 +6996,15 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V317_LERP_TELEMETRY)
+    v317_profile.dispatch_done();
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v317_lerp_diagnostic::operator_event(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "issued" : "dispatch_failopen",
+            hemenvlerp_bound,material,decision,prepared.envspec,
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction));
+#endif
 
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
