@@ -30,7 +30,9 @@ for x in j["entries"]:
     assert row["c102_f32_bits"]==x["power_bits"]
     assert row["ptde_spx"].endswith(x["shader_spx"])
     assert h.count('"'+name+'"')==1
-    assert h.count('"'+sha+'"')==1
+    # Different semantic source MTD names may contain bytewise-identical
+    # original material payloads. Raw SHA alone is never a family identity.
+    assert h.count('"'+sha+'"')==sum(z["raw_mtd_sha256"]==sha for z in j["entries"])
 assert "g_shaders" in probe and "g_bound" in probe
 for needle in ("source_exact=%u","ps_sha=%s","authorization=DENIED",
                "g_reported.fetch_add(1u)","observe_bind(","observe_pipeline(",
