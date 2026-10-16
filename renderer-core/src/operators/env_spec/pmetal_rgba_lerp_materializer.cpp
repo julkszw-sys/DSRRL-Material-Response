@@ -2280,6 +2280,155 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     return legacy_plan::dxbc::checksum_container_valid(
         output.data(),output.size());
 }
+
+#if defined(DSRRL_V333_WANDERER_SLOT9_SCHLICK_WITNESS)
+// Do not modify the R19 metal shader, the stock renderer, or the
+// already-authenticated ordinary V326 nonmetal R8. This variant is selected
+// draw-locally on exactly one owner+material tuple.
+//
+// Original DSR RX33/34/35 source (V325): Schlick late RGB live-out is
+//   MAD rDst.xyz, rTerm.xyz, rFresnel.yyyy, rG.xyz
+// with rTerm = a*(1-G) and rFresnel = exp2((-5.55473*x-6.98316)*x).
+// The two instructions IMMEDIATELY preceding this MAD are MUL and EXP;
+// the coefficient MAD contains the exact original two IEEE754 constants.
+// Isolate only the final Schlick addition: MOV rDst.xyz, rG.xyz.
+// One MOV (5 DWORDs) and four NOPs replace exactly one 9-DWORD MAD.
+// Other instruction bytes and the host ABI are preserved by rebuild().
+bool materialize_v333_nonmetal_r8_schlick_isolation_candidate(
+    const std::uint8_t *r8_source,
+    std::size_t r8_size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    output.clear();
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = static_cast<std::size_t>(-1);
+    if (!parse_dxbc(r8_source, r8_size, chunks, code_index, words))
+        return false;
+
+    std::vector<instruction_view> ins;
+    if (!decode(words, ins))
+        return false;
+
+    struct site_shape {
+        std::uint32_t destination;
+        std::uint32_t term;
+        std::uint32_t fresnel;
+        std::uint32_t fresnel_swizzle;
+        std::uint32_t source_g;
+    };
+    constexpr site_shape shapes[3] = {
+        {12u, 3u, 7u, 0x00100556u, 11u},
+        {11u, 3u, 8u, 0x00100ff6u, 10u},
+        {10u, 3u, 7u, 0x00100ff6u,  9u}
+    };
+    constexpr std::uint32_t k_neg5_55473 = 0xc0b1c059u;
+    constexpr std::uint32_t k_neg6_98316 = 0xc0df760cu;
+    constexpr std::uint32_t k_nop = 0x0100003au;
+
+    std::size_t matches = 0u;
+    std::size_t site_offset = 0u;
+    std::uint32_t source_g = 0u;
+    for (std::size_t i=3u; i<ins.size(); ++i) {
+        const auto &site=ins[i];
+        if (site.opcode!=0x32u || site.length!=9u ||
+            site.offset+9u>words.size() ||
+            words[site.offset+1u]!=0x00100072u ||
+            words[site.offset+3u]!=0x00100246u ||
+            words[site.offset+5u]!=0x00100556u &&
+            words[site.offset+5u]!=0x00100ff6u ||
+            words[site.offset+7u]!=0x00100246u)
+            continue;
+
+        const auto &ex=ins[i-1u];
+        const auto &mul=ins[i-2u];
+        const auto &coef=ins[i-3u];
+        if (ex.opcode!=0x19u || ex.length!=5u ||
+            mul.opcode!=0x38u || mul.length!=7u ||
+            coef.opcode!=0x32u || coef.length!=9u ||
+            coef.offset+9u!=mul.offset ||
+            mul.offset+7u!=ex.offset ||
+            ex.offset+5u!=site.offset ||
+            coef.offset+8u>=words.size() ||
+            words[coef.offset+5u]!=0x00004001u ||
+            words[coef.offset+6u]!=k_neg5_55473 ||
+            words[coef.offset+7u]!=0x00004001u ||
+            words[coef.offset+8u]!=k_neg6_98316)
+            continue;
+
+        for(const auto &shape:shapes) {
+            if (words[site.offset+2u]!=shape.destination ||
+                words[site.offset+4u]!=shape.term ||
+                words[site.offset+5u]!=shape.fresnel_swizzle ||
+                words[site.offset+6u]!=shape.fresnel ||
+                words[site.offset+8u]!=shape.source_g)
+                continue;
+            // Check the first source MAD in the same operator scope,
+            // including the actual G identity. It is separated from the
+            // Schlick fit by the original receiver's shading instructions.
+            bool source_mad_present=false;
+            for(const auto &earlier:ins) {
+                if(earlier.offset>=coef.offset) break;
+                if(earlier.opcode!=0x32u || earlier.length!=10u ||
+                   earlier.offset+10u>words.size() ||
+                   coef.offset-earlier.offset>420u)
+                    continue;
+                const auto k=earlier.offset;
+                if(words[k+1u]==0x00100072u &&
+                   words[k+2u]==shape.term &&
+                   words[k+3u]==0x80100006u &&
+                   words[k+4u]==0x00000041u &&
+                   words[k+5u]==1u &&
+                   words[k+6u]==0x00100246u &&
+                   words[k+7u]==shape.source_g &&
+                   words[k+8u]==0x00100006u &&
+                   words[k+9u]==1u) {
+                    source_mad_present=true;
+                    break;
+                }
+            }
+            if(!source_mad_present)
+                continue;
+            ++matches;
+            site_offset=site.offset;
+            source_g=shape.source_g;
+        }
+    }
+    if(matches!=1u || site_offset+9u>words.size())
+        return false;
+
+    // A second source sample on t10, modified by V326, must exist
+    // before the witness can be authorized on any supplied shader.
+    std::size_t swizzled_t10=0u;
+    for(const auto &s:ins)
+        if (s.opcode>=0x45u && s.opcode<=0x4au &&
+            s.length==11u && s.offset+10u<words.size() &&
+            words[s.offset+8u]==10u &&
+            words[s.offset+7u]==0x00107e46u)
+            ++swizzled_t10;
+    if(swizzled_t10!=1u)
+        return false;
+
+    words[site_offset]    = 0x05000036u; // MOV, length 5
+    words[site_offset+1u] = 0x00100072u; // rDst.xyz
+    // words[site_offset+2] preserves exact rDst
+    words[site_offset+3u] = 0x00100246u; // rG.xyzx
+    words[site_offset+4u] = source_g;
+    std::fill(words.begin()+static_cast<std::ptrdiff_t>(site_offset+5u),
+              words.begin()+static_cast<std::ptrdiff_t>(site_offset+9u),
+              k_nop);
+    std::vector<instruction_view> after;
+    if(!decode(words,after) ||
+       !rebuild(r8_source,r8_size,std::move(chunks),
+                code_index,words,output)) {
+        output.clear();
+        return false;
+    }
+    return legacy_plan::dxbc::checksum_container_valid(
+        output.data(),output.size());
+}
+#endif
+
 #endif
 
 } // namespace dsrrl::operators::env_spec
