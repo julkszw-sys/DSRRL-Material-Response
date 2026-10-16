@@ -1,7 +1,7 @@
-name: V323 Exact Native Resource Name SRV Join Win64
+name: V326 Native Nonmetal SpecRGB Swizzle Runtime Build
 on:
   push:
-    branches: [agent/v323-exact-native-t1-logical-resource-bridge-20261016]
+    branches: [agent/v326-nonmetal-lerp-ptde-t10-identity-20261016]
   workflow_dispatch:
 permissions:
   contents: read
@@ -71,6 +71,7 @@ jobs:
           python3 renderer-core/tools/test_v315_749_coverage_ledger_contract.py
           python3 renderer-core/tools/apply_v323_exact_resource_name_srv.py --apply
           python3 renderer-core/tools/test_v323_exact_resource_transport_contract.py
+          python3 renderer-core/tools/test_v326_nonmetal_lerp_ptde_t10_swizzle.py
   addon:
     needs: donor-contract
     runs-on: windows-latest
@@ -83,9 +84,9 @@ jobs:
           path: _reshade
       - name: Build one addon; no runtime/pixel claim
         shell: pwsh
-        run: ./renderer-core/tools/build_v323_exact_resource_srv_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+        run: ./renderer-core/tools/build_v326_nonmetal_lerp_t10_identity_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - uses: actions/upload-artifact@v4
         with:
-          name: V323-exact-resource-view-identity-one-addon
-          path: out-v323/*.addon64
+          name: V326-swizzle-R8-runtime-one-addon
+          path: out-v326/*.addon64
           if-no-files-found: error
