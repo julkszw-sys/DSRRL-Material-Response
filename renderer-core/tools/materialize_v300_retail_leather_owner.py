@@ -59,7 +59,7 @@ changes=[
      return false;
 #endif
     }
-    const auto &row='''')
+    const auto &row=''')
 ]
 for old,new in changes:
     if s.count(old)==1:s=s.replace(old,new,1)
