@@ -68,7 +68,7 @@ New-Item -ItemType Directory -Force out-v303 | Out-Null
 $dest = 'out-v303/DSRRL_V303_PROTECTED_R43_DONOR_CENSUS.addon64'
 Copy-Item $files[0].FullName $dest -Force
 $bintext = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes((Resolve-Path $dest)))
-if (-not $bintext.Contains($commit) -or -not $bintext.Contains('v303_mixed_origin_slot0_slot1_atomic')) {
+if (-not $bintext.Contains($commit) -or -not $bintext.Contains('v303_protected_r43_donor_census')) {
     throw "Binary provenance/build flavor verification FAILED"
 }
 (Get-FileHash $dest -Algorithm SHA256) | Format-List
