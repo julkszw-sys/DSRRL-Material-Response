@@ -8,7 +8,15 @@ resource=(root/"src/runtime/material_resource_draw_runtime.cpp").read_text()
 rh=(root/"include/dsrrl/runtime/material_resource_draw_runtime.hpp").read_text()
 census=(root/"include/dsrrl/runtime/v290_spec_draw_census.hpp").read_text()
 source=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text()
-generated=(root/"include/dsrrl/runtime/generated_spec_whitelist_20261010.hpp").read_text()
+# Generated whitelist is a CMake output, not a checked-in file. Source
+# validate its immutable 749 direct subset through the canonical generator.
+import importlib.util
+p=root/"tools/generate_sidecar_spec_whitelist_20261010.py"
+sp=importlib.util.spec_from_file_location("v315_names",p)
+mod=importlib.util.module_from_spec(sp)
+sp.loader.exec_module(mod)
+names=mod.load_names(root/"data/provenance/sidecar_specular_20261010_names.b85")
+generated=mod.render_header(names)
 assert "std::array<std::uint64_t,749u> k_dsr_direct_spec_hashes" in generated
 assert "static_assert(names::k_dsr_direct_spec_hashes.size()==749u" in h
 assert "find_index(std::uint64_t hash)" in h
