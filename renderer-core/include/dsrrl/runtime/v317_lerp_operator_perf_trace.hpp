@@ -108,7 +108,7 @@ inline void operator_event(
 #endif
     std::snprintf(line,sizeof(line),
       "[DSRRL V317 LERP SPEC_PROBE] stage=%s phase=%s issued=%u rx=%u route=%u slot=%u "
-      "spec_t10_request=%u spec_req_count=%u spec_material_ready=%u "
+      "spec_t10_request=%u spec_req_count=%u spec_material_ready=%u c101=%.9g c100=%.9g,%.9g,%.9g spec_power=%.9g spec_power_verified=%u env_slot=%u "
       "spec_a=%u spec_b=%u diff_a=%u diff_b=%u beta=%.9g "
       "t12=%p t14=%p t11=%p t13=%p s_spec=%u s_diff=%u b12=%u ps=%p "
       "mtd=%02x%02x%02x%02x%02x%02x%02x%02x flver=%02x%02x%02x%02x%02x%02x%02x%02x "
@@ -117,6 +117,11 @@ inline void operator_event(
       d.receiver_id,m.route_index,m.material_slot,
       p.material_resources.spec_rgb?1u:0u,p.material_resources.request_count,
       p.material_resources.retained_count!=0u?1u:0u,
+      static_cast<double>(d.c101),static_cast<double>(d.c100[0]),
+      static_cast<double>(d.c100[1]),static_cast<double>(d.c100[2]),
+      static_cast<double>(d.ptde_specular_power),
+      d.ptde_specular_power_verified?1u:0u,
+      static_cast<unsigned>(p.env_resources.slot),
       spec_a,spec_b,dif_a,dif_b,beta,
       static_cast<void*>(p.env_resources.ptde_a),
       static_cast<void*>(p.env_resources.ptde_b),
