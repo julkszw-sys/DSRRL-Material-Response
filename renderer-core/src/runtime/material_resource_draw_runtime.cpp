@@ -46,6 +46,17 @@ namespace {
 
 inline bool spec_equipment_allowed(std::uint64_t hash) noexcept
 {
+#if defined(DSRRL_V305_DSR_DIRECT_SPEC_ROUTE) && defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    // V295 exact FLVER corpus: no independent PTDE low *_L.flver in DSR.
+    // Keep all 1295 PTDE sidecar names but never route 544 low-name
+    // materials or two unresolved weapons through a base DSR draw.
+    // This must override the inherited V12 resource-name allowlist.
+    // Positive host name still requires exact owner/slot/MTD, native t1,
+    // receiver shader, complete PTDE operator and atomic GPU state.
+    if (sidecar_20261010::spec_allowed(hash) &&
+        !sidecar_20261010::dsr_direct_spec_allowed(hash))
+        return false;
+#endif
     if (generated::spec_equipment_name_hash_allowed_v12(hash)) return true;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     return sidecar_20261010::spec_allowed(hash);
