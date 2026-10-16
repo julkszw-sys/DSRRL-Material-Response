@@ -6,9 +6,17 @@ from pathlib import Path
 r=Path(__file__).resolve().parents[1]
 reg=json.loads((r/"data/census/ptde_mtd_envspec_router_v1.json").read_text("utf-8"))
 assert reg["source_binary"]["record_count"]==325
-by_name={row["mtd_name"]:row for row in reg["records"]}
-assert len(by_name)==len(reg["records"])
 names=("C_Leather[DSB].mtd","C_Leather[DSB]_Alp.mtd","C_Leather[DSB]_Edge.mtd")
+# Other original MTD names may have multiple raw DSR identities. Reject
+# ambiguity only in the exact three-row cohort being admitted.
+by_name={}
+for record in reg["records"]:
+    name=record["mtd_name"]
+    if name not in names:
+        continue
+    assert name not in by_name, "V306 exact Leather name has multiple raw sources"
+    by_name[name]=record
+assert set(by_name)==set(names)
 out=[]
 for n,name in enumerate(names,3):
     x=by_name[name]
