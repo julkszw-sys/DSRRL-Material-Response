@@ -23,3 +23,5 @@ jobs:
         run: python renderer-core/tools/v330_wanderer_9530_pairwise_source.py
       - name: Verify full Wanderer model owner SHA, 14 slots and shared texture triad
         run: python renderer-core/tools/test_v331_wanderer_9530_exact_owner_witness.py
+      - name: Assert V332 exact torso versus sleeve bone palette witness
+        run: python renderer-core/tools/v332_wanderer_9530_bone_palette_source.py
