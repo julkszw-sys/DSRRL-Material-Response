@@ -49,6 +49,15 @@ def load_names(source: Path) -> list[str]:
 
 def render_header(names: list[str]) -> str:
     values = sorted(fnv1a_ascii_lower(n) for n in names)
+    # Source V295: DSR contains zero of PTDE's 449 dedicated *_L.flver.
+    # Keep PTDE low-LOD and unresolved names in the original 1295 corpus,
+    # but do not positively authorize them as DSR direct host resources.
+    ptde_low = [n for n in names if n.endswith("_l_s")]
+    unresolved = {"wp_a_0911_s", "wp_a_1004_s"}
+    host = [n for n in names if not n.endswith("_l_s") and n not in unresolved]
+    if len(ptde_low)!=544 or len(host)!=749 or not unresolved.issubset(names):
+        raise ValueError("V305 FLVER source census exact name split mismatch")
+    host_values = sorted(fnv1a_ascii_lower(n) for n in host)
     out = [
         "#pragma once\n",
         "// AUTO-GENERATED: exact 1295 Specular names in 2026-10-10 DSRRL sidecar.\n",
@@ -75,7 +84,33 @@ def render_header(names: list[str]) -> str:
         "    }\n    return false;\n}\n",
         "} // namespace dsrrl::runtime::sidecar_20261010\n"
     ])
-    return "".join(out)
+    original = "".join(out)
+    namespace_tail = "} // namespace dsrrl::runtime::sidecar_20261010\n"
+    if original.count(namespace_tail) != 1:
+        raise ValueError("V305 source generator namespace drift")
+    host_header = (
+        "// V305: exact source census DSR direct 749 only; not operator authority.\n"
+        "// 544 distinct PTDE low-LOD and 2 unresolved kept above in 1295.\n"
+        "inline constexpr std::array<std::uint64_t,749u> k_dsr_direct_spec_hashes = {{\n"
+        + "".join(f"    0x{value:016x}ull,\n" for value in host_values)
+        + "}};\n"
+        "constexpr bool v305_sorted() noexcept {\n"
+        "  for (std::size_t i=1u;i<k_dsr_direct_spec_hashes.size();++i)\n"
+        "    if(k_dsr_direct_spec_hashes[i-1]>=k_dsr_direct_spec_hashes[i])return false;\n"
+        "  return true;\n"
+        "}\n"
+        'static_assert(v305_sorted(),"V305 host direct Spec hash collision");\n'
+        "inline bool dsr_direct_spec_allowed(std::uint64_t v) noexcept {\n"
+        "  std::size_t lo=0u, hi=k_dsr_direct_spec_hashes.size();\n"
+        "  while(lo<hi){const auto mid=lo+((hi-lo)>>1u);\n"
+        "    if(v<k_dsr_direct_spec_hashes[mid])hi=mid;\n"
+        "    else if(v>k_dsr_direct_spec_hashes[mid])lo=mid+1u;\n"
+        "    else return true;\n"
+        "  }\n"
+        "  return false;\n"
+        "}\n"
+    )
+    return original.replace(namespace_tail, host_header+namespace_tail)
 
 
 def main() -> None:
