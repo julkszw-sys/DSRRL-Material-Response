@@ -9,7 +9,7 @@ _L; 21 have changed MTD; 14 special chr/obj rows have changed ownership.
 649-draw V290 stock DSR runtime sample observed 0 *_L_s names but does
 not prove every possible in-game draw.
 
-V305 preserves all 1295 PTDE names in original SHA-pinned name source.
+V305 preserves all 1295 PTDE names in original SHA-pinned name source. Note 549 names have the literal *_l_s suffix, but five are DIRECT stock DSR FLVER g_Specular sources: am_f_9450_l_s, am_m_9372_l_s, bd_m_9440_1_l_s, bd_m_9440_2_l_s, wp_a_0652_l_s. The other 544 are PTDE-only low sources, so suffix-only routing is incorrect.
 The generator adds a 749-name direct DSR host-positive name subset.
 544 historical PTDE low names and two source-unresolved weapon names
 must not activate through stock DSR base-resource aliases. The source

@@ -9,10 +9,12 @@ mod=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 names=mod.load_names(root/"data/provenance/sidecar_specular_20261010_names.b85")
 assert len(names)==1295 and len(set(names))==1295
-low=[n for n in names if n.endswith("_l_s")]
+dsr_low={"am_f_9450_l_s","am_m_9372_l_s","bd_m_9440_1_l_s","bd_m_9440_2_l_s","wp_a_0652_l_s"}
+low=[n for n in names if n.endswith("_l_s") and n not in dsr_low]
 unknown={"wp_a_0911_s","wp_a_1004_s"}
-direct=[n for n in names if n not in unknown and not n.endswith("_l_s")]
-assert len(low)==544 and len(direct)==749 and unknown.issubset(names)
+direct=[n for n in names if n not in unknown and n not in low]
+assert len([n for n in names if n.endswith("_l_s")])==549
+assert len(low)==544 and len(direct)==749 and unknown.issubset(names) and dsr_low.issubset(direct)
 header=mod.render_header(names)
 assert "std::array<std::uint64_t,1295u> k_spec_hashes" in header
 assert "std::array<std::uint64_t,749u> k_dsr_direct_spec_hashes" in header
@@ -36,6 +38,7 @@ assert(!c::dsr_direct_spec_allowed(fnv("am_a_1000_l_s")));
 assert(!c::dsr_direct_spec_allowed(fnv("wp_a_0911_s")));
 assert(!c::dsr_direct_spec_allowed(fnv("wp_a_1004_s")));
 assert(c::dsr_direct_spec_allowed(fnv("wp_a_0100_s")));
+assert(c::dsr_direct_spec_allowed(fnv("am_f_9450_l_s")));
 }
 ""","utf-8")
     if sys.platform!="win32":

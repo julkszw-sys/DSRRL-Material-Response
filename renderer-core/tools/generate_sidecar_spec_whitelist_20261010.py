@@ -49,13 +49,22 @@ def load_names(source: Path) -> list[str]:
 
 def render_header(names: list[str]) -> str:
     values = sorted(fnv1a_ascii_lower(n) for n in names)
-    # Source V295: DSR contains zero of PTDE's 449 dedicated *_L.flver.
+    # Source V295/V301 exact owner: 5 *_l_s direct to DSR; 544 not.
     # Keep PTDE low-LOD and unresolved names in the original 1295 corpus,
     # but do not positively authorize them as DSR direct host resources.
-    ptde_low = [n for n in names if n.endswith("_l_s")]
+    # Five literal *_l_s names remain DIRECTLY bound to original DSR
+    # FLVER g_Specular (not to a guessed base alias); see owner handoff CSV.
+    dsr_direct_low = {
+        "am_f_9450_l_s", "am_m_9372_l_s",
+        "bd_m_9440_1_l_s", "bd_m_9440_2_l_s",
+        "wp_a_0652_l_s",
+    }
+    ptde_low = [n for n in names if n.endswith("_l_s") and n not in dsr_direct_low]
     unresolved = {"wp_a_0911_s", "wp_a_1004_s"}
-    host = [n for n in names if not n.endswith("_l_s") and n not in unresolved]
-    if len(ptde_low)!=544 or len(host)!=749 or not unresolved.issubset(names):
+    host = [n for n in names if n not in ptde_low and n not in unresolved]
+    if (len(ptde_low)!=544 or len(host)!=749 or
+        not unresolved.issubset(names) or
+        not dsr_direct_low.issubset(names)):
         raise ValueError("V305 FLVER source census exact name split mismatch")
     host_values = sorted(fnv1a_ascii_lower(n) for n in host)
     out = [
