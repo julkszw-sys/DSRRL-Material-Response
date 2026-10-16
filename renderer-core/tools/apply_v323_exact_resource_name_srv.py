@@ -31,8 +31,8 @@ def patch(source: str) -> str:
     # V322 already uses spec_equipment_allowed(): exact Oct10 749 direct names
     # plus the original owner and consumer gates; do not widen its allowlist.
     s=once(s,
-        '    reshade::api::resource,\\n    reshade::api::resource_usage usage,',
-        '    reshade::api::resource source_resource,\\n    reshade::api::resource_usage usage,')
+        '    reshade::api::resource,\n    reshade::api::resource_usage usage,',
+        '    reshade::api::resource source_resource,\n    reshade::api::resource_usage usage,')
 
     anchor='void on_init_resource_view(\n'
     producer="""// Exact native ID3D11Resource is the transport key. This does not infer the
