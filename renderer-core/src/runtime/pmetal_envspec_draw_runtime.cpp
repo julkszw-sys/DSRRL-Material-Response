@@ -804,9 +804,36 @@ bool pmetal_envspec_draw_runtime::prepare(
             material,
             decision.receiver_id);
 
-    const auto env_semantics =
-        mr::classify_mtd_envspec_semantics(
-            query);
+    auto env_semantics =
+        mr::classify_mtd_envspec_semantics(query);
+#if defined(DSRRL_V319_PTDE_EXACT_LERP_ENVSPEC_SLOTS)
+    // Correct only two retail-witnessed exact MTDs in HemEnvLerp.
+    // Original PTDE g_EnvSpcSlotNo: DullLeather_Edge=1, Metal_Edge=0.
+    // Keep the generated vanilla-DSR router, Stable and P_Metal unchanged.
+    if (family == pmetal_envspec_receiver_family::hemenvlerp &&
+        material.valid && material.owner_tuple_exact &&
+        material.material_slot_valid &&
+        decision.receiver_id >= 33u && decision.receiver_id <= 35u &&
+        decision.route_index == material.route_index &&
+        env_semantics.exact_identity_match &&
+        env_semantics.presence == mr::ptde_envspec_presence::present &&
+        env_semantics.router_state == mr::mtd_envspec_router_state::present) {
+        const bool dull_edge =
+            material.route_index == 0u && env_semantics.envspc_slot == 0u &&
+            material.semantic_name_hash ==
+                mr::mtd_semantic_hash("P_DullLeather[DSB]_Edge.mtd") &&
+            hashing::matches_hex(material.raw_mtd_sha256,
+                "44e1188bafa99d49349883dcc2052c13365f196e341ca5e7c788cbad0a4e058d");
+        const bool metal_edge =
+            material.route_index == 5u && env_semantics.envspc_slot == 2u &&
+            material.semantic_name_hash ==
+                mr::mtd_semantic_hash("P_Metal[DSB]_Edge.mtd") &&
+            hashing::matches_hex(material.raw_mtd_sha256,
+                "8b730ce8655401c5cae694ba5535efb088d9d67db2a157d8f142cb5629293485");
+        if (dull_edge) env_semantics.envspc_slot = 1u;
+        else if (metal_edge) env_semantics.envspc_slot = 0u;
+    }
+#endif
 
     if (!env_semantics.exact_identity_match ||
         env_semantics.presence !=
