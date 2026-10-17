@@ -583,9 +583,7 @@ bool hook_producer_cache_lookup(
         g_hook_producer_cache_mutex[set],
         std::try_to_lock);
     if (!lock.owns_lock()) {
-        g_hook_producer_cache_busy.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_producer_cache_busy);
         return false;
     }
 
@@ -614,15 +612,11 @@ bool hook_producer_cache_lookup(
             continue;
 
         out = entry.record;
-        g_hook_producer_cache_hit.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_producer_cache_hit);
         return true;
     }
 
-    g_hook_producer_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_producer_cache_miss);
     return false;
 }
 
@@ -677,9 +671,7 @@ void hook_producer_cache_publish_exact(
     entry.cache_generation = generation;
     entry.valid = true;
 
-    g_hook_producer_cache_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_producer_cache_publish);
 }
 
 std::atomic_bool g_hook_restore_failed{false};
@@ -834,9 +826,7 @@ bool cached_readable_window(
             entry.generation == generation &&
             entry.begin <= address &&
             address < entry.end) {
-            g_region_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(g_region_cache_hit);
             if (!entry.readable)
                 return false;
             window.begin = entry.begin;
@@ -845,9 +835,7 @@ bool cached_readable_window(
         }
     }
 
-    g_region_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_region_cache_miss);
 
     readable_window queried{};
     bool is_readable = false;
@@ -1534,16 +1522,12 @@ bool endpoint_cache_lookup(
             entry.row_id == row_id) {
             value = entry.value;
             signature = entry.signature;
-            g_endpoint_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(g_endpoint_cache_hit);
             return true;
         }
     }
 
-    g_endpoint_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_endpoint_cache_miss);
     return false;
 }
 
@@ -1603,9 +1587,7 @@ void endpoint_cache_publish(
     entry.value = value;
     entry.valid = true;
 
-    g_endpoint_cache_fill.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_endpoint_cache_fill);
 }
 
 bool read_exact_source(
