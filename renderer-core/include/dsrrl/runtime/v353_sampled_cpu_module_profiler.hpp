@@ -4,7 +4,6 @@
 // Inclusive timings can overlap between stages: never sum them as exclusive CPU.
 // No GPU timing/readback; keep state and renderer source untouched.
 #include <windows.h>
-#include <reshade.hpp>
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -100,7 +99,8 @@ private:
     bool active_=false;
 };
 
-inline void report_window(double window_s, std::uint64_t window_index) noexcept {
+template <typename Sink>
+inline void report_window(double window_s, std::uint64_t window_index, Sink &&emit) noexcept {
     const auto frequency=qpc_frequency();
     if (frequency==0u || window_s<=0.) return;
     for (std::size_t i=0;i<k_stages;++i) {
@@ -131,7 +131,7 @@ inline void report_window(double window_s, std::uint64_t window_index) noexcept 
             static_cast<unsigned long long>(approx_invocations),
             mean_us,max_us,est_ms_per_second,
             static_cast<unsigned long long>(failed));
-        reshade::log::message(reshade::log::level::info,line);
+        emit(line);
     }
 }
 inline void reset() noexcept {
