@@ -1097,11 +1097,16 @@ void on_init_device_residency(reshade::api::device *device) {
                 {
                     std::lock_guard<std::mutex> lock(g_mutex);
                     auto found = g_sidecar_shared.find(key);
-                    if (found == g_sidecar_shared.end())
-                        inserted = g_sidecar_shared.emplace(
-                            std::move(key),
-                            sidecar_shared_entry{result.view,0u,true}).second;
-                    else found->second.resident = true;
+                    if (found == g_sidecar_shared.end()) {
+                        // A concurrent cold loader may have consumed budget
+                        // since this folder was enumerated.
+                        if (bytes <= g_resident_gpu_limit &&
+                            g_resident_gpu_used <=
+                                g_resident_gpu_limit - bytes)
+                            inserted = g_sidecar_shared.emplace(
+                                std::move(key),
+                                sidecar_shared_entry{result.view,0u,true}).second;
+                    } else found->second.resident = true;
                     if (inserted) g_resident_gpu_used += bytes;
                 }
                 if (inserted) { ++loaded; reserved += bytes; }
