@@ -697,7 +697,11 @@ register_lerp_replacement(
     std::snprintf(log,sizeof(log),
 #if defined(DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX)
 #if defined(DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX)
+#if defined(DSRRL_V350_PTDE_LERP_YZW_LANE_FIX)
+        "[DSRRL V350 RGB LANES] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1 result=r1.yzw src=r1.xyzw mul=r13.xxyz",
+#else
         "[DSRRL V349 PTDE RGB LIVEOUT] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1 t10=XYZW c101=scalar_x envspec=r1.yzw",
+#endif
 #else
         "[DSRRL V348 SPEC RGB] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1 swizzle=XYZW c101=scalar_x",
 #endif
