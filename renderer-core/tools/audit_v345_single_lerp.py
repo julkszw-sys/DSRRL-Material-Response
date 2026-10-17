@@ -7,7 +7,7 @@ mat=(root/"src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text(
 build=(root/"tools/build_v345_single_lerp_one_addon.ps1").read_text()
 v344=mat.split("#if defined(DSRRL_V344_PTDE_LERP_SPEC_POST_ENV)",1)[1].split("#endif",1)[0]
 section=draw.split("register_lerp_replacement(",1)[1].split("register_lerp_nonmetal_r8_candidate(",1)[0]
-single=section.split("#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)",1)[1].split("#endif",1)[0]
+single=section.split("#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)",1)[1].split("const auto payload_sha256",1)[0]
 assert "materialize_nonmetal_lerp_r8_spec_linear_candidate(" in single
 assert "unified.empty()" in single
 assert "dxbc=unified.data();" in single
