@@ -5,7 +5,7 @@ SOURCE/CONSTRUCTION contract only. Not a runtime FPS or pixel-equivalence claim.
 from pathlib import Path
 root=Path(__file__).resolve().parents[2]
 source=(root/"renderer-core/src/runtime/pmetal_env_source_runtime.cpp").read_text("utf-8")
-builder=(root/"renderer-core/tools/build_v350_pmetal_readonly_hit_one_addon.ps1").read_text("utf-8")
+builder=(root/"renderer-core/tools/build_v350_qpc_pmetal_factorial.ps1").read_text("utf-8")
 def between(a,b):
     assert a in source and b in source, (a,b)
     return source.split(a,1)[1].split(b,1)[0]
@@ -39,8 +39,8 @@ assert "g_hook_source_tls = {" in tls and "g_hook_source_tls = {" in shared
 assert "g_hook_source_serial.fetch_add(" in producer
 assert "g_hook_source_mutex" in miss, "authoritative fallback retained"
 assert "latest_hook_source_exact_selector(" in source
-for v in ["DSRRL_V350_RC1_PMETAL_READONLY.addon64",
-          "v350_rc1_pmetal_readonly_hit_v1",
+for v in ["DSRRL_V350_QPC_PMETAL_FACTORIAL.addon64",
+          "v350_rc1_qpc_pmetal_factorial",
           "DSRRL_FLVER_SELECTOR_PROFILE=OFF",
           "DSRRL_POINTLIGHT_PROFILE=OFF",
           "DSRRL_V350_RELEASE_SKIP_HOT_OBSERVERS"]:
