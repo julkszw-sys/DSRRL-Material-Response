@@ -578,6 +578,11 @@ add_test(NAME dsrrl_renderer_clustered_pnts_materializer_tests COMMAND dsrrl_ren
 add_test(NAME dsrrl_renderer_clustered_pnts_draw_adapter_tests COMMAND dsrrl_renderer_clustered_pnts_draw_adapter_tests)
 add_test(NAME dsrrl_renderer_local_specular_receiver_tests COMMAND dsrrl_renderer_local_specular_receiver_tests)
 add_test(NAME dsrrl_renderer_local_specular_window_tests COMMAND dsrrl_renderer_local_specular_window_tests)
+add_test(
+    NAME dsrrl_v338_nonmetal_lerp_else_rgb_source_contract
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_v338_nonmetal_lerp_else_rgb.py"
+)
 add_test(NAME dsrrl_renderer_fixed_local_specular_plan_tests COMMAND dsrrl_renderer_fixed_local_specular_plan_tests)
 add_test(NAME dsrrl_renderer_fixed_local_specular_operand_tests COMMAND dsrrl_renderer_fixed_local_specular_operand_tests)
 add_test(NAME dsrrl_renderer_fixed_local_specular_ptde_reference_tests COMMAND dsrrl_renderer_fixed_local_specular_ptde_reference_tests)
