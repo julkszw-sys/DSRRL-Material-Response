@@ -7,6 +7,12 @@
 // 3: QPC reads plus the same shared counters (legacy-style).
 // Unlike historical DSRRL_STUTTER_PROFILE, only time perturbation differs;
 // no per-draw disk I/O, D3D state changes, logging, sleeps, affinity or priority.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #include <array>
 #include <atomic>
