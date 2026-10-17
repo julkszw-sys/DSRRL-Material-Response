@@ -1,2 +1,2 @@
 param([string]$ReShadeInclude)
-Write-Host 'V344 build wrapper scaffold'
+Write-Host 'V344 build wrapper pending'
