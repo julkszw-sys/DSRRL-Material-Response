@@ -583,6 +583,27 @@ register_lerp_replacement(
         return false;
     }
 
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    // Exactly ONE D3D11 HemEnvLerp pixel shader per RX33-35, identical
+    // for P_Metal and nonmetal. Rebuild after R19 A/B source preparation
+    // with a single PTDE post-EnvSpec material consumer.
+    std::vector<std::uint8_t> unified;
+    if (!operators::env_spec::
+            materialize_nonmetal_lerp_r8_spec_linear_candidate(
+                static_cast<const std::uint8_t *>(dxbc),
+                dxbc_size, unified) ||
+        unified.empty()) {
+        ++lerp_replacement_register_fail_;
+        char log[256]{};
+        std::snprintf(log,sizeof(log),
+            "[DSRRL V345 UNIFIED LERP] stage=create rx=%u candidate=REJECTED fail_open=stock",
+            static_cast<unsigned>(outcome.semantic_receiver_id));
+        reshade::log::message(reshade::log::level::warning,log);
+        return false;
+    }
+    dxbc=unified.data();
+    dxbc_size=unified.size();
+#endif
     const auto payload_sha256 =
         hashing::sha256(
             static_cast<const std::uint8_t *>(
@@ -653,6 +674,13 @@ register_lerp_replacement(
     lerp_replacement_size_[
         outcome.semantic_receiver_id] =
         dxbc_size;
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    char log[256]{};
+    std::snprintf(log,sizeof(log),
+        "[DSRRL V345 UNIFIED LERP] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1",
+        static_cast<unsigned>(outcome.semantic_receiver_id),dxbc_size);
+    reshade::log::message(reshade::log::level::info,log);
+#endif
 
     ++lerp_replacement_register_ok_;
     return true;
@@ -674,6 +702,11 @@ register_lerp_nonmetal_r8_candidate(
         !outcome.spec_rgb_consumer ||
         r19_dxbc == nullptr || r19_size==0u)
         return false;
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    // Canonical PS already built once at register_lerp_replacement.
+    // No second R8 shader is ever created.
+    return true;
+#else
     std::vector<std::uint8_t> candidate;
     if (!operators::env_spec::
             materialize_nonmetal_lerp_r8_spec_linear_candidate(
@@ -700,6 +733,7 @@ register_lerp_nonmetal_r8_candidate(
     lerp_nonmetal_r8_replacements_[
         outcome.semantic_receiver_id]=shader;
     return true;
+#endif
 }
 #endif
 
@@ -1083,7 +1117,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
-#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
     bool r8_selected = false;
 #endif
 
@@ -1115,7 +1149,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             }
 
             shader = found->second;
-#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
             // Dedicated Lerp variant only; stock R19 remains P_Metal's.
             if (material.route_index != 345u &&
                 (
@@ -1162,7 +1196,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 
-#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
     if (r8_selected)
         v287_nonmetal_trace::log("v289_r8_ps_selected",material,decision,1u);
 #endif
@@ -2026,6 +2060,24 @@ bool pmetal_envspec_draw_runtime::prepare(
             material, decision, env_resources_, prepared.env_resources,
             shadow_env_ready, shadow_material_ready,
             source.beta, source.serial);
+#endif
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    if (family == pmetal_envspec_receiver_family::hemenvlerp) {
+        static std::atomic<std::uint32_t> once{0u};
+        const bool pmetal = material.route_index == 345u;
+        const auto bit = 1u << (decision.receiver_id-33u+
+                                 (pmetal ? 0u : 3u));
+        if (!(once.fetch_or(bit,std::memory_order_relaxed)&bit)) {
+            char log[320]{};
+            std::snprintf(log,sizeof(log),
+                "[DSRRL V345 UNIFIED LERP] stage=request_ready rx=%u route=%u class=%s single_ps=1 t10=post_env t1=native beta=%.9g",
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(material.route_index),
+                pmetal ? "P_METAL" : "NONMETAL",
+                static_cast<double>(source.beta));
+            reshade::log::message(reshade::log::level::info,log);
+        }
+    }
 #endif
     prepared.ready = true;
     effect_latch(effect_request_ready_);
