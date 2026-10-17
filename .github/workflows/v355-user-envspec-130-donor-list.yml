@@ -1,0 +1,14 @@
+name: V355 authorized EnvSpec donor list 130 (no addon build)
+on:
+  push:
+    branches: [agent/v355-user-envspec-130-donor-list-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  donor-list-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact user override list and generated authority
+        run: python3 renderer-core/tools/test_v355_user_envspec_intensity_overrides.py
