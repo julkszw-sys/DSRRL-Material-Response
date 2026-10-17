@@ -2027,6 +2027,24 @@ bool pmetal_envspec_draw_runtime::prepare(
             shadow_env_ready, shadow_material_ready,
             source.beta, source.serial);
 #endif
+#if defined(DSRRL_V342_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+    if (r8_selected &&
+        family == pmetal_envspec_receiver_family::hemenvlerp &&
+        material.route_index != 345u) {
+        static std::atomic<bool> v342_once{false};
+        if (!v342_once.exchange(true, std::memory_order_relaxed)) {
+            char line[512]{};
+            std::snprintf(line, sizeof(line),
+                "[DSRRL V342 LEGACY LERP] stage=request_ready rx=%u route=%u beta=%.9g probe_a=%u probe_b=%u late_DSR_schlick_addend=0 PTDE_EnvSpecAB=R19 PTDE_EnvDiffuseAB=R19 PTDE_SpecRGB=V338 pixel=OPEN",
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                static_cast<double>(source.beta),
+                static_cast<unsigned>(prepared.env_resources.probe_a),
+                static_cast<unsigned>(prepared.env_resources.probe_b));
+            reshade::log::message(reshade::log::level::info, line);
+        }
+    }
+#endif
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
