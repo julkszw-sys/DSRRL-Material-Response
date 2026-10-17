@@ -40,4 +40,7 @@ assert "v356_unbind_named_view(key);" in s
 # V355 owner-approved 3 donor rows are built by the existing generator.
 x=(root/"data/provenance/user_envspec_intensity_overrides_v355.tsv").read_text("utf8")
 assert x.count("USER_TEST_OVERRIDE")==3
+p=(root/"src/runtime/envspec_resource_runtime.cpp").read_text("utf8")
+for marker in ("v356_resolve_exact_native_backing_locked(","g_native_resources.find(","D3D11_SRV_DIMENSION_TEXTURECUBE","DXGI_FORMAT_BC6H_UF16","DXGI_FORMAT_BC6H_SF16","[DSRRL V356 PROBE BACKING]"):
+    assert marker in p,marker
 print("V356_SAME_BACKING_RESOURCE_SRV_DESC_CONTRACT_PASS")
