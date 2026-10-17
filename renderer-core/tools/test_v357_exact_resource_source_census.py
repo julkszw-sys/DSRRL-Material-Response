@@ -42,7 +42,7 @@ for marker in ("if (!env_resource_ready) {","if (!material_ready ||","return fal
 assert not any(token in p[p.index("void v357_trace_rejected_srv("):p.index("void log_prepare_stage_once(")] for token in (
     "PSSetShaderResources(","PSSetConstantBuffers(","CopyResource(","Map(","DrawIndexed("
 ))
-assert "-DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS" in b
+assert "/DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS" in b
 assert "materialize_v357_exact_resource_source_census.py" in b
 assert "DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS.addon64" in b
 t=(root/"data/provenance/user_envspec_intensity_overrides_v355.tsv").read_text("utf8")
