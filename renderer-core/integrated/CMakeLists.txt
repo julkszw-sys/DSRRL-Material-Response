@@ -92,6 +92,11 @@ option(
     OFF)
 
 option(
+    DSRRL_V340_NONMETAL_LERP_B12_BETA_ZERO
+    "V340 diagnostic: retain exact nonmetal R8 Lerp PS and all A/B resources, but feed zero beta only into the PTDE EnvSpec/EnvDiffuse b12[3].w and b12[5].w interpolation inputs"
+    OFF)
+
+option(
     DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB
     "V289 opt-in nonmetal-only RX33-35 Lerp R8 SPEC-domain first consumer island A/B; P_Metal unchanged"
     OFF)
@@ -864,6 +869,17 @@ if(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V293_PARSER_EXACT_FLVER_ALIAS>)
+endif()
+
+if(DSRRL_V340_NONMETAL_LERP_B12_BETA_ZERO)
+    if(NOT DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB OR
+       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR
+            "V340 beta-zero requires the V338 nonmetal R8 route, owner gate and R19 exact PTDE paired EnvDiffuse")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V340_NONMETAL_LERP_B12_BETA_ZERO>)
 endif()
 
 if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
