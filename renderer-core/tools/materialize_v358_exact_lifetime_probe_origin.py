@@ -69,9 +69,7 @@ replace(res,'''    if (!extract_tight_bc6h(
             desc,
             initial_data,
             tight)) {
-        ++g_native_hash_miss;
-        return;
-    }''',
+        ++g_native_hash_miss;''',
 '''    if (!extract_tight_bc6h(
             desc,
             initial_data,
@@ -88,9 +86,7 @@ replace(res,'''    if (!extract_tight_bc6h(
                 g_v358_lifetime_probes[resource_handle.handle]=item;
             }
         }
-#endif
-        return;
-    }''',"missing BC6H initial data")
+#endif''',"missing BC6H initial data")
 replace(res,'''    const auto probe =
         env::legacy_native_probe_for_sha(
             digest);
