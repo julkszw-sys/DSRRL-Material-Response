@@ -25,6 +25,7 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#include <dxgi1_4.h>
 
 #include <algorithm>
 #include <array>
@@ -34,6 +35,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -184,9 +186,11 @@ struct sidecar_shared_hash {
 struct sidecar_shared_entry {
     ID3D11ShaderResourceView *view = nullptr; // owns one cache reference
     std::size_t live_stock_users = 0u;
+    bool resident = false; // one GPU SRV ref retained until device teardown
 };
 std::unordered_map<sidecar_shared_key, sidecar_shared_entry,
                    sidecar_shared_hash> g_sidecar_shared;
+std::atomic_bool g_session_residency{false};
 // A live native SRV handle observed under more than one exact logical texture
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
@@ -380,7 +384,8 @@ void release_shared_user(
         if (found == g_sidecar_shared.end() ||
             found->second.live_stock_users == 0u)
             return;
-        if (--found->second.live_stock_users == 0u) {
+        if (--found->second.live_stock_users == 0u &&
+            !found->second.resident) {
             last = found->second.view;
             g_sidecar_shared.erase(found);
         }
@@ -432,6 +437,18 @@ void release_cache() noexcept
 
     for (auto &entry : dead)
         release_set(entry.second);
+
+    // Reclaim resident cache refs at addon teardown, outside the mutex:
+    // COM Release may re-enter a ReShade resource-view callback.
+    std::vector<ID3D11ShaderResourceView *> resident;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (const auto &entry : g_sidecar_shared)
+            resident.push_back(entry.second.view);
+        g_sidecar_shared.clear();
+    }
+    for (auto *view : resident)
+        if (view != nullptr) view->Release();
 }
 
 void release_cache_for_device(
@@ -473,6 +490,22 @@ void release_cache_for_device(
 
     for (auto &set : dead)
         release_set(set);
+
+    // A resident SRV is owned by this device session only. Release the
+    // cache-owned reference after all stock owners are dropped.
+    std::vector<ID3D11ShaderResourceView *> resident;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (auto it = g_sidecar_shared.begin();
+             it != g_sidecar_shared.end();) {
+            if (it->first.device == device) {
+                resident.push_back(it->second.view);
+                it = g_sidecar_shared.erase(it);
+            } else ++it;
+        }
+    }
+    for (auto *view : resident)
+        if (view != nullptr) view->Release();
 }
 
 std::filesystem::path process_dir()
@@ -1031,7 +1064,10 @@ acquired_sidecar acquire_sidecar(
             const bool inserted =
                 g_sidecar_shared.emplace(
                     key,
-                    sidecar_shared_entry{loaded.view, 1u}).second;
+                    sidecar_shared_entry{
+                        loaded.view, 1u,
+                        g_session_residency.load(std::memory_order_relaxed)
+                    }).second;
             if (!inserted) {
                 // No successful publication: retain the standalone SRV.
                 return {loaded, false};
