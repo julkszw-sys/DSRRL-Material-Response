@@ -1117,7 +1117,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
-#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
     bool r8_selected = false;
 #endif
 
