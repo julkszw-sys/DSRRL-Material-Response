@@ -50,6 +50,13 @@ inline std::uint32_t count(std::uint8_t mask) noexcept {
 }
 inline void observe(std::uint64_t hash,std::uint8_t new_bits,
                     const char*stage) noexcept {
+    // Diagnostic-only, never used to authorize resource/draw routing.
+    // V350 CPU runtime: disable binary search, atomic writes and the O(749)
+    // all-name scans and log output on each novel draw observation.
+#if defined(DSRRL_V350_RELEASE_SKIP_HOT_OBSERVERS)
+    (void)hash; (void)new_bits; (void)stage;
+    return;
+#else
     const auto idx=find_index(hash);
     if(idx==749u) {
         // Low-LOD and unresolved resources cannot advance 749 targets.
@@ -78,6 +85,7 @@ inline void observe(std::uint64_t hash,std::uint8_t new_bits,
           count(draw_issued|state_restored));
         reshade::log::message(reshade::log::level::info,line);
     }
+#endif
 }
 inline void observe_probe(const specular_companion_probe &p,
                           bool owner,bool consumer) noexcept {
