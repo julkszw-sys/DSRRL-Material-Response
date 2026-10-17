@@ -26,7 +26,14 @@ for x in ["hook_producer_cache_lookup(","cached.semantic_version == record.seman
     assert x in validator,x
 assert "if (!hook_producer_cache_current_exact(" in tls
 assert "hook_producer_cache_publish_exact(" in tls
-assert "hook_producer_cache_publish_exact(" not in shared, "exact shared hit must stay read-only"
+assert "if (!g_hook_producer_readonly_hit_enabled.load(" in shared
+assert "hook_producer_cache_publish_exact(" in shared
+assert "DSRRL_PMETAL_CACHE_MODE.txt" in source
+assert "mode=0 exact_shared_hit=EXCLUSIVE_REPUBLISH" in source
+assert "mode=1 exact_shared_hit=READ_ONLY" in source
+assert "load_hook_readonly_hit_mode();" in source
+assert "std::memory_order_release" in source
+assert "hook_producer_cache_current_exact(" in tls
 assert "hook_producer_cache_publish_exact(" in miss, "unknown source always publishes"
 assert "g_hook_source_tls = {" in tls and "g_hook_source_tls = {" in shared
 assert "g_hook_source_serial.fetch_add(" in producer
