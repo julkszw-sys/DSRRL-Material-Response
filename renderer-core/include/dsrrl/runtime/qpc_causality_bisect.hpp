@@ -75,6 +75,9 @@ inline void init_from_game_directory() noexcept {
         "[DSRRL QPC CAUSALITY] mode=%u %s same_binary=YES instrumentation_only=YES",
         static_cast<unsigned>(mode),description[mode]);
     OutputDebugStringA(msg);
+#if defined(DSRRL_QPC_SCOPE_SHELL_NO_CLOCK)
+    OutputDebugStringA("[DSRRL QPC SHELL] clock_calls=COMPILED_OUT global_counter_rmw=COMPILED_OUT scope_raii=YES");
+#endif
 }
 
 inline void update_max(std::atomic<std::uint64_t> &maximum,
@@ -85,6 +88,27 @@ inline void update_max(std::atomic<std::uint64_t> &maximum,
         std::memory_order_relaxed)) {}
 }
 
+#if defined(DSRRL_QPC_SCOPE_SHELL_NO_CLOCK)
+// Code-shape isolation: preserve the RAII callsites in every hot function,
+// but remove all QPC calls and shared-counter atomic RMW from the binary.
+// The usual QPC mode 0 is the only intended runtime setting for this build.
+class scope {
+public:
+    explicit scope(stage s) noexcept
+        : index_(static_cast<std::size_t>(s)),
+          mode_(g_mode.load(std::memory_order_relaxed)) {}
+    ~scope() noexcept {
+        if (mode_ == 0u) return;
+        // Nonzero modes are a private per-thread perturbation ONLY.
+        g_tls_qpc_sink = g_tls_qpc_sink ^ (index_ + mode_);
+    }
+    scope(const scope &) = delete;
+    scope &operator=(const scope &) = delete;
+private:
+    std::size_t index_;
+    std::uint32_t mode_;
+};
+#else
 class scope {
 public:
     explicit scope(stage s) noexcept
@@ -122,6 +146,8 @@ private:
     std::uint32_t mode_;
     std::uint64_t begin_=0u;
 };
+
+#endif // DSRRL_QPC_SCOPE_SHELL_NO_CLOCK
 
 inline void report() noexcept {
     const auto mode=g_mode.load(std::memory_order_relaxed);
