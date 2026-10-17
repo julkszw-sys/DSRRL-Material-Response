@@ -29,7 +29,18 @@ function Die([string]$message) {
     throw "ABORT - bez zmian w sidecarze: $message"
 }
 function Sha256([string]$path) {
-    return (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    # Pure .NET hash avoids a dependency on Get-FileHash autoloading in
+    # Windows PowerShell launched through a .bat file.
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($path)
+        $bytes = $sha.ComputeHash($stream)
+        return [System.BitConverter]::ToString($bytes).Replace("-", "").ToLowerInvariant()
+    } finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+        $sha.Dispose()
+    }
 }
 function UnderRoot([string]$path, [string]$dir) {
     $root = [IO.Path]::GetFullPath($dir).TrimEnd([char]'\') + '\'
