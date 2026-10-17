@@ -42,7 +42,8 @@ check("#if defined("+flag+")" in probe and "#else" in probe and "#endif" in prob
       "V315 unresolved probe atomic counts need compile-time bypass")
 check("observer=COMPILED_OUT runtime_draw_evidence=NOT_COLLECTED" in v315,
       "observer-off summary must not claim runtime coverage")
-check("v315::prepared(" in integ and "v315::issued(" in integ and
+ledger_materializer=(r/"renderer-core/tools/materialize_v315_direct_749_runtime_ledger.py").read_text(encoding="utf-8")
+check("v315::prepared(" in ledger_materializer and "v315::issued(" in ledger_materializer and
       "v287_nonmetal_trace::log(" in integ and "v287_nonmetal_trace::log(" in env,
       "leave downstream draw paths in place; no-op inline instrumentation only")
 for feature in ("same_hook_source_payload(", "latest_hook_source(",
