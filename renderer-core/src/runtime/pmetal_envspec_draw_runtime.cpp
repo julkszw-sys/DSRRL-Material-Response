@@ -680,8 +680,17 @@ register_lerp_nonmetal_r8_candidate(
                 static_cast<const std::uint8_t *>(r19_dxbc),
                 r19_size,
                 candidate) ||
-        candidate.empty())
+        candidate.empty()) {
+#if defined(DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+        char failure[256]{};
+        std::snprintf(
+            failure, sizeof(failure),
+            "[DSRRL V343 LEGACY LERP] stage=register rx=%u candidate=REJECTED fallback=R19 gpu=NOT_TESTED",
+            static_cast<unsigned>(outcome.semantic_receiver_id));
+        reshade::log::message(reshade::log::level::warning, failure);
+#endif
         return false;
+    }
     std::lock_guard<std::mutex> lock(mutex_);
     if (device_==nullptr || quarantined_.load())
         return false;
@@ -699,6 +708,15 @@ register_lerp_nonmetal_r8_candidate(
         return false;
     lerp_nonmetal_r8_replacements_[
         outcome.semantic_receiver_id]=shader;
+#if defined(DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+    char success[256]{};
+    std::snprintf(
+        success, sizeof(success),
+        "[DSRRL V343 LEGACY LERP] stage=register rx=%u candidate=CREATED bytes=%zu gpu=NOT_TESTED",
+        static_cast<unsigned>(outcome.semantic_receiver_id),
+        candidate.size());
+    reshade::log::message(reshade::log::level::info, success);
+#endif
     return true;
 }
 #endif
