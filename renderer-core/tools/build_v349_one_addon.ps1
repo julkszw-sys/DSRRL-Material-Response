@@ -2,12 +2,12 @@ param([Parameter(Mandatory=$true)][string]$ReShadeInclude)
 $ErrorActionPreference = 'Stop'
 # Reuse exact V338->V347 one-addon lineage, add ONLY the two V349
 # post-EnvSpec PTDE SpecRGB source consumer corrections.
-$env:CL = '/DDSRRL_V344_PTDE_LERP_SPEC_POST_ENV /DDSRRL_V345_UNIFIED_HEMENVLERP /DDSRRL_V346_LERP_REJECT_STAGE /DDSRRL_V347_LERP_ENVDIFFUSE_REBASE /DDSRRL_V349_PTDE_LERP_SPECRGB_RGB_FIX /DDSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX'
+$env:CL = '/DDSRRL_V344_PTDE_LERP_SPEC_POST_ENV /DDSRRL_V345_UNIFIED_HEMENVLERP /DDSRRL_V346_LERP_REJECT_STAGE /DDSRRL_V347_LERP_ENVDIFFUSE_REBASE /DDSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX /DDSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX'
 & ./renderer-core/tools/build_v338_nonmetal_lerp_one_addon.ps1 -ReShadeInclude $ReShadeInclude
 if ($LASTEXITCODE -ne 0) { throw 'V349 native compilation failed' }
 New-Item -ItemType Directory -Force out-v349 | Out-Null
 Copy-Item 'out-v338/DSRRL_V338_NONMETAL_LERP_YZW_C101.addon64' 'out-v349/DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIXED.addon64' -Force
-$f = 'out-v349/DSRRL_V349_PTDE_LERP_RGB_SWIZZLE_FIXED.addon64'
+$f = 'out-v349/DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIXED.addon64'
 $b = [IO.File]::ReadAllBytes((Resolve-Path $f))
 if ($b.Length -lt 500000) { throw 'V349 small binary' }
 if ([Text.Encoding]::ASCII.GetString($b,0,2) -ne 'MZ') { throw 'V349 not PE' }
