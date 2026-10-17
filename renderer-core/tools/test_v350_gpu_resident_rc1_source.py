@@ -32,7 +32,7 @@ for token in (
     "normal_target_hash_allowed_v12(hash)",
     "load_dds(", "sidecar_shared_entry{result.view,0u,true}",
     "bytes <= g_resident_gpu_limit",
-    "g_resident_gpu_used <= ",
+    "g_resident_gpu_limit - bytes",
 ):
     assert token in pre,token
 loader=region("load_result load_dds(","void on_init_device_residency(")
