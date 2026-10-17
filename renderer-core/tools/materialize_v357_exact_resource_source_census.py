@@ -14,6 +14,8 @@ def apply(path,old,new,label):
     p.write_text(s.replace(old,new,1),"utf8")
 
 p="src/runtime/pmetal_envspec_draw_runtime.cpp"
+apply(p,"#include <cmath>","#include <algorithm>\n#include <cmath>","standard min header")
+
 apply(p,
 '#include "dsrrl/runtime/pixel_srv_shadow.hpp"',
 '#include "dsrrl/runtime/pixel_srv_shadow.hpp"\n'
