@@ -157,22 +157,44 @@ once("""    if (!env_resource_ready) {
             static_cast<std::uint32_t>(env_semantics.envspc_slot));
         static std::atomic<std::uint32_t> logged{0u};
         if ((logged.fetch_or(census_bit,std::memory_order_relaxed)&census_bit)==0u) {
+            ID3D11ShaderResourceView *native_view[3]{};
+            context->PSGetShaderResources(
+                12u,probe_b_required?3u:1u,native_view);
+            std::uint16_t probe_a=0u,probe_b=0u;
+            const bool native_a_known =
+                v354_native_probe_for_view(native_view[0],probe_a);
+            const bool native_b_known =
+                !probe_b_required ? native_a_known :
+                v354_native_probe_for_view(native_view[2],probe_b);
             const auto stats=env_resources_.telemetry();
             char line[512]{};
             std::snprintf(line,sizeof(line),
                 "[DSRRL V354 PROBE REJECT] rx=%u route=%u slot=%u"
                 " shadow_ready=%u blend=%u pack_ready=%u sampler_ready=%u"
+                " native_t12_bound=%u native_t14_bound=%u"
+                " native_a_known=%u native_a_probe=%u"
+                " native_b_known=%u native_b_probe=%u"
                 " native_matched=%llu views=%llu cube_created=%llu"
                 " cube_fail=%llu resolution=NOT_AUTHORIZED_RELEASE_BLOCK",
                 decision.receiver_id,decision.route_index,
                 static_cast<unsigned>(env_semantics.envspc_slot),
                 shadow_env_ready?1u:0u,probe_b_required?1u:0u,
                 stats.pack_ready?1u:0u,stats.sampler_ready?1u:0u,
+                native_view[0]!=nullptr?1u:0u,
+                native_view[2]!=nullptr?1u:0u,
+                native_a_known?1u:0u,static_cast<unsigned>(probe_a),
+                native_b_known?1u:0u,static_cast<unsigned>(probe_b),
                 static_cast<unsigned long long>(stats.native_matches),
                 static_cast<unsigned long long>(stats.view_matches),
                 static_cast<unsigned long long>(stats.cube_created),
                 static_cast<unsigned long long>(stats.cube_fail));
             reshade::log::message(reshade::log::level::info,line);
+            for (auto *&view : native_view) {
+                if (view != nullptr) {
+                    view->Release();
+                    view=nullptr;
+                }
+            }
         }
 #endif
         if (shader != nullptr)
@@ -180,3 +202,37 @@ once("""    if (!env_resource_ready) {
 
 p.write_text(s,encoding="utf8")
 print("V354_EXACT_RESNAPSHOT_OPERATOR_SAFE_SOURCE_PASS")
+
+
+h=root/"include/dsrrl/runtime/envspec_resource_runtime.hpp"
+hdr=h.read_text(encoding="utf8")
+anchor="namespace dsrrl::runtime {\n"
+assert hdr.count(anchor)==1,"v354 envspec resource header drift"
+hdr=hdr.replace(anchor,anchor+"""#if defined(DSRRL_V354_EXACT_RESOURCE_RESNAPSHOT)
+// Diagnostic-only lookup in existing SHA256 certified BC6H native atlas.
+bool v354_native_probe_for_view(
+    ID3D11ShaderResourceView *view,
+    std::uint16_t &probe) noexcept;
+#endif
+
+""",1)
+h.write_text(hdr,encoding="utf8")
+
+q=root/"src/runtime/envspec_resource_runtime.cpp"
+resource=q.read_text(encoding="utf8")
+anchor="} // namespace\n\nenvspec_resource_runtime::~envspec_resource_runtime()"
+assert resource.count(anchor)==1,"V354 native view probe hook anchor drift"
+resource=resource.replace(anchor,"""} // namespace
+
+#if defined(DSRRL_V354_EXACT_RESOURCE_RESNAPSHOT)
+bool v354_native_probe_for_view(
+    ID3D11ShaderResourceView *view,
+    std::uint16_t &probe) noexcept
+{
+    return probe_for_native_view(view,probe);
+}
+#endif
+
+envspec_resource_runtime::~envspec_resource_runtime()""",1)
+q.write_text(resource,encoding="utf8")
+print("V354_EXACT_NATIVE_PROBE_VIEW_CENSUS_PASS")
