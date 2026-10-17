@@ -5,6 +5,7 @@
 #include <reshade.hpp>
 
 #include <cstdint>
+#include <array>
 
 struct ID3D11DeviceContext;
 struct ID3D11ShaderResourceView;
@@ -102,6 +103,14 @@ public:
         prepared_envspec_resources &prepared) noexcept;
     void release(
         prepared_envdiffuse_resources &prepared) noexcept;
+
+#if defined(DSRRL_V336_WANDERER_SRV_AUDIT)
+    // The SHA256 of one already-verified PTDE PackedGI 32x32x6 RGBA8
+    // resource slice. No GPU readback, shader edits, or resource replacement.
+    bool audit_packed_cube_sha256(
+        std::uint16_t probe, std::uint8_t slot,
+        std::array<std::uint8_t,32> &digest) const noexcept;
+#endif
 
     envspec_resource_telemetry telemetry() const noexcept;
     void reset_stats() noexcept;
