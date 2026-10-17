@@ -1,0 +1,58 @@
+name: V342 PTDE HemEnvLerp Legacy Material Tail Island Single Addon
+on:
+  push:
+    branches: [agent/v342-ptde-lerp-material-tail-20261017]
+    paths:
+      - '.github/workflows/v342-ptde-legacy-lerp.yml'
+      - 'renderer-core/tools/build_v342_ptde_legacy_lerp_one_addon.ps1'
+      - 'renderer-core/tools/audit_v342_ptde_legacy_lerp.py'
+      - 'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp'
+      - 'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+      - 'renderer-core/integrated/CMakeLists.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check V338 source ownership and RGB routing
+        run: python3 renderer-core/tools/audit_v338_nonmetal_lerp_else_rgb.py
+      - name: Check exact PTDE legacy Lerp tail cut and three source witnesses
+        run: python3 renderer-core/tools/audit_v342_ptde_legacy_lerp.py
+  win64:
+    needs: source
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build one native V342 ReShade addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v342_ptde_legacy_lerp_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify binary and exact source identity
+        shell: pwsh
+        run: |
+          $sha = (git rev-parse HEAD).Trim()
+          $file = 'out-v342/DSRRL_V342_PTDE_HEMENVLERP_LEGACY_TAIL.addon64'
+          if (-not (Test-Path $file)) { throw "Addon missing" }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $file))
+          if ($bytes.Length -lt 500000) { throw "Addon undersized" }
+          if ([Text.Encoding]::ASCII.GetString($bytes,0,2) -ne 'MZ') { throw "Missing MZ" }
+          $off=[BitConverter]::ToInt32($bytes,0x3c)
+          if ([Text.Encoding]::ASCII.GetString($bytes,$off,4) -ne "PE`0`0") { throw "Missing PE signature" }
+          if ([BitConverter]::ToUInt16($bytes,$off+4) -ne 0x8664) { throw "Invalid architecture" }
+          $text=[Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains($sha)) { throw "Commit identity missing" }
+          if (-not $text.Contains('v342_ptde_hemenvlerp_legacy_tail_island')) { throw "Flavor missing" }
+          if (-not $text.Contains('[DSRRL V342 LEGACY LERP]')) { throw "Runtime marker missing" }
+          Write-Host "V342 SHA256=$((Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V342_PTDE_HEMENVLERP_LEGACY_TAIL_ISLAND_SINGLE_ADDON
+          path: out-v342/DSRRL_V342_PTDE_HEMENVLERP_LEGACY_TAIL.addon64
+          if-no-files-found: error
