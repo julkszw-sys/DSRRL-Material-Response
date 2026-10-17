@@ -2500,6 +2500,12 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         v344_late_sample.begin());
     v344_late_sample[3u] = 0x001000f2u; // r13.xyzw, not r5.yzw
     v344_late_sample[4u] = 13u;
+#if defined(DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX)
+    // t1 WXYZ was correct only for its YZW write mask. The relocated
+    // isolated r13 XYZW write must consume PTDE SpecRGB texel XYZW.
+    // Exact input t10 WXYZ is attested by the existing guard 17.
+    v344_late_sample[7u] = 0x00107e46u; // t10.xyzw -> r13.xyzw
+#endif
 
     // The original shader and R19 compose exactly 13 temporary registers
     // (r0..r12). Claim r13 only for this exact isolated operator island.
@@ -2516,9 +2522,14 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         return DSRRL_V346_FAIL(19u);
 
     const std::array<std::uint32_t,22> v344_modulate{{
-        // r13.xyz = r13.xyz * b12[0].xyz  (PTDE c101 carrier)
+        // PTDE c101 carries a scalar raw value in b12[0].x.
+        // Broadcast verified X instead of reading unrelated Y/Z.
         0x08000038u,0x00100072u,13u,0x00100246u,13u,
-        0x00208246u,12u,0u,
+#if defined(DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX)
+        0x00208006u,12u,0u, // cb12[0].xxxx
+#else
+        0x00208246u,12u,0u, // V347 cb12[0].xyz
+#endif
         // r13.xyz = r13.xyz * COLOR0.xyz (v6 or v7 from ISGN)
         0x07000038u,0x00100072u,13u,0x00100246u,13u,
         0x00101246u,*v344_color_reg,
