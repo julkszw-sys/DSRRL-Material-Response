@@ -603,7 +603,11 @@ register_lerp_replacement(
         char log[256]{};
 #if defined(DSRRL_V346_LERP_REJECT_STAGE)
         std::snprintf(log,sizeof(log),
+            #if defined(DSRRL_V347_LERP_ENVDIFFUSE_REBASE)
+            "[DSRRL V347 LERP REJECT] stage=create rx=%u candidate=REJECTED gate=%u fail_open=stock",
+#else
             "[DSRRL V346 LERP REJECT] stage=create rx=%u candidate=REJECTED gate=%u fail_open=stock",
+#endif
             static_cast<unsigned>(outcome.semantic_receiver_id),
             static_cast<unsigned>(
                 operators::env_spec::v346_lerp_reject_stage()));
