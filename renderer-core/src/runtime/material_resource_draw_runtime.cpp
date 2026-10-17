@@ -999,6 +999,116 @@ load_result load_dds(
     }
 }
 
+// Optional early preload. The exact stock logical name, material, MTD,
+// receiver and draw gates STILL authorize every runtime sidecar binding.
+// Merely finding a DDS in DSRRL/ grants no shader/resource authority.
+bool sidecar_residency_requested() noexcept {
+    try {
+        std::ifstream f(process_dir() / L"DSRRL_SIDECAR_RESIDENCY.txt",
+                        std::ios::binary);
+        char mode = '0';
+        return static_cast<bool>(f.read(&mode,1)) && mode == '1';
+    } catch (...) { return false; }
+}
+
+void on_init_device_residency(reshade::api::device *device) {
+    if (!g_session_residency.load(std::memory_order_acquire) ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11)
+        return;
+    auto *native = reinterpret_cast<ID3D11Device *>(device->get_native());
+    if (native == nullptr) return;
+
+    IDXGIDevice *dxgi = nullptr;
+    IDXGIAdapter *adapter = nullptr;
+    IDXGIAdapter3 *adapter3 = nullptr;
+    DXGI_QUERY_VIDEO_MEMORY_INFO memory{};
+    bool budget_ok = false;
+    if (SUCCEEDED(native->QueryInterface(IID_PPV_ARGS(&dxgi))) &&
+        dxgi != nullptr && SUCCEEDED(dxgi->GetAdapter(&adapter)) &&
+        adapter != nullptr &&
+        SUCCEEDED(adapter->QueryInterface(IID_PPV_ARGS(&adapter3))) &&
+        adapter3 != nullptr)
+        budget_ok = SUCCEEDED(adapter3->QueryVideoMemoryInfo(
+            0u, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memory));
+    if (adapter3) adapter3->Release();
+    if (adapter) adapter->Release();
+    if (dxgi) dxgi->Release();
+    if (!budget_ok || memory.Budget <= memory.CurrentUsage) {
+        reshade::log::message(reshade::log::level::warning,
+            "[DSRRL GPU RESIDENT] DXGI unused local budget unavailable; preload disabled (stock runtime intact)");
+        return;
+    }
+    // UMA DXGI budget is a shared-memory allocation budget, not dedicated VRAM.
+    // Preserve at least half of current free budget for DSR's future streams.
+    const auto unused_budget = memory.Budget - memory.CurrentUsage;
+    const auto limit = unused_budget / 2u;
+    std::uint64_t reserved = 0u;
+    unsigned loaded = 0u, rejected = 0u, budget_skips = 0u;
+    struct target_folder { asset_class cls; const wchar_t *name; };
+    constexpr target_folder targets[] = {
+        {asset_class::specular,L"Specular"},
+        {asset_class::diffuse,L"Diffuse"},
+        {asset_class::normal,L"Normals"}
+    };
+    for (const auto &folder : targets) {
+        try {
+            const auto dir = process_dir() / L"DSRRL" / folder.name;
+            if (!std::filesystem::is_directory(dir)) continue;
+            for (const auto &file : std::filesystem::directory_iterator(dir)) {
+                if (!file.is_regular_file() ||
+                    _wcsicmp(file.path().extension().c_str(),L".dds") != 0)
+                    continue;
+                const auto name = file.path().stem().wstring();
+                if (name.empty()) continue;
+                const auto hash = fnv_name(name);
+                const bool allowed = folder.cls == asset_class::specular
+                    ? (spec_equipment_allowed(hash) ||
+                       exact_subsurface_body_spec_hash(hash))
+                    : folder.cls == asset_class::diffuse
+                      ? generated::diffuse_target_hash_allowed_v12(hash)
+                      : generated::normal_target_hash_allowed_v12(hash);
+                if (!allowed) continue; // fail-open, no basename authority
+                const auto bytes = file.file_size();
+                if (!bytes || bytes > limit || reserved > limit - bytes) {
+                    ++budget_skips; continue;
+                }
+                sidecar_shared_key key{native,folder.cls,hash,name};
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    if (g_sidecar_shared.find(key) != g_sidecar_shared.end())
+                        continue;
+                }
+                // load_dds retains the original exact SHA/format gates.
+                const auto result = load_dds(
+                    native,file.path(),folder.cls,hash);
+                if (!result.view) { ++rejected; continue; }
+                bool inserted = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    auto found = g_sidecar_shared.find(key);
+                    if (found == g_sidecar_shared.end())
+                        inserted = g_sidecar_shared.emplace(
+                            std::move(key),
+                            sidecar_shared_entry{result.view,0u,true}).second;
+                    else found->second.resident = true;
+                }
+                if (inserted) { ++loaded; reserved += bytes; }
+                else result.view->Release(); // never Release under g_mutex
+            }
+        } catch (...) { ++rejected; }
+    }
+    char msg[360]{};
+    std::snprintf(msg,sizeof(msg),
+        "[DSRRL GPU RESIDENT] mode=1 early_gpu_preload=%u "
+        "dds_disk_bytes=%llu budget_unused=%llu max_preload=%llu "
+        "budget_skipped=%u rejected=%u receiver_auth=UNCHANGED",
+        loaded,static_cast<unsigned long long>(reserved),
+        static_cast<unsigned long long>(unused_budget),
+        static_cast<unsigned long long>(limit),budget_skips,rejected);
+    reshade::log::message(reshade::log::level::info,msg);
+}
+
 void account_load(
     load_status status) noexcept
 {
@@ -1571,6 +1681,14 @@ register_events() noexcept
     g_quarantined.store(false);
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
+    const bool resident = sidecar_residency_requested();
+    g_session_residency.store(resident,std::memory_order_release);
+    reshade::log::message(reshade::log::level::info,
+        resident
+            ? "[DSRRL GPU RESIDENT] mode=1 init_device_preload=ON persistent_srv=ON"
+            : "[DSRRL GPU RESIDENT] mode=0 original_cache_policy=ON");
+    reshade::register_event<reshade::addon_event::init_device>(
+        on_init_device_residency);
 
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
@@ -1592,6 +1710,9 @@ unregister_events() noexcept
 {
     if (g_core != &core_)
         return;
+
+    reshade::unregister_event<reshade::addon_event::init_device>(
+        on_init_device_residency);
 
     reshade::unregister_event<
         reshade::addon_event::destroy_device>(
