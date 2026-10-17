@@ -17,6 +17,11 @@ insert='''    bool v296_partial_material = false;
                         false, p.stock_bound, p.snapshot_resolved,
                         p.logical_hash_allowed));
             if (v296_partial_material) {
+#if defined(DSRRL_V296_ROOTCAUSE_TELEMETRY)
+                dsrrl::runtime::v296_diag::record(
+                    material, decision, p, receiver_id,
+                    g_present_count.load(std::memory_order_relaxed));
+#endif
                 static std::atomic_bool announced{false};
                 if (!announced.exchange(true))
                     reshade::log::message(
@@ -34,6 +39,7 @@ insert='''    bool v296_partial_material = false;
 '''
 before='#include "dsrrl/runtime/material_resource_draw_runtime.hpp"'
 after=before+'\n#include "dsrrl/runtime/v296_oct10_material_atomic_gate.hpp"'
+after+='\n#include "dsrrl/runtime/v296_failopen_rootcause_diag.hpp"'
 assert s.count(needle)==1 and s.count(before)==1
 s=s.replace(before,after,1).replace(needle,insert,1)
 # Normal substitution is a separate MR resource path. On an Oct10 draw
