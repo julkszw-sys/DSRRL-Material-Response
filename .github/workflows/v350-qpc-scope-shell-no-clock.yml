@@ -1,0 +1,42 @@
+name: V350 RC1 QPC scope shell no-clock
+on:
+  push:
+    branches: [agent/v350-qpc-scope-shell-no-clock-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source contracts
+        run: |
+          python3 renderer-core/tools/test_v350_perf_source_contract.py
+          python3 renderer-core/tools/test_v350_sync_source_contract.py
+          python3 renderer-core/tools/test_v350_cpu_runtime_contract.py
+          python3 renderer-core/tools/test_v350_qpc_causality_source.py
+          python3 renderer-core/tools/test_v350_qpc_shell_no_clock_source.py
+          python3 renderer-core/tools/audit_v350_ptde_rgb_lane_swizzle.py
+      - name: FLVER identity C++ lifetime
+        run: |
+          g++ -std=c++17 -O2 -pthread -I renderer-core/include renderer-core/src/runtime/flver_identity_registry.cpp renderer-core/tests/v350_flver_direct_parser_tls_lifetime_test.cpp -o /tmp/test_flver
+          /tmp/test_flver
+  native-one-addon:
+    needs: exact-contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build Win64 single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v350_qpc_shell_no_clock_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V350-RC1-QPC-scope-shell-no-clock-one-addon
+          path: out-v350-qpc-shell-no-clock/DSRRL_V350_RC1_QPC_SCOPE_SHELL.addon64
+          if-no-files-found: error
