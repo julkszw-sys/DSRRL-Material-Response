@@ -140,8 +140,55 @@ for ordinal, (signature, first, count) in enumerate(banks):
         )
     )
 
+# User-authorized visual experiment. Do not alter original PTDE donor source.
+# Fail closed if bank identity, row ID, or baseline intensity differs.
+override_path = (
+    Path(__file__).resolve().parents[1]
+    / "data/provenance/user_envspec_intensity_overrides_v355.tsv"
+)
+override_count = 0
+if override_path.is_file():
+    override_lines = [
+        line for line in override_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    override_rows = list(csv.DictReader(override_lines, delimiter="\t"))
+    fields = {
+        "bank_index", "area", "bank_name", "bank_v13_signature",
+        "row_id", "original_ptde_m", "authorized_m", "origin"
+    }
+    if not override_rows or not fields.issubset(override_rows[0]):
+        raise SystemExit("V355 user override list schema invalid")
+    seen_overrides = set()
+    for patch in override_rows:
+        index = int(patch["bank_index"])
+        row_id = int(patch["row_id"])
+        old_m = int(patch["original_ptde_m"])
+        new_m = int(patch["authorized_m"])
+        signature = "0x" + patch["bank_v13_signature"].lower()
+        if (index, row_id) in seen_overrides:
+            raise SystemExit("V355 duplicate donor override")
+        seen_overrides.add((index, row_id))
+        if index >= len(resolved_banks) or index < 0:
+            raise SystemExit("V355 bank index out of range")
+        sig, _layout, _live, first, count, bank_name = resolved_banks[index]
+        if sig.lower() != signature or bank_name != patch["bank_name"]:
+            raise SystemExit("V355 donor bank provenance mismatch")
+        if row_id >= count or row_id < 0:
+            raise SystemExit("V355 donor row out of range")
+        src_id, red, green, blue, intensity = rows[first + row_id]
+        if src_id != row_id or intensity != old_m or old_m != 100 or new_m != 130:
+            raise SystemExit("V355 PTDE baseline or authorized value mismatch")
+        if patch["origin"] != "USER_TEST_OVERRIDE":
+            raise SystemExit("V355 cannot claim PTDE donor provenance")
+        rows[first + row_id] = (src_id, red, green, blue, new_m)
+        override_count += 1
+    if seen_overrides != {(8, 6), (8, 12), (16, 18)}:
+        raise SystemExit("V355 override scope mismatch")
+
 lines = [
     "#pragma once",
+    "// User V355 test overrides applied: generated values are not exact PTDE where overridden.",
     "#include <array>",
     "#include <cstddef>",
     "#include <cstdint>",
@@ -183,5 +230,5 @@ out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text("\n".join(lines) + "\n", encoding="utf-8")
 print(
     f"generated rows={len(rows)} banks={len(resolved_banks)} "
-    f"layout_unique={len(seen_layouts)}"
+    f"layout_unique={len(seen_layouts)} user_test_overrides={override_count}"
 )
