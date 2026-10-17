@@ -1,6 +1,7 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
 #include "dsrrl/runtime/key_invalidation_journal.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
@@ -559,6 +560,7 @@ load_result load_dds(
     asset_class cls,
     std::uint64_t logical_hash) noexcept
 {
+    qpc_bisect::scope qpc_scope(qpc_bisect::stage::dds_load);
     if (device == nullptr ||
         path.empty())
         return {};
@@ -918,11 +920,13 @@ load_result load_dds(
 
         g_internal_create = true;
 
-        const HRESULT create_texture =
-            device->CreateTexture2D(
+        const HRESULT create_texture = [&]() noexcept {
+            qpc_bisect::scope qpc_texture(qpc_bisect::stage::create_texture);
+            return device->CreateTexture2D(
                 &desc,
                 initial.data(),
                 &texture);
+        }();
 
         HRESULT create_view = E_FAIL;
         if (SUCCEEDED(create_texture) &&
@@ -1259,6 +1263,7 @@ void on_init_resource_view(
     const reshade::api::resource_view_desc &,
     reshade::api::resource_view view)
 {
+    qpc_bisect::scope qpc_scope(qpc_bisect::stage::resource_view_init);
     if (g_internal_create ||
         g_quarantined.load() ||
         device == nullptr ||
