@@ -47,11 +47,11 @@ python renderer-core/tools/materialize_v358_exact_lifetime_probe_origin.py
 if ($LASTEXITCODE -ne 0) { throw 'V358 source materializer failed' }
 python renderer-core/tools/test_v358_exact_lifetime_probe_origin.py
 if ($LASTEXITCODE -ne 0) { throw 'V358 source contract failed' }
-python renderer-core/tools/materialize_v360_fixed_ptde_equipment_telemetry.py
+python renderer-core/tools/materialize_v359_attested_gi_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 materializer failed' }
 python renderer-core/tools/materialize_v359_view_scope_identity.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 exact view source recovery failed' }
-python renderer-core/tools/test_v360_fixed_ptde_equipment_telemetry.py
+python renderer-core/tools/test_v359_attested_gi_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 test failed' }
 python renderer-core/tools/materialize_v360_fixed_equipment_pointlight.py
 if ($LASTEXITCODE -ne 0) { throw 'V360 fixed-only materializer failed' }
