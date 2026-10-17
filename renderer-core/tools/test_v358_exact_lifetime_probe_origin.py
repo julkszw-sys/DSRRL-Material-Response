@@ -20,7 +20,7 @@ for value in (
     "view->GetResource(&resource)",
     "view->GetDevice(&native_device)",
     "reinterpret_cast<std::uintptr_t>(native_device)",
-    "origin.creation_sha256=origin.sha",
+    "out.creation_sha256=origin.sha",
 ):assert value in env,value
 for value in (
     "[DSRRL V358 PROBE ORIGIN]",
