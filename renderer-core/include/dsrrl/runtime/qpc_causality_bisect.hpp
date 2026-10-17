@@ -12,6 +12,8 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cwchar>
+#include <iterator>
 #include <cstring>
 #include <reshade.hpp>
 
