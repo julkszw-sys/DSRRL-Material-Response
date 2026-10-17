@@ -15,7 +15,7 @@
 #include <cwchar>
 #include <iterator>
 #include <cstring>
-#include <reshade.hpp>
+#include <cstddef>
 
 namespace dsrrl::runtime::qpc_bisect {
 
@@ -68,7 +68,7 @@ inline void init_from_game_directory() noexcept {
     std::snprintf(msg,sizeof(msg),
         "[DSRRL QPC CAUSALITY] mode=%u %s same_binary=YES instrumentation_only=YES",
         static_cast<unsigned>(mode),description[mode]);
-    reshade::log::message(reshade::log::level::info,msg);
+    OutputDebugStringA(msg);
 }
 
 inline void update_max(std::atomic<std::uint64_t> &maximum,
@@ -127,6 +127,6 @@ inline void report() noexcept {
         "[DSRRL QPC CAUSALITY] unload_mode=%u shared_observed_scopes=%llu qpc_only_tls_not_counted=YES",
         static_cast<unsigned>(mode),
         static_cast<unsigned long long>(calls));
-    reshade::log::message(reshade::log::level::info,msg);
+    OutputDebugStringA(msg);
 }
 } // namespace dsrrl::runtime::qpc_bisect
