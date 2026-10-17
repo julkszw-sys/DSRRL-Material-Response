@@ -20,7 +20,7 @@ assert "0x00100246u,13u" in v
 assert "0x07000038u,0x00100072u,1u,0x00100246u,1u," in v # old branch remains for reproducing prior version
 assert "v344_late_sample[7u] = 0x00107e46u" in v
 assert "0x00208006u,12u,0u, // cb12[0].xxxx" in v
-assert "#if defined("+f+")" in v
+assert "#if defined("+f+")" in v or "#elif defined("+f+")" in v
 assert f in b and "DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX" in b
 assert "[DSRRL V349 PTDE RGB LIVEOUT]" in r
 assert "v344_t11 != v344_t12 + v344_expected_t11_delta" in s

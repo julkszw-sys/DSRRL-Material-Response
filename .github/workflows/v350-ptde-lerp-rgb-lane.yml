@@ -1,0 +1,44 @@
+name: V350 PTDE HemEnvLerp RGB Masked-Lane Swizzle
+on:
+  push:
+    branches: [agent/v350-ptde-lerp-rgb-lane-swizzle-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit original R19 pipeline, V349 and V350 lane-level fix
+        run: |
+          python3 renderer-core/tools/audit_v347_r19_lerp_rebase.py
+          python3 renderer-core/tools/audit_v344_ptde_spec_post_env.py
+          python3 renderer-core/tools/audit_v345_single_lerp.py
+          python3 renderer-core/tools/audit_v348_unified_specrgb.py
+          python3 renderer-core/tools/audit_v349_ptde_r1_yzw.py
+          python3 renderer-core/tools/audit_v350_ptde_rgb_lane_swizzle.py
+  native-x64:
+    needs: exact-source
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Compile native one addon V350
+        shell: pwsh
+        run: ./renderer-core/tools/build_v350_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Emit SHA256 of native x64 PE
+        shell: pwsh
+        run: |
+          $f='out-v350/DSRRL_V350_PTDE_LERP_RGB_SWIZZLE_FIXED.addon64'
+          Write-Host "commit=$((git rev-parse HEAD).Trim())"
+          Write-Host "sha256=$((Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V350_PTDE_LERP_RGB_ONE_ADDON
+          path: out-v350/DSRRL_V350_PTDE_LERP_RGB_SWIZZLE_FIXED.addon64
+          if-no-files-found: error
