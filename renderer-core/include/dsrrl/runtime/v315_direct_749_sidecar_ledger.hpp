@@ -50,6 +50,13 @@ inline std::uint32_t count(std::uint8_t mask) noexcept {
 }
 inline void observe(std::uint64_t hash,std::uint8_t new_bits,
                     const char*stage) noexcept {
+    // Diagnostic-only, never used to authorize resource/draw routing.
+    // V350 CPU runtime: disable binary search, atomic writes and the O(749)
+    // all-name scans and log output on each novel draw observation.
+#if defined(DSRRL_V350_RELEASE_SKIP_HOT_OBSERVERS)
+    (void)hash; (void)new_bits; (void)stage;
+    return;
+#else
     const auto idx=find_index(hash);
     if(idx==749u) {
         // Low-LOD and unresolved resources cannot advance 749 targets.
@@ -78,9 +85,14 @@ inline void observe(std::uint64_t hash,std::uint8_t new_bits,
           count(draw_issued|state_restored));
         reshade::log::message(reshade::log::level::info,line);
     }
+#endif
 }
 inline void observe_probe(const specular_companion_probe &p,
                           bool owner,bool consumer) noexcept {
+#if defined(DSRRL_V350_RELEASE_SKIP_HOT_OBSERVERS)
+    (void)p; (void)owner; (void)consumer;
+    return;
+#else
     if(!p.snapshot_resolved || p.logical_hash==0u) {
         unidentifiable_draws.fetch_add(1u,std::memory_order_relaxed);
         return;
@@ -93,6 +105,7 @@ inline void observe_probe(const specular_companion_probe &p,
     // Consumer candidacy cannot be promoted to a prepared/issued draw.
     (void)consumer;
     observe(p.logical_hash,stage,"logical_observed");
+#endif
 }
 inline void prepared(std::uint64_t hash) noexcept {
     if(hash==0u)return;
@@ -108,6 +121,12 @@ inline void issued(std::uint64_t hash,bool lerp,bool restored) noexcept {
     observe(hash,flags,lerp?"lerp_draw_issued":"envspec_draw_issued");
 }
 inline void summary() noexcept {
+#if defined(DSRRL_V350_RELEASE_SKIP_HOT_OBSERVERS)
+    // No zero-valued coverage claim: the entire observer was deliberately off.
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL V315 749 SIDECAR SUMMARY] observer=COMPILED_OUT runtime_draw_evidence=NOT_COLLECTED");
+    return;
+#else
     char line[480]{};
     std::snprintf(line,sizeof(line),
       "[DSRRL V315 749 SIDECAR SUMMARY] "
@@ -125,5 +144,6 @@ inline void summary() noexcept {
       unidentifiable_draws.load(std::memory_order_relaxed),
       rejected_low_or_unknown.load(std::memory_order_relaxed));
     reshade::log::message(reshade::log::level::info,line);
+#endif
 }
 } // namespace dsrrl::runtime::v315
