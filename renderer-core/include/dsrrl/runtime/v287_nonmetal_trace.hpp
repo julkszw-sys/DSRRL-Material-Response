@@ -64,6 +64,13 @@ inline void log(const char *stage,
                 const operators::material_response::decision &d,
                 std::uint32_t family) noexcept
 {
+    // Runtime V350 CPU profile: V287 is a read-only observer. Prevent its
+    // per-draw SHA folding, shared compare_exchange and ReShade logging.
+    // Sender/receiver material checks and all PTDE operators run unchanged.
+#if defined(DSRRL_V350_RELEASE_SKIP_HOT_OBSERVERS)
+    (void)stage; (void)m; (void)d; (void)family;
+    return;
+#else
     // Preserve historical P_Metal instrumentation and priority unchanged.
     if (m.route_index==345u || !claim(m,d.receiver_id,family,stage))
         return;
@@ -84,6 +91,7 @@ inline void log(const char *stage,
         m.flver_sha256[4],m.flver_sha256[5],
         m.flver_sha256[6],m.flver_sha256[7]);
     reshade::log::message(reshade::log::level::info,line);
+#endif
 }
 
 } // namespace dsrrl::runtime::v287_nonmetal_trace
