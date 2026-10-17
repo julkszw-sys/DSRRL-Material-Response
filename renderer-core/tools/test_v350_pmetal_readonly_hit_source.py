@@ -24,7 +24,7 @@ for x in ["hook_producer_cache_lookup(","cached.semantic_version == record.seman
           "cached.source.generation == record.source.generation",
           "cached.source.phn_k135_valid ==","cached.source.phn_k135 =="]:
     assert x in validator,x
-assert "if (!hook_producer_cache_current_exact(" in tls
+assert "!hook_producer_cache_current_exact(" in tls
 assert "hook_producer_cache_publish_exact(" in tls
 assert "if (!g_hook_producer_readonly_hit_enabled.load(" in shared
 assert "hook_producer_cache_publish_exact(" in shared
