@@ -6,6 +6,7 @@
 #endif
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
 #include "dsrrl/runtime/exact_material_cache.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
@@ -758,6 +759,7 @@ void observe_exact_runtime_mtd(
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+ dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::mtd_observe);
  (void)semantic_key;
  if(material==nullptr)return;
 
@@ -936,6 +938,7 @@ bool exe_ok(){
  if(h)BCryptDestroyHash(h);BCryptCloseAlgorithmProvider(a,0);if(!ok)return false;static constexpr char x[]="0123456789abcdef";std::string s(64,'0');for(std::size_t i=0;i<32;++i){s[2*i]=x[d[i]>>4];s[2*i+1]=x[d[i]&15];}return s==k_sha;
 }
 void __fastcall parse_entry(void*m,const void*r) noexcept {
+ dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::flver_parse);
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  g_selector_profile_parse_events.fetch_add(
      1u,
@@ -1060,13 +1063,16 @@ bool publish_exact_selector_identity(
             profile != nullptr
                 ? selector_profile_begin(*profile)
                 : 0u;
-        pmetal_env_source_selector_event(
-            owner,
-            ret,
-            r14,
-            r15,
-            selector_stack,
-            identity);
+        {
+            dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::pmetal_selector);
+            pmetal_env_source_selector_event(
+                owner,
+                ret,
+                r14,
+                r15,
+                selector_stack,
+                identity);
+        }
         if (profile != nullptr)
             selector_profile_end_stage(
                 *profile,
@@ -1098,6 +1104,7 @@ extern "C" void dsrrl_flver_selector_observer(
     std::uint32_t incoming_mode,
     const void *selector_stack) noexcept
 {
+ dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::selector);
  selector_profile_sample profile{};
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  const auto profile_sequence =
