@@ -190,7 +190,7 @@ struct sidecar_shared_entry {
 };
 std::unordered_map<sidecar_shared_key, sidecar_shared_entry,
                    sidecar_shared_hash> g_sidecar_shared;
-std::atomic_bool g_session_residency{false};
+std::atomic_bool g_session_residency{true};
 // Guarded by g_mutex: no resident cold upload may exceed the same startup cap.
 std::uint64_t g_resident_gpu_limit = 0u;
 std::uint64_t g_resident_gpu_used = 0u;
@@ -1007,15 +1007,8 @@ load_result load_dds(
 // Optional early preload. The exact stock logical name, material, MTD,
 // receiver and draw gates STILL authorize every runtime sidecar binding.
 // Merely finding a DDS in DSRRL/ grants no shader/resource authority.
-bool sidecar_residency_requested() noexcept {
-    try {
-        std::ifstream f(process_dir() / L"DSRRL_SIDECAR_RESIDENCY.txt",
-                        std::ios::binary);
-        char mode = '0';
-        return static_cast<bool>(f.read(&mode,1)) && mode == '1';
-    } catch (...) { return false; }
-}
-
+// V350 RC1: sidecar residency is enabled without any external mode file.
+// Exact material authorization and DXGI budget guards still fail open.
 void on_init_device_residency(reshade::api::device *device) {
     if (!g_session_residency.load(std::memory_order_acquire) ||
         device == nullptr ||
@@ -1702,12 +1695,13 @@ register_events() noexcept
     g_quarantined.store(false);
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
-    const bool resident = sidecar_residency_requested();
-    g_session_residency.store(resident,std::memory_order_release);
+    // Release-candidate policy: one integrated addon with no TXT dependency.
+    // A missing/insufficient DXGI budget degrades safely to stock streaming.
+    g_session_residency.store(true,std::memory_order_release);
     reshade::log::message(reshade::log::level::info,
-        resident
-            ? "[DSRRL GPU RESIDENT] mode=1 init_device_preload=ON persistent_srv=ON"
-            : "[DSRRL GPU RESIDENT] mode=0 original_cache_policy=ON");
+        "[DSRRL GPU RESIDENT RC1] default=ON config_file=NONE "
+        "init_device_preload=ON budget_guard=DXGI_HALF_FREE_LOCAL "
+        "stock_receiver_auth=UNCHANGED");
     reshade::register_event<reshade::addon_event::init_device>(
         on_init_device_residency);
 
