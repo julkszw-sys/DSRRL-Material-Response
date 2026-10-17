@@ -90,6 +90,7 @@ before='''    const auto by_view =
 
 bool snapshot_ready_envspec('''
 after='''#if defined(DSRRL_V356_EXACT_BACKING_SRV_ALIAS)
+    (void)key;
     return v356_resolve_exact_native_backing_locked(view,probe);
 #else
     const auto by_view =
@@ -120,6 +121,7 @@ before='''            const auto by_view =
 
     std::lock_guard<std::mutex> lock(g_mutex);'''
 after='''#if defined(DSRRL_V356_EXACT_BACKING_SRV_ALIAS)
+            (void)view_key;
             return v356_resolve_exact_native_backing_locked(view,probe);
 #else
             const auto by_view =
