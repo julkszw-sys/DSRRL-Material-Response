@@ -1,0 +1,42 @@
+name: V352 Long Soak Full Telemetry one addon
+on:
+  push:
+    branches: [agent/v352-long-soak-full-telemetry-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve V351 and validate V352 telemetry source
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --output v352_fallback_census.json
+          python3 -m py_compile renderer-core/tools/materialize_v352_long_soak_telemetry.py renderer-core/tools/test_v352_long_soak_source.py
+          grep -q 'frequency_ \* 30ull' renderer-core/include/dsrrl/runtime/v352_long_soak_present_monitor.hpp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V352-Fallback-Source-Census
+          path: v352_fallback_census.json
+  native-one-addon:
+    needs: source-contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build Win64 V352 long-soak native addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v352_long_soak_telemetry.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V352-Long-Soak-Full-Telemetry-single-addon
+          path: out-v352-long-soak/DSRRL_V352_LONG_SOAK_FULL_TELEMETRY.addon64
+          if-no-files-found: error
