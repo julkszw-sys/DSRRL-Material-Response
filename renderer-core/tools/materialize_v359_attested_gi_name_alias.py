@@ -5,12 +5,14 @@ Authoritative source: DSR GI packed binder 342 rows and R15 342 probe names.
 No guesses from ordering at runtime, MTD, shader family or nearby resource.
 """
 from pathlib import Path
-import hashlib,base64,zlib
+import hashlib,base64,zlib,struct
 root=Path(__file__).resolve().parents[1]
-packed="eNp92TFuHDEMheE+pxlSIqU5QGCkzgG2SJ0gVc6fBFg3Xn0GXP0YaPg4fNSz/fbt8fXXn++/fzx+xvW4/v9c+bi+vB34BF/g95nnBY73jjrzwvOFOmuDo86FOhfOX4c64xHXdYEHeIIP8Amuehb4Br/PPFB/4L2B8xP9SZyf6E/2mQ+cM3DOQD+Hzkd/JnRNvHfi/InvNdHPiXoK9RTmqvAdC/U0zm/o2uA3+nOjzht13uc+BPwY8GPAdwHf/RMMjnoC9cBfEQmOOgN1xgLf4Kgf/g34N+DfyEOd+f8eucADPMEHuN5b4A2+wDf4feYBXQFdgToDdQbqDNSTH3k87/cLPMATfIBP8AJv8AW+waE3oDegN6A3oDegN6A3oDegN6A3oDehN6E3oTehN6E3oTehN6E3oVfzPKB3QO+A3gG9A3oH9A7oHdA7oHdA74TeCb0vuSWxBxJ7ILEHEnsgsQcSfk98r8T3SnyvxHfJz/swUefUOaj/Je89eaPPjXN6n/lCf9ZBV+A7Br5LnPbVkw/wOcAbfJ954/nG8+s68xv13NB7Q9eNeu515HFd4AE+wCd4gTc46ny57wb8PuD3Ab8P+H3g3h/YAwNz+84TfIBP8EM9ifcm3pt47zGXTuzbif5P9H+i/xP9n0+9F3iAJ/gA13sLvME/zm2hP4X+FPpT6E9hPgvzWcilhVxayKWFXFrIpYVcWsilhVxayKWFXFrYP4X9U9g/hf1T2D+F/VPYP+X9E/B1wL8B/wb8G/BvwL8B/wb8G/BvwL8B/wb8G/BvwL8B/wb8G/BvwL8B3wV8F/BdwEcBX8Qn8//ye1kjDzTuu8Z917jvGvdd475r3HeNe6pxTzXuqcb+b+z/xv5v7P/G/m/s/8b+b+z/xj5v7PPGPm/s88Y+b+zzxj5v7OHG3weevPB86XnoKugq6CrU//L74IJfFvyy4IuF/LYwzwv5aiEXLeSfhflfmP+FuV2Y24V8sjC3C3O7MLcLOWFh3hb+rrIwbwv/t33n6P/G87f4R70bc7UxVxtztbFvN/LPk798r417ZOMeeef/vtdfE+w/QA=="
+packed="eNod01tvE0cYBuD5dtd2ssS7Y+cckjghCSQBWgQUVW3VC0RDC1RFSJzFUSBOF/3bbQEB6kWlqkU8G62em/GO533ns+tUpDpVDJhmjgW2OM8FvuN7DrjC1VTHH2Udf/IXb3nHez7wkU/8zT/8y3/8z2eKqo4BU9TM0JIZs8AiSyyzwhoTNtlmnx+5xE9c5irX+JXfuM4NbnKL29zhLvd4wEMe8ZgnPOVZVRcp1UXgfooSd1T06OOuiincV3GEGVoyI2ZZS0dSIigoqejRZ8AU09R0zwxDGloyI8bMMsc8CyyyxDIrHGWV7tx1JmywyTG22GaH45xglz32nZwICkoq+kzYYJMtundPcZqv+JofuMglLvNzmgnfFb4jWuyLk3g/zuDd8G4c8ICHPOIxT3jGc17wkle85g2/u6GgoKSiRz8NnTkM62Hd2cOwboZDMxya4dAMGz0b+xv7G/sb+5uwZm9jb2NvE91ajz4DkwgKSip69Ok+m2Ka+nBi2jKkoXsyI8bMMsc8CyyyxDIrHGWVNdaZsMEmx9himx2Oc4Ld1Mrfyt/K38rfyt/K38rfdvlDxpAv5Av5Qr6Qz2zakC/kC/lCvpAv5Av5Qr6QL+QL+UKmkClkMtM2ZIju/D0tE0FBSUWPPvXhLzm7m6x/1j/rn/XP+mf9s/5Z/6x31jvrnfXOeme9s95Z15y6s85yjvN8wwW+5aKbTgQlg8N/z8g8RofPLHPMs8wKq6wzYYMddjnFWQ74hevc475JJoKSKo3d/zhW2WWP/fQFzldHUQ=="
 raw=zlib.decompress(base64.b64decode(packed))
-assert hashlib.sha256(raw).hexdigest()=="3c92de7e08b5bd4291ec683dcf5d36ff5011a4fea7c60c38dacdfd179145325a"
-names=raw.decode("ascii").splitlines()
+assert len(raw)==1368 and hashlib.sha256(raw).hexdigest()=="e25dccb8353fa57e51a23c25c246847080036e1009d56011fab7d6fa1ef7463b"
+triples=[struct.unpack_from("<BBH",raw,i) for i in range(0,len(raw),4)]
+names=[f"GI_EnvSpc_m{m:02d}_{a:02d}_{probe:04d}_0" for m,a,probe in triples]
+assert hashlib.sha256("\\n".join(names).encode()).hexdigest()=="3c92de7e08b5bd4291ec683dcf5d36ff5011a4fea7c60c38dacdfd179145325a"
 assert len(names)==342 and len(set(names))==342
 assert all(x.startswith("GI_EnvSpc_m") and x.endswith("_0") and len(x)<65 for x in names)
 h=root/"include/dsrrl/operators/env_spec/generated_gi_name_binder_v359.hpp"
