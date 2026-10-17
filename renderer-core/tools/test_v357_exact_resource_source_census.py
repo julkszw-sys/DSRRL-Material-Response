@@ -14,7 +14,7 @@ for marker in (
     "srv->GetResource(&resource)",
     "srv->GetDevice(&device)",
     "QueryInterface(",
-    "v214_resource_name_provenance::instance().snapshot(",
+    "v214_resource_provenance::instance().snapshot(",
     "NO_PRODUCER_WITNESS",
     "AMBIGUOUS_SOURCE",
     "EXACT_RETAIL_SOURCE",
