@@ -2533,9 +2533,18 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         // r13.xyz = r13.xyz * COLOR0.xyz (v6 or v7 from ISGN)
         0x07000038u,0x00100072u,13u,0x00100246u,13u,
         0x00101246u,*v344_color_reg,
-        // r1.xyz = EnvSpec_A/B.rgb * r13.xyz, before EnvDiffuse
+        // EnvSpec RGBA PTDE chain stores RGB in r1.YZW, not r1.XYZ.
+        // V344-V348 incorrectly wrote X,Y,Z: it polluted the alpha/X
+        // carrier, multiplied red by green and green by blue, while
+        // leaving B in W unscaled. Preserve r1.x and multiply the
+        // exactly proven PTDE RGB live-out YZW component-wise.
+#if defined(DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX)
+        0x07000038u,0x001000e2u,1u,0x00100796u,1u,
+        0x00100246u,13u
+#else
         0x07000038u,0x00100072u,1u,0x00100246u,1u,
         0x00100246u,13u
+#endif
     }};
 
     // Instruction-size exact: no offset shifts or replay, and no changes
