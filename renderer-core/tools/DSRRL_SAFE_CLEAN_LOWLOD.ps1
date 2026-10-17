@@ -88,6 +88,12 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
     Die "Wskazany folder nie zawiera DarkSoulsRemastered.exe."
 }
 $specDir = Join-Path $GameDir "DSRRL\Specular"
+# Never move files through junctions/symlinks, even if names match.
+$specInfo = Get-Item -LiteralPath $specDir -ErrorAction Stop
+if (($specInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    Die "Folder Specular jest junction/symlink; nie mozna bezpiecznie usuwac."
+}
+
 if (-not (Test-Path -LiteralPath $specDir -PathType Container)) {
     Die "Nie znaleziono folderu DSRRL\Specular."
 }
@@ -96,7 +102,7 @@ $auditRoot = Join-Path $GameDir "_DSRRL_LOWLOD_REPORTS"
 
 # Only the exact tested RC1 has the certified negative mapping of 544 names.
 # If a future addon changes receiver/resource routes, fail closed.
-if ($Apply -or -not [string]::IsNullOrWhiteSpace($Restore)) {
+if ($Apply) {
     $addonCandidates = @()
     if (-not [string]::IsNullOrWhiteSpace($AddonPath)) {
         if (-not (Test-Path -LiteralPath $AddonPath -PathType Leaf)) {
