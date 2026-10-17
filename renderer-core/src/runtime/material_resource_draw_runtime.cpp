@@ -191,6 +191,9 @@ struct sidecar_shared_entry {
 std::unordered_map<sidecar_shared_key, sidecar_shared_entry,
                    sidecar_shared_hash> g_sidecar_shared;
 std::atomic_bool g_session_residency{false};
+// Guarded by g_mutex: no resident cold upload may exceed the same startup cap.
+std::uint64_t g_resident_gpu_limit = 0u;
+std::uint64_t g_resident_gpu_used = 0u;
 // A live native SRV handle observed under more than one exact logical texture
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
@@ -446,6 +449,8 @@ void release_cache() noexcept
         for (const auto &entry : g_sidecar_shared)
             resident.push_back(entry.second.view);
         g_sidecar_shared.clear();
+        g_resident_gpu_limit = 0u;
+        g_resident_gpu_used = 0u;
     }
     for (auto *view : resident)
         if (view != nullptr) view->Release();
@@ -1043,6 +1048,11 @@ void on_init_device_residency(reshade::api::device *device) {
     // Preserve at least half of current free budget for DSR's future streams.
     const auto unused_budget = memory.Budget - memory.CurrentUsage;
     const auto limit = unused_budget / 2u;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_resident_gpu_limit = limit;
+        g_resident_gpu_used = 0u;
+    }
     std::uint64_t reserved = 0u;
     unsigned loaded = 0u, rejected = 0u, budget_skips = 0u;
     struct target_folder { asset_class cls; const wchar_t *name; };
@@ -1092,6 +1102,7 @@ void on_init_device_residency(reshade::api::device *device) {
                             std::move(key),
                             sidecar_shared_entry{result.view,0u,true}).second;
                     else found->second.resident = true;
+                    if (inserted) g_resident_gpu_used += bytes;
                 }
                 if (inserted) { ++loaded; reserved += bytes; }
                 else result.view->Release(); // never Release under g_mutex
@@ -1152,12 +1163,16 @@ acquired_sidecar acquire_sidecar(
             }
         }
 
-        auto loaded = load_dds(
-            device, sidecar_path(cls, logical_name),
-            cls, logical_hash);
+        const auto path = sidecar_path(cls, logical_name);
+        auto loaded = load_dds(device, path, cls, logical_hash);
         if (loaded.view == nullptr)
             return {loaded, false};
 
+        std::error_code size_error{};
+        const auto cold_size = g_session_residency.load(
+            std::memory_order_relaxed)
+            ? std::filesystem::file_size(path, size_error)
+            : 0u;
         try {
             std::lock_guard<std::mutex> lock(g_mutex);
             const auto it = g_sidecar_shared.find(key);
@@ -1171,13 +1186,14 @@ acquired_sidecar acquire_sidecar(
                 return {{winner, load_status::ready}, true};
             }
 
+            const bool resident = !size_error && cold_size != 0u &&
+                cold_size <= g_resident_gpu_limit &&
+                g_resident_gpu_used <= g_resident_gpu_limit - cold_size;
             const bool inserted =
                 g_sidecar_shared.emplace(
                     key,
-                    sidecar_shared_entry{
-                        loaded.view, 1u,
-                        g_session_residency.load(std::memory_order_relaxed)
-                    }).second;
+                    sidecar_shared_entry{loaded.view, 1u, resident}).second;
+            if (inserted && resident) g_resident_gpu_used += cold_size;
             if (!inserted) {
                 // No successful publication: retain the standalone SRV.
                 return {loaded, false};
