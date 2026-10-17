@@ -1,7 +1,7 @@
 name: V335 Native
 on:
   push:
-    branches: [agent/v335-mr-exact-owner-route-recovery-20261017]
+    branches: [agent/v336-wanderer-srv-audit]
   workflow_dispatch:
 jobs:
   test:
