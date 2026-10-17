@@ -2412,8 +2412,18 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     if (v344_isgn_count != 1u || !v344_color_reg)
         return DSRRL_V346_FAIL(12u);
 
-    // R19 DXBC site census: one t12 EnvSpec A sample and one t11
-    // EnvDiffuse A sample, separated by exactly 129 DWORDs.
+    // R19 EXPLICIT EnvDiffuse RGB/A port relocates t11 SAMPLE to the
+    // six-NOP prefix preceding stock t11 without moving EnvSpec t12.
+    // Therefore the real post-R19 SHEX delta is 129-6 = 123 DWORDs.
+    // 129 belongs only to the original non-ported EnvDiffuse topology.
+    // These exact guards still require unique t12/t14/t11 samples,
+    // sufficient NOP room and byte-for-byte PTDE EnvSpec A/B identity.
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    constexpr std::size_t v344_expected_t11_delta =
+        129u - k_ptde_envdiffuse_lerp_prefix_words;
+#else
+    constexpr std::size_t v344_expected_t11_delta = 129u;
+#endif
     constexpr std::size_t v344_none = static_cast<std::size_t>(-1);
     std::size_t v344_t12 = v344_none;
     std::size_t v344_t11 = v344_none;
@@ -2438,7 +2448,7 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     if (v344_t12_count != 1u || v344_t11_count != 1u ||
         v344_t14_count != 1u ||
         v344_t12 == v344_none || v344_t11 == v344_none ||
-        v344_t11 != v344_t12 + 129u ||
+        v344_t11 != v344_t12 + v344_expected_t11_delta ||
         v344_t12 + k_ptde_rgba_envspec_chain.size() >
             v344_t11 - 6u ||
         v344_t12 + k_ptde_rgba_envspec_chain.size() + 33u >
