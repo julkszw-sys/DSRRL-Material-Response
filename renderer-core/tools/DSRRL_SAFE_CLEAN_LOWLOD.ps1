@@ -22,8 +22,8 @@ $directLowLod = @(
 $unresolved = @("wp_a_0911_s", "wp_a_1004_s")
 
 function New-ExactSet {
-    return [System.Collections.Generic.HashSet[string]]::new(
-        [System.StringComparer]::OrdinalIgnoreCase)
+    return ,([System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase))
 }
 function Die([string]$message) {
     throw "ABORT - bez zmian w sidecarze: $message"
