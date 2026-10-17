@@ -2,6 +2,7 @@
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
@@ -7689,6 +7690,12 @@ bool AddonInit(
 {
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
+    dsrrl::runtime::qpc_bisect::init_from_game_directory();
+    char qpc_mode_line[200]{};
+    std::snprintf(qpc_mode_line,sizeof(qpc_mode_line),
+        "[DSRRL QPC CAUSALITY] mode=%u same_binary=YES qpc_bit=1 atomic_bit=2",
+        static_cast<unsigned>(dsrrl::runtime::qpc_bisect::g_mode.load(std::memory_order_relaxed)));
+    reshade::log::message(reshade::log::level::info,qpc_mode_line);
 
     if (k_addon_loaded_only_bisect) {
         reshade::log::message(
@@ -8212,6 +8219,7 @@ void AddonUninit(
     }
 
     unregister_events();
+    dsrrl::runtime::qpc_bisect::report();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::
