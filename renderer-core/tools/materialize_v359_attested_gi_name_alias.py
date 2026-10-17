@@ -12,7 +12,7 @@ raw=zlib.decompress(base64.b64decode(packed))
 assert len(raw)==1368 and hashlib.sha256(raw).hexdigest()=="e25dccb8353fa57e51a23c25c246847080036e1009d56011fab7d6fa1ef7463b"
 triples=[struct.unpack_from("<BBH",raw,i) for i in range(0,len(raw),4)]
 names=[f"GI_EnvSpc_m{m:02d}_{a:02d}_{probe:04d}_0" for m,a,probe in triples]
-assert hashlib.sha256("\\n".join(names).encode()).hexdigest()=="3c92de7e08b5bd4291ec683dcf5d36ff5011a4fea7c60c38dacdfd179145325a"
+assert hashlib.sha256("\n".join(names).encode()).hexdigest()=="3c92de7e08b5bd4291ec683dcf5d36ff5011a4fea7c60c38dacdfd179145325a"
 assert len(names)==342 and len(set(names))==342
 assert all(x.startswith("GI_EnvSpc_m") and x.endswith("_0") and len(x)<65 for x in names)
 h=root/"include/dsrrl/operators/env_spec/generated_gi_name_binder_v359.hpp"
