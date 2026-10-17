@@ -12,6 +12,9 @@
 #endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
+#if defined(DSRRL_V336_WANDERER_SRV_AUDIT)
+#include "dsrrl/runtime/v336_wanderer_srv_witness.hpp"
+#endif
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -2015,6 +2018,14 @@ bool pmetal_envspec_draw_runtime::prepare(
         prepared.diagnostic_diff_a = prepared.envdiffuse_resources.probe_a;
         prepared.diagnostic_diff_b = prepared.envdiffuse_resources.probe_b;
     }
+#endif
+#if defined(DSRRL_V336_WANDERER_SRV_AUDIT) && defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    if (r8_selected &&
+        family == pmetal_envspec_receiver_family::hemenvlerp)
+        v336_wanderer_srv_witness(
+            material, decision, env_resources_, prepared.env_resources,
+            shadow_env_ready, shadow_material_ready,
+            source.beta, source.serial);
 #endif
     prepared.ready = true;
     effect_latch(effect_request_ready_);
