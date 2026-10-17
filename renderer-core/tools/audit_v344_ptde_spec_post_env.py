@@ -7,8 +7,9 @@ b=(root/"tools/build_v344_ptde_lerp_one_addon.ps1").read_text()
 flag="DSRRL_V344_PTDE_LERP_SPEC_POST_ENV"
 assert s.count("#if defined("+flag+")")==1
 assert flag in b and "build_v338_nonmetal_lerp_one_addon.ps1" in b
-section=s.split("#if defined("+flag+")",1)[1].split("#endif",1)[0]
-assert "v344_t11 != v344_t12 + 129u" in section
+section=s.split("#if defined("+flag+")",1)[1].split("#endif\n\n    std::vector<instruction_view> after;",1)[0]
+assert "v344_t11 != v344_t12 + v344_expected_t11_delta" in section
+assert "129u - k_ptde_envdiffuse_lerp_prefix_words" in section
 assert "v344_t12 + k_ptde_rgba_envspec_chain.size() + 33u" in section
 assert "std::memcmp(sig.data() + name_off, \"COLOR\", 6u)" in section
 assert "input_reg != 6u && input_reg != 7u" in section
@@ -25,5 +26,5 @@ assert s.index("materialize_nonmetal_lerp_r8_spec_linear_candidate(") < s.index(
 assert {"RX33":6,"RX34":7,"RX35":6} == {"RX33":6,"RX34":7,"RX35":6}
 # 11 words sample + 8 c101 + 7 vertexColor + 7 multiply into EnvSpec.
 assert 11+8+7+7==33
-assert 129-6-74>=33
+assert 129-6-6-74>=33  # real PTDE EnvDiffuse start was relocated six DWORDs
 print("V344 PASS: PTDE t10 relocated after exact EnvSpec A/B, 13th temp isolated, stock t1 remains, original COLOR0 v6/v7 receiver maps; GPU/pixel OPEN")
