@@ -37,9 +37,9 @@ python renderer-core/tools/materialize_v356_exact_probe_backing.py
 if ($LASTEXITCODE -ne 0) { throw 'V356 probe patch failed' }
 python renderer-core/tools/test_v356_exact_backing_spec_rgb.py
 if ($LASTEXITCODE -ne 0) { throw 'V356 test failed' }
-python renderer-core/tools/materialize_v358_exact_lifetime_probe_origin.py
+python renderer-core/tools/materialize_v357_exact_resource_source_census.py
 if ($LASTEXITCODE -ne 0) { throw 'V357 negative source census materializer failed' }
-python renderer-core/tools/test_v358_exact_lifetime_probe_origin.py
+python renderer-core/tools/test_v357_exact_resource_source_census.py
 if ($LASTEXITCODE -ne 0) { throw 'V357 negative source census contract failed' }
 python renderer-core/tools/materialize_v358_exact_lifetime_probe_origin.py
 if ($LASTEXITCODE -ne 0) { throw 'V358 source materializer failed' }
