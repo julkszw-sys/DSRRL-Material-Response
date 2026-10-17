@@ -2538,7 +2538,18 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         // carrier, multiplied red by green and green by blue, while
         // leaving B in W unscaled. Preserve r1.x and multiply the
         // exactly proven PTDE RGB live-out YZW component-wise.
-#if defined(DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX)
+#if defined(DSRRL_V350_PTDE_LERP_YZW_LANE_FIX)
+        // DXBC source swizzle is indexed by *destination lane*, NOT
+        // compacted into consecutive XYZ just because destination mask
+        // is YZW. Correct mapping:
+        //   Y = r1.Y * r13.X   (PTDE red)
+        //   Z = r1.Z * r13.Y   (PTDE green)
+        //   W = r1.W * r13.Z   (PTDE blue)
+        // Keep r1.X untouched; all other material/EnvSpec operators stock
+        // to this candidate, one unified PS for both P_Metal and nonmetal.
+        0x07000038u,0x001000e2u,1u,0x00100e46u,1u,
+        0x00100906u,13u
+#elif defined(DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX)
         0x07000038u,0x001000e2u,1u,0x00100796u,1u,
         0x00100246u,13u
 #else
