@@ -695,7 +695,11 @@ register_lerp_replacement(
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
     char log[256]{};
     std::snprintf(log,sizeof(log),
+#if defined(DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX)
+        "[DSRRL V348 SPEC RGB] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1 swizzle=XYZW c101=scalar_x",
+#else
         "[DSRRL V345 UNIFIED LERP] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1",
+#endif
         static_cast<unsigned>(outcome.semantic_receiver_id),dxbc_size);
     reshade::log::message(reshade::log::level::info,log);
 #endif
