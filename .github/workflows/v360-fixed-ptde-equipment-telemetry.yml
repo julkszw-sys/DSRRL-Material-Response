@@ -1,0 +1,41 @@
+name: V360 Fixed PTDE equipment sidecar lighting telemetry one addon
+on:
+  push:
+    branches: [agent/v360-v359-fixed-ptde-equipment-telemetry-20261018]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: V359 ancestry and V360 fixed-only source/build syntax
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --output v359_fallback_census.json
+          python3 -m py_compile renderer-core/tools/materialize_v360_fixed_equipment_pointlight.py renderer-core/tools/test_v360_fixed_equipment_pointlight.py renderer-core/tools/materialize_v353_sampled_module_profiler.py renderer-core/tools/test_v353_sampled_module_profiler.py renderer-core/tools/materialize_v357_exact_resource_source_census.py renderer-core/tools/test_v357_exact_resource_source_census.py renderer-core/tools/materialize_v358_exact_lifetime_probe_origin.py renderer-core/tools/test_v358_exact_lifetime_probe_origin.py renderer-core/tools/materialize_v359_attested_gi_name_alias.py renderer-core/tools/test_v359_attested_gi_name_alias.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V360-Fallback-Source-Census
+          path: v359_fallback_census.json
+  native-one-addon:
+    needs: source-contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build V360 fixed-only native Win64 single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v360_fixed_ptde_equipment.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V360-Fixed-PTDE-Equipment-single-addon
+          path: out-v360-fixed-equipment/DSRRL_V360_FIXED_PTDE_EQUIPMENT.addon64
+          if-no-files-found: error
