@@ -29,7 +29,7 @@ mask=lambda tok:(tok>>4)&15
 swz=lambda tok:tuple((tok>>(4+2*i))&3 for i in range(4))
 assert mask(0x001000e2)==0xe # YZW
 assert mask(0x00100072)==0x7 # XYZ
-assert swz(0x00100796)==(1,2,3,0) # r1.YZWX
+assert swz(0x00100796)==(1,2,3,1) # r1.YZWY (packed active YZW lanes)
 assert swz(0x00100246)==(0,1,2,0) # scratch r13.XYZ
 ptde_envspec=[.12,.24,.48] # native r1.YZW expected RGB
 ptde_spec=[.7,.6,.5]
