@@ -24,6 +24,12 @@ need=[
 for key in need: assert key in s, key
 assert s.count("stage=spec_rgb_native_exact_sidecar_rescued")==1
 assert s.count("stage=envspec_native_exact_sha_rescued")==1
+assert "v354_native_probe_for_view(native_view[0],probe_a)" in s
+assert "v354_native_probe_for_view(native_view[2],probe_b)" in s
+assert "native_a_known=%u native_a_probe=%u" in s
+assert "native_b_known=%u native_b_probe=%u" in s
+assert "v354_native_probe_for_view(" in (root/"include/dsrrl/runtime/envspec_resource_runtime.hpp").read_text("utf8")
+assert "return probe_for_native_view(view,probe);" in (root/"src/runtime/envspec_resource_runtime.cpp").read_text("utf8")
 assert "source_.latest(material, source)" in s
 assert "material.owner_tuple_exact" in s
 assert "g_current = resolved;" in o and "v351::recover_exact_route(identity)" in o
