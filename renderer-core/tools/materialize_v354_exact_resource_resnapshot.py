@@ -144,5 +144,39 @@ once("""                      true,
         }
 #endif""","bounded spec reject census")
 # preserve formatting of old source branch: opening new if block continues original code
+once("""    if (!env_resource_ready) {
+        if (shader != nullptr)
+            shader->Release();""",
+"""    if (!env_resource_ready) {
+#if defined(DSRRL_V354_EXACT_RESOURCE_RESNAPSHOT)
+        // Bounded receiver/slot diagnostic: never mutates or aliases a probe.
+        const auto rx_key =
+            decision.receiver_id >= 33u && decision.receiver_id <= 35u
+                ? decision.receiver_id - 33u : 3u;
+        const auto census_bit = 1u << (rx_key*4u +
+            static_cast<std::uint32_t>(env_semantics.envspc_slot));
+        static std::atomic<std::uint32_t> logged{0u};
+        if ((logged.fetch_or(census_bit,std::memory_order_relaxed)&census_bit)==0u) {
+            const auto stats=env_resources_.telemetry();
+            char line[512]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V354 PROBE REJECT] rx=%u route=%u slot=%u"
+                " shadow_ready=%u blend=%u pack_ready=%u sampler_ready=%u"
+                " native_matched=%llu views=%llu cube_created=%llu"
+                " cube_fail=%llu resolution=NOT_AUTHORIZED_RELEASE_BLOCK",
+                decision.receiver_id,decision.route_index,
+                static_cast<unsigned>(env_semantics.envspc_slot),
+                shadow_env_ready?1u:0u,probe_b_required?1u:0u,
+                stats.pack_ready?1u:0u,stats.sampler_ready?1u:0u,
+                static_cast<unsigned long long>(stats.native_matches),
+                static_cast<unsigned long long>(stats.view_matches),
+                static_cast<unsigned long long>(stats.cube_created),
+                static_cast<unsigned long long>(stats.cube_fail));
+            reshade::log::message(reshade::log::level::info,line);
+        }
+#endif
+        if (shader != nullptr)
+            shader->Release();""","bounded probe reject diagnostics")
+
 p.write_text(s,encoding="utf8")
 print("V354_EXACT_RESNAPSHOT_OPERATOR_SAFE_SOURCE_PASS")
