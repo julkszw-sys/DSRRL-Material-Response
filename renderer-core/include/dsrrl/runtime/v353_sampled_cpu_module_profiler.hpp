@@ -3,6 +3,9 @@
 // QPC only on sampled entry/exit, bounded atomics per completed sample.
 // Inclusive timings can overlap between stages: never sum them as exclusive CPU.
 // No GPU timing/readback; keep state and renderer source untouched.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <array>
 #include <atomic>
