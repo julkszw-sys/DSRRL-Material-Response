@@ -27,7 +27,7 @@ jobs:
             renderer-core/tests/v350_flver_direct_parser_tls_lifetime_test.cpp \
             -o /tmp/v350_flver_lifetime
           /tmp/v350_flver_lifetime
-          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -I renderer-core/include \
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -DDSRRL_RUNTIME_TELEMETRY_DEFAULT_ON -I renderer-core/include \
             renderer-core/src/runtime/flver_identity_registry.cpp \
             renderer-core/tests/flver_identity_registry_tests.cpp \
             -o /tmp/v350_flver_canonical
