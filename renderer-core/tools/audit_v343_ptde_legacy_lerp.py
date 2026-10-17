@@ -13,7 +13,7 @@ cm = (r/"integrated/CMakeLists.txt").read_text()
 ps = (r/"tools/build_v343_ptde_legacy_lerp_one_addon.ps1").read_text()
 flag="DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG"
 assert shader.count("#if defined("+flag+")") == 1
-assert rt.count("#if defined("+flag+")") == 1
+assert rt.count("#if defined("+flag+")") >= 3  # registration rejection, success and request-ready
 assert ("if("+flag+")") in cm
 assert "-D"+flag+"=ON" in ps
 assert "-DDSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=ON" in ps
