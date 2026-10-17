@@ -53,10 +53,13 @@ python renderer-core/tools/materialize_v359_view_scope_identity.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 exact view source recovery failed' }
 python renderer-core/tools/test_v359_attested_gi_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 test failed' }
+'@
+Once '$argsList = @(' @'
 python renderer-core/tools/materialize_v360_fixed_equipment_pointlight.py
 if ($LASTEXITCODE -ne 0) { throw 'V360 fixed-only materializer failed' }
 python renderer-core/tools/test_v360_fixed_equipment_pointlight.py
 if ($LASTEXITCODE -ne 0) { throw 'V360 fixed-only source contract failed' }
+$argsList = @(
 '@
 $temp=Join-Path $PSScriptRoot '_v353_generated_build.ps1'
 try {
