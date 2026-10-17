@@ -83,7 +83,10 @@ s=s.replace(mark,mark+'''
     if (telemetry_window) {
         dsrrl::runtime::v353::report_window(
             g_v352_soak.last_window_seconds(),
-            ++g_v353_window_index);
+            ++g_v353_window_index,
+            [](const char *line) noexcept {
+                reshade::log::message(reshade::log::level::info,line);
+            });
     }
 #endif''',1)
 p.write_text(s,encoding="utf-8")
