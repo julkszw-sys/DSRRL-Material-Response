@@ -26,7 +26,7 @@ function New-ExactSet {
         [System.StringComparer]::OrdinalIgnoreCase)
 }
 function Die([string]$message) {
-    throw "ABORT — bez zmian w sidecarze: $message"
+    throw "ABORT - bez zmian w sidecarze: $message"
 }
 function Sha256([string]$path) {
     return (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -152,7 +152,7 @@ if (-not [string]::IsNullOrWhiteSpace($Restore)) {
         $to = Join-Path $specDir $name
         if (-not (Test-Path -LiteralPath $from -PathType Leaf)) { continue }
         if (Test-Path -LiteralPath $to) {
-            Write-Warning "Pominieto $name — plik w Specular juz istnieje."
+            Write-Warning "Pominieto $name - plik w Specular juz istnieje."
             continue
         }
         if ((Sha256 $from) -ne ([string]$rec.SHA256).ToLowerInvariant()) {
@@ -188,10 +188,10 @@ if (Test-Path -LiteralPath $extraProtect -PathType Leaf) {
 foreach ($file in $manifestSources) {
     $fi = Get-Item -LiteralPath $file -ErrorAction Stop
     if (($fi.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        Die "Manifest jest linkiem — nie mozna bezpiecznie zweryfikowac: $file"
+        Die "Manifest jest linkiem - nie mozna bezpiecznie zweryfikowac: $file"
     }
     if ($fi.Length -gt 33554432) {
-        Die "Manifest wiekszy niz 32 MB — wymaga recznego sprawdzenia: $file"
+        Die "Manifest wiekszy niz 32 MB - wymaga recznego sprawdzenia: $file"
     }
     $body = [IO.File]::ReadAllText($file)
     $mentions = [regex]::Matches($body,
@@ -232,14 +232,14 @@ New-Item -ItemType Directory -Path $auditRoot -Force | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss_fff"
 $report = Join-Path $auditRoot ("low_lod_audit_" + $stamp + ".csv")
 $rows | Export-Csv -NoTypeInformation -LiteralPath $report -Encoding UTF8
-Write-Host "DSRRL V350 RC1 LOW-LOD — audyt dokladnych 544 negative mappings"
+Write-Host "DSRRL V350 RC1 LOW-LOD - audyt dokladnych 544 negative mappings"
 Write-Host "Chronione DSR-direct low LOD: 5 | niewyjasnione: 2 (nietkniete)"
 Write-Host "W katalogu Specular: $($all.Count) | do kwarantanny: $($toMove.Count)"
 Write-Host "Wpisy kandydatow chronione lokalnymi manifestami: $($protected.Count - 5)"
 Write-Host "Raport: $report"
 
 if (-not $Apply) {
-    Write-Host "DRY RUN — NIC NIE ZMIENIONO. Uruchom z -Apply aby przeniesc kandydatow." -ForegroundColor Yellow
+    Write-Host "DRY RUN - NIC NIE ZMIENIONO. Uruchom z -Apply aby przeniesc kandydatow." -ForegroundColor Yellow
     exit 0
 }
 if ($toMove.Count -eq 0) {
