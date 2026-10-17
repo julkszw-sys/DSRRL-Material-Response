@@ -1,4 +1,5 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include <algorithm>
@@ -289,6 +290,7 @@ std::atomic<std::uint64_t> g_tls_hits{0},g_mutex_fallbacks{0};
 } // namespace
 
 bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t readable_bytes) noexcept {
+    qpc_bisect::scope qpc_scope(qpc_bisect::stage::flver_parse);
     if(!model||!raw||readable_bytes<0x18u){++g_invalid;return false;}
     const auto *bytes=static_cast<const std::uint8_t*>(raw);
     constexpr std::array<std::uint8_t,6> magic={'F','L','V','E','R',0};
@@ -296,8 +298,9 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     std::uint32_t data_offset=0,data_length=0;std::memcpy(&data_offset,bytes+0x0c,4);std::memcpy(&data_length,bytes+0x10,4);
     const std::uint64_t total=static_cast<std::uint64_t>(data_offset)+data_length;
     if(data_offset<0x40u||total<data_offset||total>k_max_flver_bytes||total>readable_bytes){++g_invalid;return false;}
-    const auto sha=digest(raw,static_cast<std::size_t>(total));
+    const auto sha=[&]() noexcept { qpc_bisect::scope qpc_hash(qpc_bisect::stage::flver_digest); return digest(raw,static_cast<std::size_t>(total)); }();
     try {
+        qpc_bisect::scope qpc_register(qpc_bisect::stage::flver_registry);
         std::lock_guard<std::mutex> lock(g_mutex);
         const auto found =
             g_by_model.find(model);
