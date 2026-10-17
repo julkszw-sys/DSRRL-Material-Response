@@ -177,8 +177,8 @@ bool v358_probe_origin_for_native_view(
 #endif
 
 '''
-replace(res,"} // namespace\n\nenvspec_resource_runtime::~envspec_resource_runtime()",
-        "} // namespace\n\n"+helper+"envspec_resource_runtime::~envspec_resource_runtime()","exact native view origin lookup")
+replace(res,"envspec_resource_runtime::~envspec_resource_runtime()",
+        helper+"envspec_resource_runtime::~envspec_resource_runtime()","exact native view origin lookup")
 
 draw="src/runtime/pmetal_envspec_draw_runtime.cpp"
 helper=r'''#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
