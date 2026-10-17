@@ -92,8 +92,8 @@ option(
     OFF)
 
 option(
-    DSRRL_V342_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG
-    "V342 experimental exact nonmetal RX33-35 Lerp late DSR fitted Schlick additive cut; PTDE EnvSpec+EnvDiffuse+SpecRGB are already ported by R19; not a full PTDE pixel shader"
+    DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG
+    "V343 experimental exact nonmetal RX33-35 Lerp late DSR fitted Schlick additive cut; PTDE EnvSpec+EnvDiffuse+SpecRGB are already ported by R19; not a full PTDE pixel shader"
     OFF)
 
 option(
@@ -871,16 +871,16 @@ if(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V293_PARSER_EXACT_FLVER_ALIAS>)
 endif()
 
-if(DSRRL_V342_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+if(DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
     if(NOT DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB OR
        NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG OR
        NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
        NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         message(FATAL_ERROR
-            "V342 local PTDE Lerp material tail requires V338 nonmetal R8 and exact PTDE R19 EnvSpec/EnvDiffuse/material island")
+            "V343 local PTDE Lerp material tail requires V338 nonmetal R8 and exact PTDE R19 EnvSpec/EnvDiffuse/material island")
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
-        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V342_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG>)
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG>)
 endif()
 
 if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
