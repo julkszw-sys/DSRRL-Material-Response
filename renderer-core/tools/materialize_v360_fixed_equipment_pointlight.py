@@ -82,6 +82,35 @@ change(source,
         !clustered_pointlight_hooks) {""",
        """    if (k_clustered_pointlight_runtime_enabled &&
         !clustered_pointlight_hooks) {""")
+# The FLVER install's first argument owns the clustered builder, not Fixed.
+# Do not arm a hidden clustered CPU producer while reporting clustered=STOCK.
+change(source,
+       """flver_identity_transport::install(
+            k_pointlight_drawtime_runtime_enabled,
+            upper_lower_enabled,
+            hemdir3_enabled)""",
+       """flver_identity_transport::install(
+            k_clustered_pointlight_runtime_enabled,
+            upper_lower_enabled,
+            hemdir3_enabled)""")
+
+# Preserve both audits, but require the *new* exact V360 split instead of
+# their original PointLight-all-on/off spelling.
+hot="tools/audit_active_islands_hotpath.py"
+change(hot,
+       "k_pointlight_drawtime_runtime_enabled,\\n            upper_lower_enabled",
+       "k_clustered_pointlight_runtime_enabled,\\n            upper_lower_enabled")
+change(hot,
+       "if (k_pointlight_drawtime_runtime_enabled) {\\n            clustered_pnts =",
+       "if (k_pointlight_drawtime_runtime_enabled) {\\n            if (k_clustered_pointlight_runtime_enabled) {\\n            clustered_pnts =")
+change(hot,
+       "if (k_pointlight_drawtime_runtime_enabled &&\\n        clustered_pnts_candidate)",
+       "if (k_clustered_pointlight_runtime_enabled &&\\n        clustered_pnts_candidate)")
+cluster_audit="tools/audit_clustered_pnts_activation_sources.py"
+change(cluster_audit,
+       "k_pointlight_drawtime_runtime_enabled,\\n            upper_lower_enabled",
+       "k_clustered_pointlight_runtime_enabled,\\n            upper_lower_enabled")
+
 change(source,
        "    g_clustered_pnts.frame_event(present);",
        "    if (k_clustered_pointlight_runtime_enabled)\n"
