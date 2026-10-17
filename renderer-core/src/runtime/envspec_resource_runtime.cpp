@@ -1790,6 +1790,27 @@ void envspec_resource_runtime::release(
     prepared = {};
 }
 
+#if defined(DSRRL_V336_WANDERER_SRV_AUDIT)
+bool envspec_resource_runtime::audit_packed_cube_sha256(
+    std::uint16_t probe, std::uint8_t slot,
+    std::array<std::uint8_t,32> &digest) const noexcept
+{
+    digest = {};
+    if (probe >= env::k_legacy_envspec_probe_count ||
+        slot >= k_ptde_slots)
+        return false;
+    const auto index =
+        static_cast<std::size_t>(probe) * k_ptde_slots + slot;
+    const auto offset = index * k_ptde_cube_bytes;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_pack_ready || offset > g_pack.size() ||
+        k_ptde_cube_bytes > g_pack.size()-offset)
+        return false;
+    digest = hashing::sha256(g_pack.data()+offset,k_ptde_cube_bytes);
+    return true;
+}
+#endif
+
 envspec_resource_telemetry
 envspec_resource_runtime::telemetry() const noexcept
 {
