@@ -33,6 +33,8 @@ python renderer-core/tools/test_v354_exact_resource_resnapshot.py
 if ($LASTEXITCODE -ne 0) { throw 'V354 test failed' }
 python renderer-core/tools/materialize_v356_exact_backing_spec_rgb.py
 if ($LASTEXITCODE -ne 0) { throw 'V356 source patch failed' }
+python renderer-core/tools/materialize_v356_exact_probe_backing.py
+if ($LASTEXITCODE -ne 0) { throw 'V356 probe patch failed' }
 python renderer-core/tools/test_v356_exact_backing_spec_rgb.py
 if ($LASTEXITCODE -ne 0) { throw 'V356 test failed' }
 '@
@@ -43,7 +45,7 @@ try {
  if ($LASTEXITCODE -ne 0) { throw 'V353 build failed' }
  $file='out-v356-exact-backing/DSRRL_V356_EXACT_BACKING_RECOVERY.addon64'
  $raw=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $file)))
- foreach($m in @('[DSRRL V356 EXACT BACKING]','[DSRRL V354 RESOURCE RESNAPSHOT]','[DSRRL V354 SPEC REJECT]','[DSRRL V354 PROBE REJECT]','[DSRRL V353 CPU_STAGE]','[DSRRL V352 PERF]','[DSRRL V351 DSR_ONLY_OPERATOR]','v356_exact_backing_recovery')) {
+ foreach($m in @('[DSRRL V356 EXACT BACKING]','[DSRRL V356 PROBE BACKING]','[DSRRL V354 RESOURCE RESNAPSHOT]','[DSRRL V354 SPEC REJECT]','[DSRRL V354 PROBE REJECT]','[DSRRL V353 CPU_STAGE]','[DSRRL V352 PERF]','[DSRRL V351 DSR_ONLY_OPERATOR]','v356_exact_backing_recovery')) {
    if (-not $raw.Contains($m)) { throw "Missing binary marker: $m" }
  }
  Write-Host 'V356 EXACT BACKING BUILD PASS; RUNTIME/PIXEL OPEN'
