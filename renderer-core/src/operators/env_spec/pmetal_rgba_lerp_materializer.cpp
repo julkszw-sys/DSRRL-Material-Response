@@ -2266,8 +2266,89 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         words[exact_t10 + 3u] != 0x001000e2u ||
         words[exact_t10 + 7u] != 0x00107936u)
         return false;
-    // Only resource operand source swizzle changes, DSR wxyz -> PTDE xyzw.
-    words[exact_t10 + 7u] = 0x00107e46u;
+    // V338: preserve the native ELSE consumer's semantic RGB carrier.
+    // Original t1 is swizzled wxyz into rSpec.xyzw, so rSpec.yzw=RGB.
+    // The PTDE t10 clone writes YZW ONLY. Its original wxyz source
+    // likewise produces rSpec.yzw=PTDE RGB while preserving rSpec.x
+    // (the independent stock-t1 alpha/material lane).
+    //
+    // V326 changed only the source swizzle to xyzw, thereby writing
+    // [PTDE G,PTDE B,PTDE A] to rSpec.yzw. Restoring the original
+    // wxyz source is necessary, but R19 also inserts a raw-c101
+    // MUL on rSpec.xyz; that multiplies the unrelated X lane and
+    // leaves the SpecRGB B component unscaled. Move this one MUL
+    // to the PTDE RGB carrier yzw and broadcast raw c101.x.
+    // This is nonmetal R8 only: R19/P_Metal, Stable, native t1,
+    // EnvDiffuse and EnvSpec A/B remain byte-identical.
+    const std::uint32_t ptde_rgb_reg =
+        words[exact_t10 + 4u];
+    constexpr std::uint32_t k_c101_mul_words = 8u;
+    const std::size_t c101_mul_word = exact_t10 + 11u;
+    if (c101_mul_word + k_c101_mul_words > words.size() ||
+        words[c101_mul_word] != 0x08000038u ||
+        words[c101_mul_word + 1u] != 0x00100072u ||
+        words[c101_mul_word + 2u] != ptde_rgb_reg ||
+        words[c101_mul_word + 3u] != 0x00100246u ||
+        words[c101_mul_word + 4u] != ptde_rgb_reg ||
+        words[c101_mul_word + 5u] != 0x00208246u ||
+        words[c101_mul_word + 6u] != 12u ||
+        words[c101_mul_word + 7u] != 0u)
+        return false;
+
+    // Require the exactly matched native nonmetal ELSE consumer:
+    // MUL r1.xyz, rSpec.yzw, cb0[10].xyz. It must retain yzw;
+    // overwriting its read to xyz would consume stock-t1 alpha.
+    std::size_t else_rgb_reads = 0u;
+    bool inside_material = false;
+    bool inside_material_else = false;
+    std::size_t inner_depth = 0u;
+    for (const auto &cur : ins) {
+        if (!inside_material) {
+            if (cur.opcode == 0x1fu &&
+                cur.length == 4u &&
+                cur.offset + 3u < words.size() &&
+                words[cur.offset + 1u] == 0x0020800au &&
+                words[cur.offset + 2u] == 0u &&
+                words[cur.offset + 3u] == 85u)
+                inside_material = true;
+            continue;
+        }
+        if (cur.opcode == 0x1fu) {
+            ++inner_depth;
+            continue;
+        }
+        if (cur.opcode == 0x15u) {
+            if (inner_depth == 0u)
+                break;
+            --inner_depth;
+            continue;
+        }
+        if (cur.opcode == 0x12u && inner_depth == 0u) {
+            inside_material_else = true;
+            continue;
+        }
+        if (!inside_material_else || inner_depth != 0u ||
+            cur.opcode != 0x38u || cur.length != 8u ||
+            cur.offset + 7u >= words.size() ||
+            words[cur.offset + 1u] != 0x00100072u ||
+            words[cur.offset + 3u] != 0x00100796u ||
+            words[cur.offset + 4u] != ptde_rgb_reg ||
+            words[cur.offset + 5u] != 0x00208246u ||
+            words[cur.offset + 6u] != 0u ||
+            words[cur.offset + 7u] != 10u)
+            continue;
+        ++else_rgb_reads;
+    }
+    if (!inside_material || !inside_material_else ||
+        else_rgb_reads != 1u)
+        return false;
+
+    // Keep the t10 sample's wxyz swizzle and YZW destination.
+    // All other consumers retain native swizzles. Scale exactly
+    // the resulting PTDE RGB carrier, broadcasting b12[0].x=c101.
+    words[c101_mul_word + 1u] = 0x001000e2u;
+    words[c101_mul_word + 3u] = 0x00100796u;
+    words[c101_mul_word + 5u] = 0x00208006u;
 
     std::vector<instruction_view> after;
     if (!decode(words, after))

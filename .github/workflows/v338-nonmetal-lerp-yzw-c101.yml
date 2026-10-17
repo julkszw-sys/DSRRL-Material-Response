@@ -1,0 +1,53 @@
+name: V338 Nonmetal HemEnvLerp YZW C101 Win64 Single Addon
+on:
+  push:
+    branches: [agent/v338-nonmetal-lerp-else-rgb-20261017]
+    paths:
+      - '.github/workflows/v338-nonmetal-lerp-yzw-c101.yml'
+      - 'renderer-core/tools/build_v338_nonmetal_lerp_one_addon.ps1'
+      - 'renderer-core/tools/audit_v338_nonmetal_lerp_else_rgb.py'
+      - 'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v338-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify V338 YZW carrier and raw-c101 routing
+        run: python3 renderer-core/tools/audit_v338_nonmetal_lerp_else_rgb.py
+  v338-native:
+    needs: v338-source
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build exact V338 integrated additive runtime
+        shell: pwsh
+        run: ./renderer-core/tools/build_v338_nonmetal_lerp_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify portable executable and intended binary provenance
+        shell: pwsh
+        run: |
+          $sha = (git rev-parse HEAD).Trim()
+          $path = 'out-v338/DSRRL_V338_NONMETAL_LERP_YZW_C101.addon64'
+          if (-not (Test-Path $path)) { throw 'V338 addon not found' }
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $path))
+          if ($bytes.Length -lt 500000) { throw 'Unexpectedly small addon' }
+          if ([System.Text.Encoding]::ASCII.GetString($bytes,0,2) -ne 'MZ') { throw 'Not PE' }
+          $off = [BitConverter]::ToInt32($bytes,0x3c)
+          if ([System.Text.Encoding]::ASCII.GetString($bytes,$off,4) -ne "PE`0`0") { throw 'PE signature mismatch' }
+          if ([BitConverter]::ToUInt16($bytes,$off+4) -ne 0x8664) { throw 'Not AMD64' }
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains($sha)) { throw 'Source identity missing' }
+          if (-not $text.Contains('v338_nonmetal_lerp_yzw_c101_repair')) { throw 'V338 flavor absent' }
+          Write-Host "V338 PE64 sha256=$((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V338-PTDE-EnvSpec-nonmetal-Lerp-YZW-C101-one-addon
+          path: out-v338/DSRRL_V338_NONMETAL_LERP_YZW_C101.addon64
+          if-no-files-found: error
