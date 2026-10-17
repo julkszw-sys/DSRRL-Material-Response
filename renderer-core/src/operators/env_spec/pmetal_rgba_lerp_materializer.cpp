@@ -2350,6 +2350,193 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     words[c101_mul_word + 3u] = 0x00100796u;
     words[c101_mul_word + 5u] = 0x00208006u;
 
+
+#if defined(DSRRL_V344_PTDE_LERP_SPEC_POST_ENV)
+    // V344 exact PTDE SpecRGB operator island (RX33/RX34/RX35 ONLY).
+    // The R19 EnvSpec RGBA(A/B, beta) operator leaves its live-out in r1.xyz
+    // immediately before the exact PTDE EnvDiffuse A/B block.
+    // Do not overwrite the native DSR SpecTex r5.yzw *before* cb0[85].x
+    // MaterialWorkflow. Leave t1 fully stock, including alpha/F0/roughness.
+    // Instead move the verified PTDE t10 sample to an isolated r13 register
+    // after EnvSpec A/B has been decoded and blended; perform exactly
+    //    EnvSpec.rgb *= PTDE_SpecRGB.rgb * c101.rgb * COLOR0.rgb
+    // in the PTDE signal domain before the EnvDiffuse/common merge.
+    // No extra double spec gain, no global PBL/Fresnel disable.
+
+    // COLOR0 register differs between the original DSR receiver signatures:
+    // RX33, RX35: v6; RX34 (Sdw): v7. Require exact ISGN semantic identity.
+    std::optional<std::uint32_t> v344_color_reg;
+    std::size_t v344_isgn_count = 0u;
+    for (const auto &current : chunks) {
+        if (std::memcmp(current.tag.data(), "ISGN", 4u) != 0)
+            continue;
+        ++v344_isgn_count;
+        const auto &sig = current.payload;
+        if (sig.size() < 8u)
+            return false;
+        const auto count = read_u32(sig.data());
+        if (count == 0u || count > 32u ||
+            static_cast<std::size_t>(count) * 24u > sig.size() - 8u)
+            return false;
+        for (std::uint32_t i = 0u; i < count; ++i) {
+            const auto at = 8u + static_cast<std::size_t>(i) * 24u;
+            const auto name_off =
+                static_cast<std::size_t>(read_u32(sig.data() + at));
+            const auto semantic_index = read_u32(sig.data() + at + 4u);
+            const auto input_reg = read_u32(sig.data() + at + 16u);
+            const auto mask = sig[at + 20u];
+            if (name_off > sig.size() ||
+                sig.size() - name_off < 6u)
+                return false;
+            if (std::memcmp(sig.data() + name_off, "COLOR", 6u) != 0 ||
+                semantic_index != 0u)
+                continue;
+            if (v344_color_reg.has_value() ||
+                (input_reg != 6u && input_reg != 7u) ||
+                (mask & 0x07u) != 0x07u)
+                return false;
+            v344_color_reg = input_reg;
+        }
+    }
+    if (v344_isgn_count != 1u || !v344_color_reg)
+        return false;
+
+    // R19 DXBC site census: one t12 EnvSpec A sample and one t11
+    // EnvDiffuse A sample, separated by exactly 129 DWORDs.
+    constexpr std::size_t v344_none = static_cast<std::size_t>(-1);
+    std::size_t v344_t12 = v344_none;
+    std::size_t v344_t11 = v344_none;
+    std::size_t v344_t12_count = 0u;
+    std::size_t v344_t11_count = 0u;
+    std::size_t v344_t14_count = 0u;
+    for (const auto &entry : ins) {
+        if (entry.opcode < 0x45u || entry.opcode > 0x4au ||
+            entry.length != 13u || entry.offset + 12u >= words.size())
+            continue;
+        if (words[entry.offset + 8u] == 12u) {
+            v344_t12 = entry.offset;
+            ++v344_t12_count;
+        }
+        if (words[entry.offset + 8u] == 11u) {
+            v344_t11 = entry.offset;
+            ++v344_t11_count;
+        }
+        if (words[entry.offset + 8u] == 14u)
+            ++v344_t14_count;
+    }
+    if (v344_t12_count != 1u || v344_t11_count != 1u ||
+        v344_t14_count != 1u ||
+        v344_t12 == v344_none || v344_t11 == v344_none ||
+        v344_t11 != v344_t12 + 129u ||
+        v344_t12 + k_ptde_rgba_envspec_chain.size() >
+            v344_t11 - 6u ||
+        v344_t12 + k_ptde_rgba_envspec_chain.size() + 33u >
+            v344_t11 - 6u)
+        return false;
+
+    // Verify the *actual ported PTDE* A/B chain rather than assuming any
+    // t12/t14 user shares the same operator. Reflection coordinate
+    // register is the only receiver-dependent part of this 74-DWORD cut.
+    for (std::size_t i = 0u; i <
+         k_ptde_rgba_envspec_chain.size(); ++i) {
+        if (i == 6u || i == 38u)
+            continue;
+        if (words[v344_t12 + i] != k_ptde_rgba_envspec_chain[i])
+            return false;
+    }
+    if (words[v344_t12 + 6u] != words[v344_t12 + 38u] ||
+        words[v344_t12 + 6u] < 5u ||
+        words[v344_t12 + 6u] > 7u)
+        return false;
+
+    const auto v344_insertion =
+        v344_t12 + k_ptde_rgba_envspec_chain.size();
+    for (std::size_t i = v344_insertion;
+         i < v344_t11 - 6u; ++i)
+        if (words[i] != 0x0100003au)
+            return false;
+
+    // Keep exactly one t10 sample. Relocate it rather than duplicating
+    // it, then NOP its original raw-c101 multiply. Its declaration,
+    // RDEF resource binding, UV coordinates and sampler remain unchanged.
+    // This restores the stock t1 Sample r5.xyzw for every DSR workflow
+    // branch while dedicating an independent scratch r13 to PTDE RGB.
+    if (words[exact_t10 + 3u] != 0x001000e2u ||
+        words[exact_t10 + 7u] != 0x00107936u ||
+        words[exact_t10 + 8u] != 10u ||
+        words[exact_t10 + 10u] != 1u ||
+        words[c101_mul_word + 1u] != 0x001000e2u ||
+        words[c101_mul_word + 3u] != 0x00100796u ||
+        words[c101_mul_word + 5u] != 0x00208006u ||
+        c101_mul_word != exact_t10 + 11u)
+        return false;
+
+    std::array<std::uint32_t,11> v344_late_sample{};
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(exact_t10),
+        v344_late_sample.size(),
+        v344_late_sample.begin());
+    v344_late_sample[3u] = 0x001000f2u; // r13.xyzw, not r5.yzw
+    v344_late_sample[4u] = 13u;
+
+    // The original shader and R19 compose exactly 13 temporary registers
+    // (r0..r12). Claim r13 only for this exact isolated operator island.
+    std::size_t v344_temps_word = v344_none;
+    for (const auto &entry : ins) {
+        if (entry.opcode != 0x68u || entry.length != 2u ||
+            words[entry.offset + 1u] != 13u)
+            continue;
+        if (v344_temps_word != v344_none)
+            return false;
+        v344_temps_word = entry.offset;
+    }
+    if (v344_temps_word == v344_none)
+        return false;
+
+    const std::array<std::uint32_t,22> v344_modulate{{
+        // r13.xyz = r13.xyz * b12[0].xyz  (PTDE c101 carrier)
+        0x08000038u,0x00100072u,13u,0x00100246u,13u,
+        0x00208246u,12u,0u,
+        // r13.xyz = r13.xyz * COLOR0.xyz (v6 or v7 from ISGN)
+        0x07000038u,0x00100072u,13u,0x00100246u,13u,
+        0x00101246u,*v344_color_reg,
+        // r1.xyz = EnvSpec_A/B.rgb * r13.xyz, before EnvDiffuse
+        0x07000038u,0x00100072u,1u,0x00100246u,1u,
+        0x00100246u,13u
+    }};
+
+    // Instruction-size exact: no offset shifts or replay, and no changes
+    // to original EnvDiffuse A/B, native t1 or post-merge DSR receiver.
+    std::fill(
+        words.begin() + static_cast<std::ptrdiff_t>(exact_t10),
+        words.begin() + static_cast<std::ptrdiff_t>(
+            c101_mul_word + k_c101_mul_words),
+        0x0100003au);
+    std::copy(
+        v344_late_sample.begin(),v344_late_sample.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(v344_insertion));
+    std::copy(
+        v344_modulate.begin(),v344_modulate.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(
+            v344_insertion + v344_late_sample.size()));
+    words[v344_temps_word + 1u] = 14u;
+
+    // Postcondition before rebuild: exactly one relocated t10 sample and
+    // scratch-register declaration, with all 19 original t10/c101 DWORDs
+    // now NOPs. Never silently accept a different producer/consumer.
+    for (std::size_t i = exact_t10;
+         i < c101_mul_word + k_c101_mul_words; ++i)
+        if (words[i] != 0x0100003au)
+            return false;
+    if (words[v344_insertion + 3u] != 0x001000f2u ||
+        words[v344_insertion + 4u] != 13u ||
+        words[v344_temps_word + 1u] != 14u ||
+        words[v344_insertion + v344_late_sample.size() +
+            v344_modulate.size() - 1u] != 13u)
+        return false;
+#endif
+
     std::vector<instruction_view> after;
     if (!decode(words, after))
         return false;

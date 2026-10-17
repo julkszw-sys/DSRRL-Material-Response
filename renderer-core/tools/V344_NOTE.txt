@@ -1,0 +1,1 @@
+V344: test precise PTDE SpecRGB post-EnvSpec Lerp consumption, preserving native t1. Diagnostic only.
