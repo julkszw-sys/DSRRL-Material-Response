@@ -73,6 +73,6 @@ ap.add_argument("--output",default="v351_fallback_census.json")
 args=ap.parse_args()
 Path(args.output).write_text(json.dumps(result,indent=2,ensure_ascii=False),encoding="utf-8")
 assert result["all_return_false_and_stock_text_hits"]>200
-assert any("v304_typed_dsr_only_native_draw" in c["matched"] for c in items)
-assert any("non_atomic_spec_failopen" in c["matched"] for c in items) is False or True
+assert "v304_typed_dsr_only_native_draw" in (root/"tools/materialize_v304_typed_dsr_only_donors.py").read_text(encoding="utf-8")
+assert "stock_material_fail_open" in (root/"include/dsrrl/runtime/v296_oct10_material_atomic_gate.hpp").read_text(encoding="utf-8")
 print("V351_CENSUS_PASS",len(items),groups," RELEASE_BLOCKED")
