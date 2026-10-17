@@ -68,13 +68,13 @@ void v357_trace_rejected_srv(
     std::array<wchar_t,257> producer_name{};
     std::size_t producer_length=0u;
     const auto producer_status=
-        v214_resource_name_provenance::instance().snapshot(
+        v214_resource_provenance::instance().snapshot(
             reinterpret_cast<std::uintptr_t>(device),
             reinterpret_cast<std::uintptr_t>(resource),
             producer_name,producer_length);
     // Printable, bounded raw original retail name, never invented FNV/hash.
     char original_name[69]{};
-    if(producer_status==v214_resource_name_provenance::status::exact) {
+    if(producer_status==v214_resource_provenance::status::exact) {
         const auto n=std::min(producer_length,
                              sizeof(original_name)-1u);
         for(std::size_t i=0u;i<n;++i) {
@@ -84,9 +84,9 @@ void v357_trace_rejected_srv(
         }
     }
     const char *origin=producer_status==
-        v214_resource_name_provenance::status::exact
+        v214_resource_provenance::status::exact
         ? "EXACT_RETAIL_SOURCE"
-        : producer_status==v214_resource_name_provenance::status::ambiguous
+        : producer_status==v214_resource_provenance::status::ambiguous
             ? "AMBIGUOUS_SOURCE" : "NO_PRODUCER_WITNESS";
 
     char line[960]{};
