@@ -680,6 +680,34 @@ void hook_producer_cache_publish_exact(
     telemetry::hot_count(g_hook_producer_cache_publish);
 }
 
+// Exact same-key semantic payload is already owned by the immutable cache
+// record. Refreshing its event serial requires a shard-exclusive lock and
+// can repeatedly block read-only selectors on another DSR draw thread.
+// Only elide this redundant publication after a complete shared-locked
+// identity / payload / version / generation check. A miss, generation
+// rollover, eviction or writer contention uses the original writer path.
+// The event-local TLS record still carries the current serial unchanged.
+bool hook_producer_cache_current_exact(
+    const hook_selector_identity_v1 &key,
+    const hook_source_record &record) noexcept
+{
+    if (!key.valid || !record.valid)
+        return false;
+
+    hook_source_record cached{};
+    if (!hook_producer_cache_lookup(
+            key, cached, &record.source))
+        return false;
+
+    return cached.valid &&
+        cached.semantic_version == record.semantic_version &&
+        cached.source.generation == record.source.generation &&
+        cached.source.phn_k135_valid ==
+            record.source.phn_k135_valid &&
+        cached.source.phn_k135 ==
+            record.source.phn_k135;
+}
+
 std::atomic_bool g_hook_restore_failed{false};
 
 enum hook_decode_stage : std::uint32_t {
@@ -1957,9 +1985,14 @@ void publish_hook_source(
         };
         g_hook_selector_identity_tls =
             selector_identity;
-        hook_producer_cache_publish_exact(
-            selector_identity,
-            g_hook_source_tls);
+        // Read-mostly steady state: do not take an exclusive shard lock
+        // merely to replace the same semantic record with a new event serial.
+        if (!hook_producer_cache_current_exact(
+                selector_identity,
+                g_hook_source_tls))
+            hook_producer_cache_publish_exact(
+                selector_identity,
+                g_hook_source_tls);
         telemetry::hot_count(g_hook_publish);
         return;
     }
@@ -1979,9 +2012,9 @@ void publish_hook_source(
         };
         g_hook_selector_identity_tls =
             selector_identity;
-        hook_producer_cache_publish_exact(
-            selector_identity,
-            g_hook_source_tls);
+        // The preceding lookup attested the exact key and source payload.
+        // The TLS carries the current event serial; a shard rewrite would
+        // only thrash the read lock on the other renderer worker.
         telemetry::hot_count(g_hook_publish);
 
         static std::atomic_bool
