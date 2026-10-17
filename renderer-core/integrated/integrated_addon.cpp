@@ -2937,6 +2937,14 @@ bool integrated_operator_enabled_by_policy(
     case dsrrl::core::operator_id::upper_lower:
     case dsrrl::core::operator_id::hemdir3:
         return false;
+#if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
+    // RC2: PointLight is stock DSR. No fixed/clustered PointLight,
+    // per-light legacy specular, or PntS attenuation island may be armed.
+    case dsrrl::core::operator_id::point_light:
+    case dsrrl::core::operator_id::local_specular_legacy:
+    case dsrrl::core::operator_id::pointlight_pnts_attenuation:
+        return false;
+#endif
     default:
         return true;
     }
