@@ -1,7 +1,7 @@
 name: V346 HemEnvLerp First Reject Gate Trace
 on:
   push:
-    branches: [agent/v346-single-lerp-20261017]
+    branches: [agent/v346-lerp-reject-stage-20261017]
   workflow_dispatch:
 permissions:
   contents: read
