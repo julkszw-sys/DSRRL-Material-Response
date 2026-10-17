@@ -1354,6 +1354,25 @@ bool pmetal_envspec_draw_runtime::prepare(
         carrier3 = {{0.0f,0.0f,0.0f}};
 #endif
 
+// V340: isolate ONLY the shader's PTDE EnvSpec/EnvDiffuse interpolation
+// operands. The original producer beta, A/B probe selection, resource and
+// material routing, GPU cb0 and R8 shader identity are left unchanged.
+// In particular, beta=0 here must NOT suppress loading/binding probe B.
+// Reuse the already-verified exact nonmetal R8-selected draw identity.
+#if defined(DSRRL_V340_NONMETAL_LERP_B12_BETA_ZERO)
+#if !defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+#error "V340 requires the authenticated V289/V338 nonmetal R8 route"
+#endif
+    const float v340_shader_beta =
+        r8_selected &&
+        family == pmetal_envspec_receiver_family::hemenvlerp &&
+        material.route_index != 345u
+            ? 0.0f
+            : source.beta;
+#else
+    const float v340_shader_beta = source.beta;
+#endif
+
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
     const std::array<f4,6> payload{{
 #else
@@ -1389,7 +1408,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             carrier3[0],
             carrier3[1],
             carrier3[2],
-            source.beta
+            v340_shader_beta
         }
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         ,
@@ -1403,7 +1422,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             source.envdiffuse_b[0],
             source.envdiffuse_b[1],
             source.envdiffuse_b[2],
-            source.beta
+            v340_shader_beta
         }
 #endif
     }};
@@ -2026,6 +2045,30 @@ bool pmetal_envspec_draw_runtime::prepare(
             material, decision, env_resources_, prepared.env_resources,
             shadow_env_ready, shadow_material_ready,
             source.beta, source.serial);
+#endif
+#if defined(DSRRL_V340_NONMETAL_LERP_B12_BETA_ZERO)
+    if (r8_selected &&
+        family == pmetal_envspec_receiver_family::hemenvlerp &&
+        material.route_index != 345u) {
+        // Emit only after b12 upload and complete draw mutation verification.
+        // CPU evidence of a prepared shader-beta-zero candidate, not a claim
+        // of GPU draw or pixel equivalence.
+        static std::atomic<bool> v340_once{false};
+        if (!v340_once.exchange(true, std::memory_order_relaxed)) {
+            char witness[500]{};
+            std::snprintf(
+                witness, sizeof(witness),
+                "[DSRRL V340 BETA ZERO] STAGE=request_ready family=1 rx=%u route=%u src_beta=%.9g b12_3w=%.9g b12_5w=%.9g probe_a=%u probe_b=%u t12t14_preserved=1 r8_shader_preserved=1 P_Metal_unchanged=1",
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                static_cast<double>(source.beta),
+                static_cast<double>(v340_shader_beta),
+                static_cast<double>(v340_shader_beta),
+                static_cast<unsigned>(prepared.env_resources.probe_a),
+                static_cast<unsigned>(prepared.env_resources.probe_b));
+            reshade::log::message(reshade::log::level::info, witness);
+        }
+    }
 #endif
     prepared.ready = true;
     effect_latch(effect_request_ready_);
