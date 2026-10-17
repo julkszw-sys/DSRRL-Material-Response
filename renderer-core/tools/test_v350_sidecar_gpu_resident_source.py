@@ -33,6 +33,14 @@ assert "acquire_sidecar(" in draw and "on_init_resource_view" in s
 assert "!found->second.resident" in release
 assert "std::vector<ID3D11ShaderResourceView *> resident;" in s
 assert "g_sidecar_shared.clear();" in s
+# GPU residency on late cold assets must share the startup DXGI cap:
+# otherwise streaming eventually pins unlimited textures on a UMA APU.
+cold = region("acquired_sidecar acquire_sidecar(", "bool snapshot_companion_cached(")
+assert "g_resident_gpu_limit" in cold and "g_resident_gpu_used" in cold
+assert "cold_size <= g_resident_gpu_limit" in cold
+assert "g_resident_gpu_used <= g_resident_gpu_limit - cold_size" in cold
+assert "if (inserted && resident) g_resident_gpu_used += cold_size;" in cold
+assert "if (inserted) g_resident_gpu_used += bytes;" in early
 assert "on_init_device_residency" in s
 assert "addon_event::init_device" in s
 assert "DSRRL_QPC_SCOPE_SHELL_NO_CLOCK" in build
