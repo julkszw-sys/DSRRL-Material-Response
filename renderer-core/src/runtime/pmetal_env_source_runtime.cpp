@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cwchar>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -455,6 +456,41 @@ std::array<std::shared_mutex,k_hook_producer_cache_sets>
 std::array<std::uint8_t,k_hook_producer_cache_sets>
     g_hook_producer_cache_victim{};
 std::atomic<std::uint64_t> g_hook_producer_cache_generation{1u};
+// Diagnostic A/B: one identical binary, 0=legacy exclusive rewrite,
+// 1=read-only exact semantic hit. Initialized once before the hooks start.
+std::atomic_bool g_hook_producer_readonly_hit_enabled{false};
+
+bool load_hook_readonly_hit_mode() noexcept
+{
+    wchar_t game_path[MAX_PATH]{};
+    const DWORD n = GetModuleFileNameW(
+        nullptr, game_path, MAX_PATH);
+    if (n == 0u || n >= MAX_PATH)
+        return false;
+
+    auto *slash = std::wcsrchr(game_path, L'\\');
+    if (slash == nullptr)
+        return false;
+    const wchar_t file[] = L"DSRRL_PMETAL_CACHE_MODE.txt";
+    const auto prefix = static_cast<std::size_t>(
+        slash + 1 - game_path);
+    if (prefix + (sizeof(file) / sizeof(wchar_t)) > MAX_PATH)
+        return false;
+    std::memcpy(slash + 1, file, sizeof(file));
+    HANDLE handle = CreateFileW(
+        game_path, GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return false;
+    char mode = '0';
+    DWORD got = 0u;
+    const bool valid =
+        ReadFile(handle, &mode, 1u, &got, nullptr) != FALSE &&
+        got == 1u;
+    CloseHandle(handle);
+    return valid && mode == '1';
+}
 std::atomic<std::uint64_t> g_hook_producer_cache_hit{0u};
 std::atomic<std::uint64_t> g_hook_producer_cache_miss{0u};
 std::atomic<std::uint64_t> g_hook_producer_cache_busy{0u};
@@ -1987,7 +2023,9 @@ void publish_hook_source(
             selector_identity;
         // Read-mostly steady state: do not take an exclusive shard lock
         // merely to replace the same semantic record with a new event serial.
-        if (!hook_producer_cache_current_exact(
+        if (!g_hook_producer_readonly_hit_enabled.load(
+                std::memory_order_relaxed) ||
+            !hook_producer_cache_current_exact(
                 selector_identity,
                 g_hook_source_tls))
             hook_producer_cache_publish_exact(
@@ -2013,8 +2051,13 @@ void publish_hook_source(
         g_hook_selector_identity_tls =
             selector_identity;
         // The preceding lookup attested the exact key and source payload.
-        // The TLS carries the current event serial; a shard rewrite would
-        // only thrash the read lock on the other renderer worker.
+        // In mode 0, retain the original exclusive same-payload rewrite
+        // for a truly same-binary A/B. Mode 1 keeps the hit read-only.
+        if (!g_hook_producer_readonly_hit_enabled.load(
+                std::memory_order_relaxed))
+            hook_producer_cache_publish_exact(
+                selector_identity,
+                g_hook_source_tls);
         telemetry::hot_count(g_hook_publish);
 
         static std::atomic_bool
@@ -2454,6 +2497,16 @@ void pmetal_env_source_cache_invalidate() noexcept
 
 bool pmetal_env_source_runtime::install() noexcept
 {
+    const bool read_only_mode =
+        load_hook_readonly_hit_mode();
+    g_hook_producer_readonly_hit_enabled.store(
+        read_only_mode, std::memory_order_release);
+    reshade::log::message(
+        reshade::log::level::info,
+        read_only_mode
+            ? "[DSRRL PMETAL CACHE A/B] mode=1 exact_shared_hit=READ_ONLY tls_hit=SHARED_VALIDATE no_qpc=YES"
+            : "[DSRRL PMETAL CACHE A/B] mode=0 exact_shared_hit=EXCLUSIVE_REPUBLISH tls_hit=EXCLUSIVE_REPUBLISH no_qpc=YES");
+
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     if (!load_exact_envdiffuse_donor()) {
         reshade::log::message(
