@@ -2269,6 +2269,64 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     // Only resource operand source swizzle changes, DSR wxyz -> PTDE xyzw.
     words[exact_t10 + 7u] = 0x00107e46u;
 
+    // V338: the native nonmetal ELSE branch still expects the STOCK t1
+    // wxyz decode (rSpec = [A,R,G,B]) and reads rSpec.yzw at cb0[10].
+    // The dedicated PTDE t10 sample above instead writes RGB directly to
+    // rSpec.xyz, leaving rSpec.w from the independently required native t1.
+    // Without updating this single consumer the ELSE branch receives
+    // [G,B,stock-alpha] instead of [R,G,B]. The P_Metal THEN branch is
+    // deliberately untouched. Match the exact source register, IF/ELSE
+    // scope and original cb0[10] operand; fail open for any other shader.
+    const std::uint32_t ptde_rgb_reg = words[exact_t10 + 4u];
+    std::size_t else_rgb_reads = 0u;
+    std::size_t else_rgb_word = 0u;
+    bool inside_material = false;
+    bool inside_material_else = false;
+    std::size_t inner_depth = 0u;
+
+    for (const auto &cur : ins) {
+        if (!inside_material) {
+            if (cur.opcode == 0x1fu &&
+                cur.length == 4u &&
+                cur.offset + 3u < words.size() &&
+                words[cur.offset + 1u] == 0x0020800au &&
+                words[cur.offset + 2u] == 0u &&
+                words[cur.offset + 3u] == 85u)
+                inside_material = true;
+            continue;
+        }
+        if (cur.opcode == 0x1fu) {
+            ++inner_depth;
+            continue;
+        }
+        if (cur.opcode == 0x15u) {
+            if (inner_depth == 0u)
+                break;
+            --inner_depth;
+            continue;
+        }
+        if (cur.opcode == 0x12u && inner_depth == 0u) {
+            inside_material_else = true;
+            continue;
+        }
+        if (!inside_material_else || inner_depth != 0u ||
+            cur.opcode != 0x38u || cur.length != 8u ||
+            cur.offset + 7u >= words.size() ||
+            words[cur.offset + 1u] != 0x00100072u ||
+            words[cur.offset + 3u] != 0x00100796u ||
+            words[cur.offset + 4u] != ptde_rgb_reg ||
+            words[cur.offset + 5u] != 0x00208246u ||
+            words[cur.offset + 6u] != 0u ||
+            words[cur.offset + 7u] != 10u)
+            continue;
+        ++else_rgb_reads;
+        else_rgb_word = cur.offset;
+    }
+    if (!inside_material || !inside_material_else ||
+        else_rgb_reads != 1u)
+        return false;
+    words[else_rgb_word + 3u] = 0x00100246u;
+
     std::vector<instruction_view> after;
     if (!decode(words, after))
         return false;
