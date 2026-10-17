@@ -680,8 +680,17 @@ register_lerp_nonmetal_r8_candidate(
                 static_cast<const std::uint8_t *>(r19_dxbc),
                 r19_size,
                 candidate) ||
-        candidate.empty())
+        candidate.empty()) {
+#if defined(DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+        char failure[256]{};
+        std::snprintf(
+            failure, sizeof(failure),
+            "[DSRRL V343 LEGACY LERP] stage=register rx=%u candidate=REJECTED fallback=R19 gpu=NOT_TESTED",
+            static_cast<unsigned>(outcome.semantic_receiver_id));
+        reshade::log::message(reshade::log::level::warning, failure);
+#endif
         return false;
+    }
     std::lock_guard<std::mutex> lock(mutex_);
     if (device_==nullptr || quarantined_.load())
         return false;
@@ -699,6 +708,15 @@ register_lerp_nonmetal_r8_candidate(
         return false;
     lerp_nonmetal_r8_replacements_[
         outcome.semantic_receiver_id]=shader;
+#if defined(DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+    char success[256]{};
+    std::snprintf(
+        success, sizeof(success),
+        "[DSRRL V343 LEGACY LERP] stage=register rx=%u candidate=CREATED bytes=%zu gpu=NOT_TESTED",
+        static_cast<unsigned>(outcome.semantic_receiver_id),
+        candidate.size());
+    reshade::log::message(reshade::log::level::info, success);
+#endif
     return true;
 }
 #endif
@@ -2026,6 +2044,24 @@ bool pmetal_envspec_draw_runtime::prepare(
             material, decision, env_resources_, prepared.env_resources,
             shadow_env_ready, shadow_material_ready,
             source.beta, source.serial);
+#endif
+#if defined(DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+    if (r8_selected &&
+        family == pmetal_envspec_receiver_family::hemenvlerp &&
+        material.route_index != 345u) {
+        static std::atomic<bool> v343_once{false};
+        if (!v343_once.exchange(true, std::memory_order_relaxed)) {
+            char line[512]{};
+            std::snprintf(line, sizeof(line),
+                "[DSRRL V343 LEGACY LERP] stage=request_ready rx=%u route=%u beta=%.9g probe_a=%u probe_b=%u late_DSR_schlick_addend=0 PTDE_EnvSpecAB=R19 PTDE_EnvDiffuseAB=R19 PTDE_SpecRGB=V338 pixel=OPEN",
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                static_cast<double>(source.beta),
+                static_cast<unsigned>(prepared.env_resources.probe_a),
+                static_cast<unsigned>(prepared.env_resources.probe_b));
+            reshade::log::message(reshade::log::level::info, line);
+        }
+    }
 #endif
     prepared.ready = true;
     effect_latch(effect_request_ready_);

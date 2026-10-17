@@ -2350,6 +2350,69 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     words[c101_mul_word + 3u] = 0x00100796u;
     words[c101_mul_word + 5u] = 0x00208006u;
 
+#if defined(DSRRL_V343_PTDE_LEGACY_LERP_MATERIAL_TAIL_DIAG)
+    // Experimental operator island only, NOT a full PTDE ps_3_0 port.
+    // PTDE RX33/RX34/RX35 have separate EnvSpec and diffuse material
+    // composition, not this DSR-only fitted five-instruction late
+    // Schlick addition. R19 already owns the exact PTDE EnvSpec RGBA
+    // A/B+beta, EnvDiffuse A/B+beta and SpecRGB*c101 cuts. V343
+    // isolates the remaining additional DSR term at the local
+    //   MAD rSurface.xyz, rMaterial.xyz, rSchlick.xxx, rBase.xyz
+    // IMPORTANT V343 CORRECTION: literal k_fit_a is at fit+6 and
+    // k_fit_b is at fit+8; fit+7 is a literal-type operand token
+    // 0x00004001. V342 incorrectly tested fit+7==k_fit_a and its
+    // nonmetal candidate always failed open to R19.
+    // by replacing ONLY the Schlick factor input with literal zero:
+    //   MAD rSurface.xyz, rMaterial.xyz, 0, rBase.xyz
+    // This is diagnostic; rBase is still native DSR and does not imply
+    // verified full PTDE color, fog or material equivalence.
+    //
+    // Require the *exact* 5-op DSR RX33-35 late signature and unique
+    // reachable destination, not a general "disable Fresnel" rule.
+    // Nonmetal exact R8 selection is enforced by draw runtime.
+    constexpr std::uint32_t k_fit_a = 0xc0b1c059u;
+    constexpr std::uint32_t k_fit_b = 0xc0df760cu;
+    std::size_t v343_matches = 0u;
+    std::size_t v343_mad_word = 0u;
+    for (std::size_t i = 1u; i + 3u < ins.size(); ++i) {
+        const auto &dot = ins[i - 1u];
+        const auto &fit = ins[i];
+        const auto &mul = ins[i + 1u];
+        const auto &ex = ins[i + 2u];
+        const auto &add = ins[i + 3u];
+        if (dot.opcode != 0x10u || dot.length != 7u ||
+            fit.opcode != 0x32u || fit.length != 9u ||
+            mul.opcode != 0x38u || mul.length != 7u ||
+            ex.opcode != 0x19u || ex.length != 5u ||
+            add.opcode != 0x32u || add.length != 9u ||
+            dot.offset + dot.length != fit.offset ||
+            fit.offset + fit.length != mul.offset ||
+            mul.offset + mul.length != ex.offset ||
+            ex.offset + ex.length != add.offset ||
+            add.offset + 8u >= words.size() ||
+            words[fit.offset + 6u] != k_fit_a ||
+            words[fit.offset + 8u] != k_fit_b ||
+            words[add.offset + 1u] != 0x00100072u ||
+            words[add.offset + 3u] != 0x00100246u ||
+            (words[add.offset + 5u] & 0x000000ffu) != 0x00000056u && 
+                (words[add.offset + 5u] & 0x000000ffu) != 0x000000f6u ||
+            words[add.offset + 6u] != words[ex.offset + 2u] ||
+            words[add.offset + 7u] != 0x00100246u)
+            continue;
+        ++v343_matches;
+        v343_mad_word = add.offset;
+    }
+    if (v343_matches != 1u)
+        return false;
+    // Source1 operand has exactly two DWORDs both before/after the
+    // patch. The MAD, other two sources and destination stay identical.
+    words[v343_mad_word + 5u] = 0x00004001u;
+    words[v343_mad_word + 6u] = 0x00000000u;
+    if (words[v343_mad_word + 5u] != 0x00004001u ||
+        words[v343_mad_word + 6u] != 0u)
+        return false;
+#endif
+
     std::vector<instruction_view> after;
     if (!decode(words, after))
         return false;
