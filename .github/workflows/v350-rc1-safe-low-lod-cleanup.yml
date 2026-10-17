@@ -1,0 +1,89 @@
+name: V350 RC1 safe exact low LOD sidecar cleanup
+on:
+  push:
+    branches: [agent/v350-rc1-sidecar-inventory-tool-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned Oct10 corpus and materialize plain text
+        shell: pwsh
+        run: |
+          python renderer-core/tools/export_v350_rc1_lod_corpus.py --output _cleanup/DSRRL_SPEC_NAMES_1295.txt
+      - name: Retrieve exact V350 GPU Resident RC1 addon for SHA gate test
+        uses: actions/download-artifact@v4
+        with:
+          name: V350-GPU-Resident-RC1-one-addon
+          run-id: 39040452685
+          github-token: ${{ github.token }}
+          path: _rc_addon
+      - name: Native PowerShell end-to-end safe move and restore
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $rc = (Get-ChildItem _rc_addon -Filter *.addon64 -Recurse | Select-Object -First 1).FullName
+          if ((Get-FileHash $rc -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'c298ca9e4f4c34a427ff29d7a72fba02fab8f0f9019de2fd1098a1c73d9ba5fa') { throw 'RC1_SHA_MISMATCH' }
+          $root = Join-Path $env:RUNNER_TEMP 'Steam/steamapps/common/DARK SOULS REMASTERED'
+          New-Item -ItemType Directory -Force $root,(Join-Path $root 'DSRRL/Specular'),(Join-Path $root 'DSRRL/Diffuse'),(Join-Path $root 'DSRRL/manifests') | Out-Null
+          Set-Content -LiteralPath (Join-Path $root 'DarkSoulsRemastered.exe') -Value 'fake exe' -NoNewline
+          Copy-Item _cleanup/DSRRL_SPEC_NAMES_1295.txt (Join-Path $root 'DSRRL_SPEC_NAMES_1295.txt')
+          Copy-Item renderer-core/tools/DSRRL_SAFE_CLEAN_LOWLOD.ps1 (Join-Path $root 'DSRRL_SAFE_CLEAN_LOWLOD.ps1')
+          Copy-Item renderer-core/tools/lod_cleaner/*.bat $root
+          Copy-Item $rc (Join-Path $root 'DSRRL_V350_SCOPE_SHELL_GPU_RESIDENT_RC1.addon64')
+          $names = @(Get-Content _cleanup/DSRRL_SPEC_NAMES_1295.txt)
+          $direct = @('am_f_9450_l_s','am_m_9372_l_s','bd_m_9440_1_l_s','bd_m_9440_2_l_s','wp_a_0652_l_s')
+          $candidate = @($names | Where-Object { $_.EndsWith('_l_s') -and $_ -notin $direct })
+          if ($candidate.Count -ne 544) { throw 'NO_544_CANDIDATES' }
+          $keepFromManifest = $candidate[0]
+          Set-Content -LiteralPath (Join-Path $root 'DSRRL/manifests/owner_mapping.json') -Value ('{"material_texture":"' + $keepFromManifest + '.dds"}')
+          foreach ($n in @($candidate[0],$candidate[1],$candidate[2],$direct[0], 'unknown_l_s')) {
+            Set-Content -LiteralPath (Join-Path $root ('DSRRL/Specular/'+$n+'.dds')) -Value ('dummy-'+$n)
+          }
+          Set-Content -LiteralPath (Join-Path $root ('DSRRL/Diffuse/'+$candidate[3]+'.dds')) -Value 'diffuse'
+          $tool = Join-Path $root 'DSRRL_SAFE_CLEAN_LOWLOD.ps1'
+          # Regression: actually run the BAT from a Steam-style path WITH SPACES.
+          # This previously failed as -GameDir "%~dp0" because trailing slash
+          # escaped the quote, producing an illegal path in GetFullPath.
+          $auditBat = Join-Path $root 'AUDYT_SIDEcAR.bat'
+          $applyBat = Join-Path $root 'OCZYSC_LOW_LOD.bat'
+          if ((Get-Content $auditBat -Raw) -match '\-GameDir' -or (Get-Content $applyBat -Raw) -match '\-GameDir') { throw 'BAT_TRAILING_BACKSLASH_REGRESSION' }
+          & $auditBat
+          if ($LASTEXITCODE -ne 0) { throw 'BAT_AUDIT_FAILED' }
+          if (-not (Test-Path (Join-Path $root ('DSRRL/Specular/'+$candidate[1]+'.dds')))) { throw 'DRYRUN_MOVED_FILE' }
+          & $applyBat
+          if ($LASTEXITCODE -ne 0) { throw 'BAT_APPLY_FAILED' }
+          foreach ($n in @($candidate[0],$direct[0],'unknown_l_s')) {
+            if (-not (Test-Path (Join-Path $root ('DSRRL/Specular/'+$n+'.dds')))) { throw ('DELETED_MAPPED_FILE '+$n) }
+          }
+          foreach ($n in @($candidate[1],$candidate[2])) {
+            if (Test-Path (Join-Path $root ('DSRRL/Specular/'+$n+'.dds'))) { throw ('FAILED_TO_QUARANTINE '+$n) }
+          }
+          if (-not (Test-Path (Join-Path $root ('DSRRL/Diffuse/'+$candidate[3]+'.dds')))) { throw 'TOUCHED_DIFFUSE' }
+          $q = Get-ChildItem -LiteralPath (Join-Path $root '_DSRRL_LOWLOD_QUARANTINE') -Directory | Select-Object -First 1
+          if ($null -eq $q -or @(Import-Csv (Join-Path $q.FullName 'ledger.csv')).Count -ne 2) { throw 'QUARANTINE_LEDGER_BAD' }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tool -GameDir $root -Restore $q.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'RESTORE_FAILED' }
+          foreach ($n in @($candidate[1],$candidate[2])) {
+            if (-not (Test-Path (Join-Path $root ('DSRRL/Specular/'+$n+'.dds')))) { throw ('RESTORE_MISSING '+$n) }
+          }
+          Write-Host 'V350_RC1_LOWLOD_WINDOWS_STEAM_PATH_BAT_AUDIT_APPLY_RESTORE_PASS exact=544 protected_direct=5 manifest_override=1 unknown_preserved=1 other_classes_preserved=1'
+      - name: Package simple Windows cleanup scripts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force '_dist' | Out-Null
+          Copy-Item renderer-core/tools/DSRRL_SAFE_CLEAN_LOWLOD.ps1 _dist/
+          Copy-Item _cleanup/DSRRL_SPEC_NAMES_1295.txt _dist/
+          Copy-Item renderer-core/tools/lod_cleaner/*.bat _dist/
+          Copy-Item renderer-core/tools/lod_cleaner/README_PL.txt _dist/
+          Compress-Archive -Path _dist/* -DestinationPath DSRRL_V350_RC1_SAFE_LOWLOD_CLEANUP.zip -Force
+          Get-FileHash DSRRL_V350_RC1_SAFE_LOWLOD_CLEANUP.zip -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V350-RC1-SAFE-LOWLOD-CLEANUP
+          path: DSRRL_V350_RC1_SAFE_LOWLOD_CLEANUP.zip
+          if-no-files-found: error
