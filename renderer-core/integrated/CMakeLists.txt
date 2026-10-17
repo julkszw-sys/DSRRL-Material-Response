@@ -858,9 +858,10 @@ if(DSRRL_V291_LERP_CUBEMAP_CENSUS)
 endif()
 
 if(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
-    if(NOT DSRRL_V291_MATERIAL_STAGE_CENSUS OR
-       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-        message(FATAL_ERROR "V293 exact owner alias requires material census and nonmetal atomic gate")
+    # V293 checks parser-authenticated identity independently of diagnostic
+    # material census. Preserve the required nonmetal consumer gate only.
+    if(NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V293 exact owner alias requires nonmetal atomic gate")
     endif()
     target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V293_PARSER_EXACT_FLVER_ALIAS>)
