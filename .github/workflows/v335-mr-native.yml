@@ -1,7 +1,7 @@
 name: V335 Native
 on:
   push:
-    branches: [agent/v335-mr-exact-owner-route-recovery-20261017]
+    branches: [agent/v336-wanderer-srv-audit]
   workflow_dispatch:
 jobs:
   test:
@@ -23,5 +23,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: V335-MR-Exact-Route-One-Addon
-          path: out-v335/*.addon64
+          path: out-v336/*.addon64
           if-no-files-found: error
