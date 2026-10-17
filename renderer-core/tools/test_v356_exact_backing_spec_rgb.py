@@ -37,6 +37,7 @@ assert "DSRRL_V356_EXACT_BACKING_RECOVERY.addon64" in b
 assert "owner_tuple_exact" in s
 assert "spec_rgb_consumer_ready" in s
 assert "v356_unbind_named_view(key);" in s
+assert "v214_resource_provenance::instance().snapshot(" in (root/"tools/apply_v323_exact_resource_name_srv.py").read_text("utf8")
 # V355 owner-approved 3 donor rows are built by the existing generator.
 x=(root/"data/provenance/user_envspec_intensity_overrides_v355.tsv").read_text("utf8")
 assert x.count("USER_TEST_OVERRIDE")==3
