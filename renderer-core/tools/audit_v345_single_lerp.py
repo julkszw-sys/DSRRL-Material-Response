@@ -5,7 +5,7 @@ root=Path(__file__).resolve().parents[1]
 draw=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text()
 mat=(root/"src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp").read_text()
 build=(root/"tools/build_v345_single_lerp_one_addon.ps1").read_text()
-v344=mat.split("#if defined(DSRRL_V344_PTDE_LERP_SPEC_POST_ENV)",1)[1].split("#endif",1)[0]
+v344=mat.split("#if defined(DSRRL_V344_PTDE_LERP_SPEC_POST_ENV)",1)[1].split("#endif\n\n    std::vector<instruction_view> after;",1)[0]
 section=draw.split("register_lerp_replacement(",1)[1].split("register_lerp_nonmetal_r8_candidate(",1)[0]
 single=section.split("#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)",1)[1].split("const auto payload_sha256",1)[0]
 assert "materialize_nonmetal_lerp_r8_spec_linear_candidate(" in single
@@ -23,7 +23,7 @@ assert "#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRR
 assert "stage=request_ready" in route and "single_ps=1" in route
 assert "pmetal ? \"P_METAL\" : \"NONMETAL\"" in route
 assert "r8_selected" in route  # remains only behind disabled alternative gate
-assert "v344_t11 != v344_t12 + 129u" in v344
+assert "v344_t11 != v344_t12 + v344_expected_t11_delta" in v344
 assert "v344_late_sample[4u] = 13u" in v344
 assert "words[v344_temps_word + 1u] = 14u" in v344
 assert "std::memcmp(sig.data() + name_off, \"COLOR\", 6u)" in v344
