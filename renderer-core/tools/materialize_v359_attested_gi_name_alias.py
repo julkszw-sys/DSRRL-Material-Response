@@ -36,8 +36,8 @@ def replace(path,old,new,tag):
 
 p="src/runtime/envspec_resource_runtime.cpp"
 # CMake retains original source headers; this is exact resource-name provenance.
-replace(p,'#include "dsrrl/operators/env_spec/legacy_resource_bridge.hpp"',
-'#include "dsrrl/operators/env_spec/legacy_resource_bridge.hpp"\n#include "dsrrl/operators/env_spec/generated_gi_name_binder_v359.hpp"\n#include "dsrrl/runtime/texture_identity_transport.hpp"',"include")
+replace(p,'#include "dsrrl/runtime/envspec_resource_runtime.hpp"',
+'#include "dsrrl/runtime/envspec_resource_runtime.hpp"\n#include "dsrrl/operators/env_spec/generated_gi_name_binder_v359.hpp"\n#include "dsrrl/runtime/texture_identity_transport.hpp"',"include")
 replace(p,"    bool certified = false;\n    std::uint16_t probe = 0u;\n};\n// A resource pointer",
 '''    bool certified = false;
     std::uint16_t probe = 0u;
