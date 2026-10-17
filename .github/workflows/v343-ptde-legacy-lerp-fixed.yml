@@ -1,0 +1,58 @@
+name: V343 PTDE HemEnvLerp Verified DXBC Material Tail Single Addon
+on:
+  push:
+    branches: [agent/v343-ptde-lerp-fixed-tail-20261017]
+    paths:
+      - '.github/workflows/v343-ptde-legacy-lerp-fixed.yml'
+      - 'renderer-core/tools/build_v343_ptde_legacy_lerp_one_addon.ps1'
+      - 'renderer-core/tools/audit_v343_ptde_legacy_lerp.py'
+      - 'renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp'
+      - 'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+      - 'renderer-core/integrated/CMakeLists.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  token-witness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify V338 base RGB carrier and c101 source
+        run: python3 renderer-core/tools/audit_v338_nonmetal_lerp_else_rgb.py
+      - name: Simulate three original DSR RX33-35 DXBC 5-op signatures and catch V342 wrong literal offset
+        run: python3 renderer-core/tools/audit_v343_ptde_legacy_lerp.py
+  build-win64:
+    needs: token-witness
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Compile V343 single ReShade AMD64 addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v343_ptde_legacy_lerp_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify PE64 SHA and V343 token markers
+        shell: pwsh
+        run: |
+          $sha = (git rev-parse HEAD).Trim()
+          $file = 'out-v343/DSRRL_V343_PTDE_HEMENVLERP_MATERIAL_TAIL_FIXED.addon64'
+          if (-not (Test-Path $file)) { throw "Missing one addon" }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $file))
+          if ($bytes.Length -lt 500000) { throw "Not expected binary size" }
+          if ([Text.Encoding]::ASCII.GetString($bytes,0,2) -ne 'MZ') { throw "Invalid MZ" }
+          $off=[BitConverter]::ToInt32($bytes,0x3c)
+          if ([Text.Encoding]::ASCII.GetString($bytes,$off,4) -ne "PE`0`0") { throw "Invalid PE" }
+          if ([BitConverter]::ToUInt16($bytes,$off+4) -ne 0x8664) { throw "Invalid x64" }
+          $text=[Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $text.Contains($sha)) { throw "Missing source identity" }
+          if (-not $text.Contains('v343_ptde_hemenvlerp_material_tail_fixed')) { throw "Missing flavor" }
+          if (-not $text.Contains('[DSRRL V343 LEGACY LERP]')) { throw "Missing instrumented candidate outcome marker" }
+          Write-Host "V343 native addon SHA256 $((Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V343_NONMETAL_PTDE_LERP_TAIL_FIXED_SINGLE_ADDON
+          path: out-v343/DSRRL_V343_PTDE_HEMENVLERP_MATERIAL_TAIL_FIXED.addon64
+          if-no-files-found: error
