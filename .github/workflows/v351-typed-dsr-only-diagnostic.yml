@@ -16,6 +16,9 @@ jobs:
           python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
           python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
           python3 renderer-core/tools/test_v351_fallback_census.py --output v351_fallback_census.json
+          g++ -std=c++17 -O2 -I renderer-core/include renderer-core/tests/v351_exact_dsr_only_lightbank_source_test.cpp -o /tmp/v351_donor_test
+          /tmp/v351_donor_test
+          python3 -m py_compile renderer-core/tools/v351_release_fallback_gate.py
       - uses: actions/upload-artifact@v4
         with:
           name: V351-Fallback-Source-Census
