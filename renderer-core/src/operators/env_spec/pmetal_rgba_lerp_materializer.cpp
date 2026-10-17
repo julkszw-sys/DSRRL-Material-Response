@@ -2147,21 +2147,32 @@ materialize_pmetal_rgba_lerp_receiver(
 
 
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+namespace { thread_local std::uint32_t v346_last_reject = 0u; }
+std::uint32_t v346_lerp_reject_stage() noexcept { return v346_last_reject; }
+#define DSRRL_V346_FAIL(STAGE) (v346_last_reject = (STAGE), false)
+#else
+#define DSRRL_V346_FAIL(STAGE) false
+#endif
+
 bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     const std::uint8_t *r19_source,
     std::size_t r19_size,
     std::vector<std::uint8_t> &output) noexcept
 {
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+    v346_last_reject = 0u;
+#endif
     output.clear();
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
     std::size_t code_index = static_cast<std::size_t>(-1);
     if (!parse_dxbc(r19_source, r19_size, chunks, code_index, words))
-        return false;
+        return DSRRL_V346_FAIL(1u);
 
     std::vector<instruction_view> ins;
     if (!decode(words, ins))
-        return false;
+        return DSRRL_V346_FAIL(2u);
 
     // The exact R19 Lerp receiver contains IF b0[85].x. Only its ELSE
     // branch has this 5/10/5 LOG-MUL(2.2)-EXP SPEC-domain transfer.
@@ -2230,7 +2241,7 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     }
     if (material_if_matches!=1u || matches!=1u ||
         gamma_exp<=gamma_log)
-        return false;
+        return DSRRL_V346_FAIL(3u);
 
     // Exact Stable R8 semantic topology, not an arbitrary gain:
     // keep the already-computed SPEC carrier register, NOP LOG and MUL,
@@ -2259,13 +2270,13 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         if (slot != 10u)
             continue;
         if (exact_t10 != no_t10)
-            return false;
+            return DSRRL_V346_FAIL(4u);
         exact_t10 = sample.offset;
     }
     if (native_t1_count != 1u || exact_t10 == no_t10 ||
         words[exact_t10 + 3u] != 0x001000e2u ||
         words[exact_t10 + 7u] != 0x00107936u)
-        return false;
+        return DSRRL_V346_FAIL(5u);
     // V338: preserve the native ELSE consumer's semantic RGB carrier.
     // Original t1 is swizzled wxyz into rSpec.xyzw, so rSpec.yzw=RGB.
     // The PTDE t10 clone writes YZW ONLY. Its original wxyz source
@@ -2293,7 +2304,7 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         words[c101_mul_word + 5u] != 0x00208246u ||
         words[c101_mul_word + 6u] != 12u ||
         words[c101_mul_word + 7u] != 0u)
-        return false;
+        return DSRRL_V346_FAIL(6u);
 
     // Require the exactly matched native nonmetal ELSE consumer:
     // MUL r1.xyz, rSpec.yzw, cb0[10].xyz. It must retain yzw;
@@ -2341,7 +2352,7 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     }
     if (!inside_material || !inside_material_else ||
         else_rgb_reads != 1u)
-        return false;
+        return DSRRL_V346_FAIL(7u);
 
     // Keep the t10 sample's wxyz swizzle and YZW destination.
     // All other consumers retain native swizzles. Scale exactly
@@ -2373,11 +2384,11 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         ++v344_isgn_count;
         const auto &sig = current.payload;
         if (sig.size() < 8u)
-            return false;
+            return DSRRL_V346_FAIL(8u);
         const auto count = read_u32(sig.data());
         if (count == 0u || count > 32u ||
             static_cast<std::size_t>(count) * 24u > sig.size() - 8u)
-            return false;
+            return DSRRL_V346_FAIL(9u);
         for (std::uint32_t i = 0u; i < count; ++i) {
             const auto at = 8u + static_cast<std::size_t>(i) * 24u;
             const auto name_off =
@@ -2387,19 +2398,19 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
             const auto mask = sig[at + 20u];
             if (name_off > sig.size() ||
                 sig.size() - name_off < 6u)
-                return false;
+                return DSRRL_V346_FAIL(10u);
             if (std::memcmp(sig.data() + name_off, "COLOR", 6u) != 0 ||
                 semantic_index != 0u)
                 continue;
             if (v344_color_reg.has_value() ||
                 (input_reg != 6u && input_reg != 7u) ||
                 (mask & 0x07u) != 0x07u)
-                return false;
+                return DSRRL_V346_FAIL(11u);
             v344_color_reg = input_reg;
         }
     }
     if (v344_isgn_count != 1u || !v344_color_reg)
-        return false;
+        return DSRRL_V346_FAIL(12u);
 
     // R19 DXBC site census: one t12 EnvSpec A sample and one t11
     // EnvDiffuse A sample, separated by exactly 129 DWORDs.
@@ -2432,7 +2443,7 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
             v344_t11 - 6u ||
         v344_t12 + k_ptde_rgba_envspec_chain.size() + 33u >
             v344_t11 - 6u)
-        return false;
+        return DSRRL_V346_FAIL(13u);
 
     // Verify the *actual ported PTDE* A/B chain rather than assuming any
     // t12/t14 user shares the same operator. Reflection coordinate
@@ -2442,19 +2453,19 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         if (i == 6u || i == 38u)
             continue;
         if (words[v344_t12 + i] != k_ptde_rgba_envspec_chain[i])
-            return false;
+            return DSRRL_V346_FAIL(14u);
     }
     if (words[v344_t12 + 6u] != words[v344_t12 + 38u] ||
         words[v344_t12 + 6u] < 5u ||
         words[v344_t12 + 6u] > 7u)
-        return false;
+        return DSRRL_V346_FAIL(15u);
 
     const auto v344_insertion =
         v344_t12 + k_ptde_rgba_envspec_chain.size();
     for (std::size_t i = v344_insertion;
          i < v344_t11 - 6u; ++i)
         if (words[i] != 0x0100003au)
-            return false;
+            return DSRRL_V346_FAIL(16u);
 
     // Keep exactly one t10 sample. Relocate it rather than duplicating
     // it, then NOP its original raw-c101 multiply. Its declaration,
@@ -2469,7 +2480,7 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
         words[c101_mul_word + 3u] != 0x00100796u ||
         words[c101_mul_word + 5u] != 0x00208006u ||
         c101_mul_word != exact_t10 + 11u)
-        return false;
+        return DSRRL_V346_FAIL(17u);
 
     std::array<std::uint32_t,11> v344_late_sample{};
     std::copy_n(
@@ -2488,11 +2499,11 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
             words[entry.offset + 1u] != 13u)
             continue;
         if (v344_temps_word != v344_none)
-            return false;
+            return DSRRL_V346_FAIL(18u);
         v344_temps_word = entry.offset;
     }
     if (v344_temps_word == v344_none)
-        return false;
+        return DSRRL_V346_FAIL(19u);
 
     const std::array<std::uint32_t,22> v344_modulate{{
         // r13.xyz = r13.xyz * b12[0].xyz  (PTDE c101 carrier)
@@ -2528,26 +2539,30 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     for (std::size_t i = exact_t10;
          i < c101_mul_word + k_c101_mul_words; ++i)
         if (words[i] != 0x0100003au)
-            return false;
+            return DSRRL_V346_FAIL(20u);
     if (words[v344_insertion + 3u] != 0x001000f2u ||
         words[v344_insertion + 4u] != 13u ||
         words[v344_temps_word + 1u] != 14u ||
         words[v344_insertion + v344_late_sample.size() +
             v344_modulate.size() - 1u] != 13u)
-        return false;
+        return DSRRL_V346_FAIL(21u);
 #endif
 
     std::vector<instruction_view> after;
     if (!decode(words, after))
-        return false;
+        return DSRRL_V346_FAIL(22u);
     if (!rebuild(r19_source,r19_size,std::move(chunks),
                  code_index,words,output)) {
         output.clear();
-        return false;
+        return DSRRL_V346_FAIL(23u);
     }
-    return legacy_plan::dxbc::checksum_container_valid(
-        output.data(),output.size());
+    if (!legacy_plan::dxbc::checksum_container_valid(
+            output.data(),output.size()))
+        return DSRRL_V346_FAIL(99u);
+    return true;
 }
+#undef DSRRL_V346_FAIL
+
 #endif
 
 } // namespace dsrrl::operators::env_spec
