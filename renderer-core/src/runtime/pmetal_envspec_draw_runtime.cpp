@@ -26,6 +26,12 @@
 #include <cstdio>
 #include <cstring>
 
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+namespace dsrrl::operators::env_spec {
+std::uint32_t v346_lerp_reject_stage() noexcept;
+}
+#endif
+
 namespace dsrrl::runtime {
 namespace {
 
@@ -595,9 +601,17 @@ register_lerp_replacement(
         unified.empty()) {
         ++lerp_replacement_register_fail_;
         char log[256]{};
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+        std::snprintf(log,sizeof(log),
+            "[DSRRL V346 LERP REJECT] stage=create rx=%u candidate=REJECTED gate=%u fail_open=stock",
+            static_cast<unsigned>(outcome.semantic_receiver_id),
+            static_cast<unsigned>(
+                operators::env_spec::v346_lerp_reject_stage()));
+#else
         std::snprintf(log,sizeof(log),
             "[DSRRL V345 UNIFIED LERP] stage=create rx=%u candidate=REJECTED fail_open=stock",
             static_cast<unsigned>(outcome.semantic_receiver_id));
+#endif
         reshade::log::message(reshade::log::level::warning,log);
         return false;
     }
