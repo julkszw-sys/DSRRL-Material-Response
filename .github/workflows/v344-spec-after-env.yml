@@ -1,5 +1,8 @@
 name: V344 PTDE SpecRGB One Addon
-on: workflow_dispatch
+on:
+  push:
+    branches: [agent/v344-ptde-lerp-spec-after-env-20261017]
+  workflow_dispatch:
 jobs:
   build:
     runs-on: windows-latest
