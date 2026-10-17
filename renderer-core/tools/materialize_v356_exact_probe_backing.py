@@ -53,7 +53,7 @@ bool v356_resolve_exact_native_backing_locked(
     view->GetDevice(&native_device);
     const bool same_device =
         native_device!=nullptr &&
-        reinterpret_cast<void *>(native_device)==g_device->get_native();
+        reinterpret_cast<std::uintptr_t>(native_device)==static_cast<std::uintptr_t>(g_device->get_native());
     const auto it=g_native_resources.find(
         static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(backing)));
