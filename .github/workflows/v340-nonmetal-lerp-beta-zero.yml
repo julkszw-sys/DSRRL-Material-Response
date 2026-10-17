@@ -1,0 +1,57 @@
+name: V340 Nonmetal HemEnvLerp Shader Beta Zero Win64
+on:
+  push:
+    branches: [agent/v340-nonmetal-lerp-beta-zero-20261017]
+    paths:
+      - '.github/workflows/v340-nonmetal-lerp-beta-zero.yml'
+      - 'renderer-core/tools/build_v340_nonmetal_lerp_beta_zero_one_addon.ps1'
+      - 'renderer-core/tools/audit_v340_nonmetal_lerp_beta_zero.py'
+      - 'renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp'
+      - 'renderer-core/integrated/CMakeLists.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: V338 source/bytecode guard
+        run: python3 renderer-core/tools/audit_v338_nonmetal_lerp_else_rgb.py
+      - name: V340 beta-zero isolated carrier and controls source contract
+        run: python3 renderer-core/tools/audit_v340_nonmetal_lerp_beta_zero.py
+  native-win64:
+    needs: exact-source
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build V340 one integrated ReShade addon with nonmetal shader beta=0
+        shell: pwsh
+        run: ./renderer-core/tools/build_v340_nonmetal_lerp_beta_zero_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Attest PE AMD64, full source and flavor
+        shell: pwsh
+        run: |
+          $file = 'out-v340/DSRRL_V340_NONMETAL_LERP_BETA_ZERO.addon64'
+          $commit = (git rev-parse HEAD).Trim()
+          if (-not (Test-Path $file)) { throw "Missing V340 single addon" }
+          $bytes = [IO.File]::ReadAllBytes((Resolve-Path $file))
+          if ($bytes.Length -lt 500000) { throw "Invalid binary length" }
+          if ([Text.Encoding]::ASCII.GetString($bytes,0,2) -ne 'MZ') { throw "Missing MZ" }
+          $offset = [BitConverter]::ToInt32($bytes,0x3c)
+          if ([Text.Encoding]::ASCII.GetString($bytes,$offset,4) -ne "PE`0`0") { throw "Invalid PE" }
+          if ([BitConverter]::ToUInt16($bytes,$offset+4) -ne 0x8664) { throw "Invalid AMD64 machine" }
+          $t = [Text.Encoding]::ASCII.GetString($bytes)
+          if (-not $t.Contains($commit)) { throw "Missing source SHA" }
+          if (-not $t.Contains('v340_nonmetal_lerp_r8_beta_zero')) { throw "Missing V340 build flavor" }
+          if (-not $t.Contains('[DSRRL V340 BETA ZERO]')) { throw "Missing runtime verification marker" }
+          Write-Host "V340 ADDON_SHA256=$((Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V340_NONMETAL_LERP_SHADER_BETA_ZERO_SINGLE_ADDON
+          path: out-v340/DSRRL_V340_NONMETAL_LERP_BETA_ZERO.addon64
+          if-no-files-found: error
