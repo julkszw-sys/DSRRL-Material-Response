@@ -25,6 +25,7 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#include <dxgi1_4.h>
 
 #include <algorithm>
 #include <array>
@@ -34,6 +35,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -184,9 +186,14 @@ struct sidecar_shared_hash {
 struct sidecar_shared_entry {
     ID3D11ShaderResourceView *view = nullptr; // owns one cache reference
     std::size_t live_stock_users = 0u;
+    bool resident = false; // one GPU SRV ref retained until device teardown
 };
 std::unordered_map<sidecar_shared_key, sidecar_shared_entry,
                    sidecar_shared_hash> g_sidecar_shared;
+std::atomic_bool g_session_residency{false};
+// Guarded by g_mutex: no resident cold upload may exceed the same startup cap.
+std::uint64_t g_resident_gpu_limit = 0u;
+std::uint64_t g_resident_gpu_used = 0u;
 // A live native SRV handle observed under more than one exact logical texture
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
@@ -380,7 +387,8 @@ void release_shared_user(
         if (found == g_sidecar_shared.end() ||
             found->second.live_stock_users == 0u)
             return;
-        if (--found->second.live_stock_users == 0u) {
+        if (--found->second.live_stock_users == 0u &&
+            !found->second.resident) {
             last = found->second.view;
             g_sidecar_shared.erase(found);
         }
@@ -432,6 +440,20 @@ void release_cache() noexcept
 
     for (auto &entry : dead)
         release_set(entry.second);
+
+    // Reclaim resident cache refs at addon teardown, outside the mutex:
+    // COM Release may re-enter a ReShade resource-view callback.
+    std::vector<ID3D11ShaderResourceView *> resident;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (const auto &entry : g_sidecar_shared)
+            resident.push_back(entry.second.view);
+        g_sidecar_shared.clear();
+        g_resident_gpu_limit = 0u;
+        g_resident_gpu_used = 0u;
+    }
+    for (auto *view : resident)
+        if (view != nullptr) view->Release();
 }
 
 void release_cache_for_device(
@@ -473,6 +495,22 @@ void release_cache_for_device(
 
     for (auto &set : dead)
         release_set(set);
+
+    // A resident SRV is owned by this device session only. Release the
+    // cache-owned reference after all stock owners are dropped.
+    std::vector<ID3D11ShaderResourceView *> resident;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (auto it = g_sidecar_shared.begin();
+             it != g_sidecar_shared.end();) {
+            if (it->first.device == device) {
+                resident.push_back(it->second.view);
+                it = g_sidecar_shared.erase(it);
+            } else ++it;
+        }
+    }
+    for (auto *view : resident)
+        if (view != nullptr) view->Release();
 }
 
 std::filesystem::path process_dir()
@@ -966,6 +1004,127 @@ load_result load_dds(
     }
 }
 
+// Optional early preload. The exact stock logical name, material, MTD,
+// receiver and draw gates STILL authorize every runtime sidecar binding.
+// Merely finding a DDS in DSRRL/ grants no shader/resource authority.
+bool sidecar_residency_requested() noexcept {
+    try {
+        std::ifstream f(process_dir() / L"DSRRL_SIDECAR_RESIDENCY.txt",
+                        std::ios::binary);
+        char mode = '0';
+        return static_cast<bool>(f.read(&mode,1)) && mode == '1';
+    } catch (...) { return false; }
+}
+
+void on_init_device_residency(reshade::api::device *device) {
+    if (!g_session_residency.load(std::memory_order_acquire) ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11)
+        return;
+    auto *native = reinterpret_cast<ID3D11Device *>(device->get_native());
+    if (native == nullptr) return;
+
+    IDXGIDevice *dxgi = nullptr;
+    IDXGIAdapter *adapter = nullptr;
+    IDXGIAdapter3 *adapter3 = nullptr;
+    DXGI_QUERY_VIDEO_MEMORY_INFO memory{};
+    bool budget_ok = false;
+    if (SUCCEEDED(native->QueryInterface(IID_PPV_ARGS(&dxgi))) &&
+        dxgi != nullptr && SUCCEEDED(dxgi->GetAdapter(&adapter)) &&
+        adapter != nullptr &&
+        SUCCEEDED(adapter->QueryInterface(IID_PPV_ARGS(&adapter3))) &&
+        adapter3 != nullptr)
+        budget_ok = SUCCEEDED(adapter3->QueryVideoMemoryInfo(
+            0u, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memory));
+    if (adapter3) adapter3->Release();
+    if (adapter) adapter->Release();
+    if (dxgi) dxgi->Release();
+    if (!budget_ok || memory.Budget <= memory.CurrentUsage) {
+        reshade::log::message(reshade::log::level::warning,
+            "[DSRRL GPU RESIDENT] DXGI unused local budget unavailable; preload disabled (stock runtime intact)");
+        return;
+    }
+    // UMA DXGI budget is a shared-memory allocation budget, not dedicated VRAM.
+    // Preserve at least half of current free budget for DSR's future streams.
+    const auto unused_budget = memory.Budget - memory.CurrentUsage;
+    const auto limit = unused_budget / 2u;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_resident_gpu_limit = limit;
+        g_resident_gpu_used = 0u;
+    }
+    std::uint64_t reserved = 0u;
+    unsigned loaded = 0u, rejected = 0u, budget_skips = 0u;
+    struct target_folder { asset_class cls; const wchar_t *name; };
+    constexpr target_folder targets[] = {
+        {asset_class::specular,L"Specular"},
+        {asset_class::diffuse,L"Diffuse"},
+        {asset_class::normal,L"Normals"}
+    };
+    for (const auto &folder : targets) {
+        try {
+            const auto dir = process_dir() / L"DSRRL" / folder.name;
+            if (!std::filesystem::is_directory(dir)) continue;
+            for (const auto &file : std::filesystem::directory_iterator(dir)) {
+                if (!file.is_regular_file() ||
+                    _wcsicmp(file.path().extension().c_str(),L".dds") != 0)
+                    continue;
+                const auto name = file.path().stem().wstring();
+                if (name.empty()) continue;
+                const auto hash = fnv_name(name);
+                const bool allowed = folder.cls == asset_class::specular
+                    ? (spec_equipment_allowed(hash) ||
+                       exact_subsurface_body_spec_hash(hash))
+                    : folder.cls == asset_class::diffuse
+                      ? generated::diffuse_target_hash_allowed_v12(hash)
+                      : generated::normal_target_hash_allowed_v12(hash);
+                if (!allowed) continue; // fail-open, no basename authority
+                const auto bytes = file.file_size();
+                if (!bytes || bytes > limit || reserved > limit - bytes) {
+                    ++budget_skips; continue;
+                }
+                sidecar_shared_key key{native,folder.cls,hash,name};
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    if (g_sidecar_shared.find(key) != g_sidecar_shared.end())
+                        continue;
+                }
+                // load_dds retains the original exact SHA/format gates.
+                const auto result = load_dds(
+                    native,file.path(),folder.cls,hash);
+                if (!result.view) { ++rejected; continue; }
+                bool inserted = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    auto found = g_sidecar_shared.find(key);
+                    if (found == g_sidecar_shared.end()) {
+                        // A concurrent cold loader may have consumed budget
+                        // since this folder was enumerated.
+                        if (bytes <= g_resident_gpu_limit &&
+                            g_resident_gpu_used <=
+                                g_resident_gpu_limit - bytes)
+                            inserted = g_sidecar_shared.emplace(
+                                std::move(key),
+                                sidecar_shared_entry{result.view,0u,true}).second;
+                    } else found->second.resident = true;
+                    if (inserted) g_resident_gpu_used += bytes;
+                }
+                if (inserted) { ++loaded; reserved += bytes; }
+                else result.view->Release(); // never Release under g_mutex
+            }
+        } catch (...) { ++rejected; }
+    }
+    char msg[360]{};
+    std::snprintf(msg,sizeof(msg),
+        "[DSRRL GPU RESIDENT] mode=1 early_gpu_preload=%u "
+        "dds_disk_bytes=%llu budget_unused=%llu max_preload=%llu "
+        "budget_skipped=%u rejected=%u receiver_auth=UNCHANGED",
+        loaded,static_cast<unsigned long long>(reserved),
+        static_cast<unsigned long long>(unused_budget),
+        static_cast<unsigned long long>(limit),budget_skips,rejected);
+    reshade::log::message(reshade::log::level::info,msg);
+}
+
 void account_load(
     load_status status) noexcept
 {
@@ -1009,12 +1168,16 @@ acquired_sidecar acquire_sidecar(
             }
         }
 
-        auto loaded = load_dds(
-            device, sidecar_path(cls, logical_name),
-            cls, logical_hash);
+        const auto path = sidecar_path(cls, logical_name);
+        auto loaded = load_dds(device, path, cls, logical_hash);
         if (loaded.view == nullptr)
             return {loaded, false};
 
+        std::error_code size_error{};
+        const auto cold_size = g_session_residency.load(
+            std::memory_order_relaxed)
+            ? std::filesystem::file_size(path, size_error)
+            : 0u;
         try {
             std::lock_guard<std::mutex> lock(g_mutex);
             const auto it = g_sidecar_shared.find(key);
@@ -1028,10 +1191,14 @@ acquired_sidecar acquire_sidecar(
                 return {{winner, load_status::ready}, true};
             }
 
+            const bool resident = !size_error && cold_size != 0u &&
+                cold_size <= g_resident_gpu_limit &&
+                g_resident_gpu_used <= g_resident_gpu_limit - cold_size;
             const bool inserted =
                 g_sidecar_shared.emplace(
                     key,
-                    sidecar_shared_entry{loaded.view, 1u}).second;
+                    sidecar_shared_entry{loaded.view, 1u, resident}).second;
+            if (inserted && resident) g_resident_gpu_used += cold_size;
             if (!inserted) {
                 // No successful publication: retain the standalone SRV.
                 return {loaded, false};
@@ -1535,6 +1702,14 @@ register_events() noexcept
     g_quarantined.store(false);
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
+    const bool resident = sidecar_residency_requested();
+    g_session_residency.store(resident,std::memory_order_release);
+    reshade::log::message(reshade::log::level::info,
+        resident
+            ? "[DSRRL GPU RESIDENT] mode=1 init_device_preload=ON persistent_srv=ON"
+            : "[DSRRL GPU RESIDENT] mode=0 original_cache_policy=ON");
+    reshade::register_event<reshade::addon_event::init_device>(
+        on_init_device_residency);
 
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
@@ -1556,6 +1731,9 @@ unregister_events() noexcept
 {
     if (g_core != &core_)
         return;
+
+    reshade::unregister_event<reshade::addon_event::init_device>(
+        on_init_device_residency);
 
     reshade::unregister_event<
         reshade::addon_event::destroy_device>(
