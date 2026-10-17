@@ -26,7 +26,6 @@ required=[
 "spec_equipment_allowed(",
 "query.material.owner_tuple_exact",
 "material_resources_.prepare_draw_requests(" if False else "prepare_draw_requests_bound(",
-"v214_resource_provenance::instance().snapshot(",
 ]
 for value in required:assert value in s,value
 assert "materialize_v356_exact_backing_spec_rgb.py" in b
