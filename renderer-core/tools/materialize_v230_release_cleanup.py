@@ -54,7 +54,7 @@ s=s[:i]+"#endif\n"+s[i:]
 # addon so it cannot export debug telemetry.
 p.write_text(s,"utf-8")
 
-p=r/"integrated/integrated_addon.cpp"
+p=r.parent/"build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp"
 s=p.read_text("utf-8")
 s=one(s,"    dsrrl::runtime::qpc_bisect::report();","    // v2.3.0: no QPC unload profiler report.","qpc report")
 # Neither diagnostic dump computes operator authority: keep all real state
@@ -103,7 +103,7 @@ def suppress_info_logs(s):
     return s,cut
 
 stats={}
-for p in [r/"integrated/integrated_addon.cpp",*sorted((r/"src").rglob("*.cpp"))]:
+for p in [r.parent/"build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp",*sorted((r/"src").rglob("*.cpp"))]:
     old=p.read_text("utf-8")
     new,count=suppress_info_logs(old)
     if count:p.write_text(new,"utf-8");stats[str(p.relative_to(r))]=count
