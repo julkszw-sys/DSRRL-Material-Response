@@ -13,7 +13,7 @@ jobs:
       - name: Static source and optimizer contract
         shell: bash
         run: |
-          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/materialize_v230_release_cleanup_stage2.py renderer-core/tools/materialize_v230_release_cleanup_stage3.py renderer-core/tools/materialize_v230_release_cleanup_stage4.py renderer-core/tools/test_v230_release_contract.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/materialize_v230_release_cleanup_stage2.py renderer-core/tools/materialize_v230_release_cleanup_stage3.py renderer-core/tools/materialize_v230_release_cleanup_stage4.py renderer-core/tools/materialize_v230_release_cleanup_stage5.py renderer-core/tools/test_v230_release_contract.py
           python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
           python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
           python3 renderer-core/tools/test_v351_fallback_census.py --output v230_fallback_census.json
