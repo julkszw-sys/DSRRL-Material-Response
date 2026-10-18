@@ -57,6 +57,15 @@ p.write_text(s,"utf-8")
 p=r.parent/"build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp"
 s=p.read_text("utf-8")
 s=one(s,"    dsrrl::runtime::qpc_bisect::report();","    // v2.3.0: no QPC unload profiler report.","qpc report")
+# AddonInit's old diagnostic snprintf remains reachable even when its logger
+# is removed, so cut the formatting itself; retain QPC scope RAII callsites.
+start=s.find("    char qpc_mode_line[200]{};")
+assert start>=0 and s.find("    char qpc_mode_line[200]{};",start+1)<0
+end=s.find("    reshade::log::message(reshade::log::level::info,qpc_mode_line);",start)
+assert end>start
+end+=len("    reshade::log::message(reshade::log::level::info,qpc_mode_line);")
+s=s[:start]+"    // v2.3.0: QPC mode banner removed, scope shape retained."+s[end:]
+
 # Neither diagnostic dump computes operator authority: keep all real state
 # counters, D3D11 lifetime/restore code, all material and shader routing.
 for name in ("log_state","log_effect_matrix","observe_pointlight_render_target"):
