@@ -1,0 +1,84 @@
+param([Parameter(Mandatory=$true)][string]$ReShadeInclude)
+$ErrorActionPreference='Stop'
+$source=Join-Path $PSScriptRoot 'build_v350_gpu_resident_pointlight_off_rc2.ps1'
+$script:base=[IO.File]::ReadAllText($source)
+function Once($old,$new) {
+ if (-not $script:base.Contains($old)) { throw "V353 drift: $old" }
+ $script:base=$script:base.Replace($old,$new)
+}
+Once 'v350_rc2_gpu_resident_pointlight_off' 'v362_stock_clustered_census'
+Once 'build-v350-gpu-resident-pointlight-off-rc2' 'build-v362-stock-pnts'
+Once 'out-v350-gpu-resident-pointlight-off-rc2' 'out-v362-stock-pnts'
+Once 'DSRRL_V350_GPU_RESIDENT_POINTLIGHT_OFF_RC2.addon64' 'DSRRL_V362_STOCK_PNTS_CENSUS.addon64'
+Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V296_ROOTCAUSE_TELEMETRY /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V352_LONG_SOAK_PRESENT /DDSRRL_V353_CPU_MODULE_PROFILER /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS /DDSRRL_V360_FIXED_EQUIP_TEST /DDSRRL_V361_FIXED_BIND_CENSUS /DDSRRL_V362_STOCK_CLUSTERED_BIND_CENSUS'
+Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=ON'
+Once "'-DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=ON'," "'-DDSRRL_PHYSICAL_CUT_POINTLIGHT_ALL=OFF',`n    '-DDSRRL_V360_FIXED_EQUIP_TEST=ON',`n    '-DDSRRL_V361_FIXED_BIND_CENSUS=ON',`n    '-DDSRRL_V362_STOCK_CLUSTERED_BIND_CENSUS=ON',"
+Once "'-DDSRRL_POINTLIGHT_DRAWTIME_BYPASS=ON'" "'-DDSRRL_POINTLIGHT_DRAWTIME_BYPASS=OFF'"
+Once 'python renderer-core/tools/test_v304_typed_donor_contract.py' @'
+python renderer-core/tools/test_v304_typed_donor_contract.py
+if ($LASTEXITCODE -ne 0) { throw 'V304 contract failed' }
+python renderer-core/tools/materialize_v351_typed_lightbank_modified_renderer.py
+if ($LASTEXITCODE -ne 0) { throw 'V351 patch failed' }
+python renderer-core/tools/materialize_v352_long_soak_telemetry.py
+if ($LASTEXITCODE -ne 0) { throw 'V352 patch failed' }
+python renderer-core/tools/materialize_v353_sampled_module_profiler.py
+if ($LASTEXITCODE -ne 0) { throw 'V353 patch failed' }
+python renderer-core/tools/test_v351_modified_renderer_source.py
+if ($LASTEXITCODE -ne 0) { throw 'V351 contract failed' }
+python renderer-core/tools/test_v352_long_soak_source.py
+if ($LASTEXITCODE -ne 0) { throw 'V352 contract failed' }
+python renderer-core/tools/test_v353_sampled_module_profiler.py
+if ($LASTEXITCODE -ne 0) { throw 'V353 profiler contract failed' }
+python renderer-core/tools/materialize_v354_exact_resource_resnapshot.py
+if ($LASTEXITCODE -ne 0) { throw 'V354 exact resource patch failed' }
+python renderer-core/tools/test_v354_exact_resource_resnapshot.py
+if ($LASTEXITCODE -ne 0) { throw 'V354 test failed' }
+python renderer-core/tools/materialize_v356_exact_backing_spec_rgb.py
+if ($LASTEXITCODE -ne 0) { throw 'V356 source patch failed' }
+python renderer-core/tools/materialize_v356_exact_probe_backing.py
+if ($LASTEXITCODE -ne 0) { throw 'V356 probe patch failed' }
+python renderer-core/tools/test_v356_exact_backing_spec_rgb.py
+if ($LASTEXITCODE -ne 0) { throw 'V356 test failed' }
+python renderer-core/tools/materialize_v357_exact_resource_source_census.py
+if ($LASTEXITCODE -ne 0) { throw 'V357 negative source census materializer failed' }
+python renderer-core/tools/test_v357_exact_resource_source_census.py
+if ($LASTEXITCODE -ne 0) { throw 'V357 negative source census contract failed' }
+python renderer-core/tools/materialize_v358_exact_lifetime_probe_origin.py
+if ($LASTEXITCODE -ne 0) { throw 'V358 source materializer failed' }
+python renderer-core/tools/test_v358_exact_lifetime_probe_origin.py
+if ($LASTEXITCODE -ne 0) { throw 'V358 source contract failed' }
+python renderer-core/tools/materialize_v359_attested_gi_name_alias.py
+if ($LASTEXITCODE -ne 0) { throw 'V359 materializer failed' }
+python renderer-core/tools/materialize_v359_view_scope_identity.py
+if ($LASTEXITCODE -ne 0) { throw 'V359 exact view source recovery failed' }
+python renderer-core/tools/test_v359_attested_gi_name_alias.py
+if ($LASTEXITCODE -ne 0) { throw 'V359 test failed' }
+'@
+Once '$argsList = @(' @'
+python renderer-core/tools/materialize_v360_fixed_equipment_pointlight.py
+if ($LASTEXITCODE -ne 0) { throw 'V360 fixed-only materializer failed' }
+python renderer-core/tools/test_v360_fixed_equipment_pointlight.py
+if ($LASTEXITCODE -ne 0) { throw 'V360 fixed-only source contract failed' }
+python renderer-core/tools/materialize_v361_fixed_bind_census.py
+if ($LASTEXITCODE -ne 0) { throw 'V361 bind census materializer failed' }
+python renderer-core/tools/test_v361_fixed_bind_census.py
+if ($LASTEXITCODE -ne 0) { throw 'V361 bind census source contract failed' }
+python renderer-core/tools/materialize_v362_stock_clustered_census.py
+if ($LASTEXITCODE -ne 0) { throw 'V362 stock PntS census materializer failed' }
+python renderer-core/tools/test_v362_stock_clustered_census.py
+if ($LASTEXITCODE -ne 0) { throw 'V362 stock PntS census contract failed' }
+$argsList = @(
+'@
+$temp=Join-Path $PSScriptRoot '_v353_generated_build.ps1'
+try {
+ [IO.File]::WriteAllText($temp,$script:base,[Text.UTF8Encoding]::new($false))
+ & $temp -ReShadeInclude $ReShadeInclude
+ if ($LASTEXITCODE -ne 0) { throw 'V353 build failed' }
+ $file='out-v362-stock-pnts/DSRRL_V362_STOCK_PNTS_CENSUS.addon64'
+ $raw=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $file)))
+ foreach($m in @('[DSRRL V356 EXACT BACKING]','[DSRRL V356 PROBE BACKING]','[DSRRL V357 RESOURCE SOURCE]','[DSRRL V357 BC6H PRODUCER]','[DSRRL V358 PROBE ORIGIN]','[DSRRL V359 GI NAME RECOVERED]','[DSRRL V354 RESOURCE RESNAPSHOT]','[DSRRL V354 SPEC REJECT]','[DSRRL V354 PROBE REJECT]','[DSRRL V353 CPU_STAGE]','[DSRRL V352 PERF]','[DSRRL V351 DSR_ONLY_OPERATOR]','v362_stock_clustered_census','[DSRRL V360 FIXED EQUIPMENT]','[DSRRL V361 FIXED BIND]','[DSRRL V362 STOCK PNTS]')) {
+   if (-not $raw.Contains($m)) { throw "Missing binary marker: $m" }
+ }
+ Write-Host 'V362 READONLY STOCK PNTS CENSUS ONE-ADDON BUILD PASS; ACTIVATION/PIXEL OPEN'
+ Get-FileHash $file -Algorithm SHA256 | Format-List
+} finally { Remove-Item $temp -Force -ErrorAction SilentlyContinue }
