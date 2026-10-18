@@ -16,6 +16,9 @@ for token in ("/DDSRRL_V352_LONG_SOAK_PRESENT",
 assert "Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF'" in builder
 assert "build_v350_gpu_resident_pointlight_off_rc2.ps1" in builder
 assert "DSRRL_Restored_Lighting_v2.3.0.addon64" in builder
+for flag in ('DSRRL_V298_LIVE_MTD_WITNESS','DSRRL_V314_UNROUTED_LIT_MUL_CENSUS','DSRRL_V315_DIRECT_749_RUNTIME_LEDGER'):
+    assert "Once ' /"+flag+"' ''" in builder
+
 assert "DSRRL_V350_PTDE_LERP_RGB_COMPONENT_SWIZZLE" in (root/"tools/build_v350_gpu_resident_pointlight_off_rc2.ps1").read_text("utf8")
 qpc=(root/"include/dsrrl/runtime/qpc_causality_bisect.hpp").read_text("utf8")
 assert "DSRRL_QPC_SCOPE_SHELL_NO_CLOCK" in qpc
