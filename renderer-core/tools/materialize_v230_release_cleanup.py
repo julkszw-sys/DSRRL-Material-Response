@@ -60,7 +60,7 @@ s=one(s,"    dsrrl::runtime::qpc_bisect::report();","    // v2.3.0: no QPC unloa
 # Neither diagnostic dump computes operator authority: keep all real state
 # counters, D3D11 lifetime/restore code, all material and shader routing.
 for name in ("log_state","log_effect_matrix","observe_pointlight_render_target"):
-    marker="void "+name+"("
+    marker=("void log_state(const char *tag) noexcept" if name=="log_state" else "void "+name+"(")
     if s.count(marker)!=1:raise RuntimeError("Ambiguous diagnostic "+name)
     begin=s.index(marker); op=s.index("{",begin)
     depth=0
