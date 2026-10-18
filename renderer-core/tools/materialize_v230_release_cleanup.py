@@ -71,7 +71,7 @@ for name in ("log_state","log_effect_matrix","observe_pointlight_render_target")
             if depth==0:break
     else:raise RuntimeError("Unbalanced diagnostic "+name)
     # Preserve API and its arguments; an empty function still compiles.
-    s=s[:op+1]+"\n    // Release: diagnostic observer disabled; no operator mutation.\n"+s[i:]
+    s=s[:op+1]+"\n    (void)"+("cmd_list" if name=="observe_pointlight_render_target" else "tag")+";\n    // Release: diagnostic observer disabled; no operator mutation.\n"+s[i:]
 p.write_text(s,"utf-8")
 
 def suppress_info_logs(s):
