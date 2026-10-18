@@ -106,7 +106,7 @@ stats={}
 for p in [r.parent/"build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp",*sorted((r/"src").rglob("*.cpp"))]:
     old=p.read_text("utf-8")
     new,count=suppress_info_logs(old)
-    if count:p.write_text(new,"utf-8");stats[str(p.relative_to(r))]=count
+    if count:p.write_text(new,"utf-8");stats[str(p.relative_to(r) if p.is_relative_to(r) else p.relative_to(r.parent))]=count
 if sum(stats.values())<25:raise RuntimeError("Unexpectedly few telemetry sites")
 print("V230_RELEASE_INFO_OBSERVERS_CUT",sum(stats.values()))
 print("V230_RELEASE_QPC_SCOPE_SHELL_AND_PERFORMANCE_PATH_PRESERVED")
