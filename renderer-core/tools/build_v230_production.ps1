@@ -12,6 +12,14 @@ Once 'out-v350-gpu-resident-pointlight-off-rc2' 'out-v230-release'
 Once 'DSRRL_V350_GPU_RESIDENT_POINTLIGHT_OFF_RC2.addon64' 'DSRRL_Restored_Lighting_v2.3.0.addon64'
 Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V230_PRODUCTION /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS'
 Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF'
+Once '$argsList = @(' @'
+python renderer-core/tools/materialize_v230_release_cleanup.py
+if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 cleanup failed' }
+python renderer-core/tools/test_v230_release_contract.py
+if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 release contract failed' }
+$argsList = @(
+'@
+
 Once 'python renderer-core/tools/test_v304_typed_donor_contract.py' @'
 python renderer-core/tools/test_v304_typed_donor_contract.py
 if ($LASTEXITCODE -ne 0) { throw 'V304 contract failed' }
@@ -51,10 +59,7 @@ python renderer-core/tools/materialize_v359_view_scope_identity.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 exact view source recovery failed' }
 python renderer-core/tools/test_v359_attested_gi_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 test failed' }
-python renderer-core/tools/materialize_v230_release_cleanup.py
-if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 cleanup failed' }
-python renderer-core/tools/test_v230_release_contract.py
-if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 release contract failed' }
+
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'
 try {
