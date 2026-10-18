@@ -26,6 +26,8 @@ python renderer-core/tools/materialize_v230_release_cleanup_stage3.py
 if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 diagnostic formatting cleanup failed' }
 python renderer-core/tools/materialize_v230_release_cleanup_stage4.py
 if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 EnvSpec observer cleanup failed' }
+python renderer-core/tools/materialize_v230_release_cleanup_stage5.py
+if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 negative-probe census cleanup failed' }
 python renderer-core/tools/test_v230_release_contract.py
 if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 release contract failed' }
 $env:DSRRL_V230_LOG_FREE_AUDIT='1'
