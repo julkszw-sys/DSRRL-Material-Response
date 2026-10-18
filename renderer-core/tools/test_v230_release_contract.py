@@ -32,6 +32,8 @@ for term in ("g_session_residency","g_sidecar_shared","on_init_device","QueryVid
     assert term in gpu, f"V350 GPU residency optimization missing: {term}"
 source=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text("utf8")
 assert "latest_hook_source" in source, "Protected producer fallback absent"
+assert "g_hook_producer_readonly_hit_enabled" not in source, "Rejected PR444 read-only exact-hit path must NOT be shipped"
+assert "load_hook_readonly_hit_mode" not in source, "Rejected PR444 configuration must NOT be shipped"
 env=(root/"src/runtime/envspec_resource_runtime.cpp").read_text("utf8")
 assert "v359_verified_native_name_probe_locked" in env
 assert "g_v359_map_conflict" in env
