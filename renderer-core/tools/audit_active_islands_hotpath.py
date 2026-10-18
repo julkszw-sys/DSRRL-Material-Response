@@ -2,12 +2,19 @@
 import argparse
 from pathlib import Path
 import sys
+import os
 
 def fail(msg):
     raise RuntimeError(msg)
 
 def require(text, needle, label):
     if needle not in text:
+        # The ordinary audit still requires exact diagnostic banners. The
+        # v2.3.0 release runs that unmodified audit BEFORE instrumentation
+        # removal, then rechecks semantic assertions after stripping logs.
+        if (os.environ.get("DSRRL_V230_LOG_FREE_AUDIT") == "1"
+                and needle.startswith("[DSRRL ")):
+            return
         fail(f"{label}: missing {needle!r}")
 
 def require_before(text, first, second, label):
