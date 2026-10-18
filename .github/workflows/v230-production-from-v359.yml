@@ -13,7 +13,7 @@ jobs:
       - name: Static source and optimizer contract
         shell: bash
         run: |
-          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/materialize_v230_release_cleanup_stage2.py renderer-core/tools/materialize_v230_release_cleanup_stage3.py renderer-core/tools/materialize_v230_release_cleanup_stage4.py renderer-core/tools/test_v230_release_contract.py
           python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
           python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
           python3 renderer-core/tools/test_v351_fallback_census.py --output v230_fallback_census.json
@@ -45,7 +45,7 @@ jobs:
           foreach($marker in @('2.3.0','v230_production')) {
             if (!$raw.Contains($marker)) { throw "Missing identity $marker" }
           }
-          foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]')) {
+          foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]','[DSRRL V298 MTD]','[DSRRL V314 UNKNOWN PS RECEIVER]','[DSRRL V315 749 SIDECAR SUMMARY]','[DSRRL ENVSPEC APPLY]','[DSRRL ENVSPEC SOURCE]','[DSRRL EFFECT ACT]','[DSRRL POINTLIGHT GATE]','[DSRRL POINTLIGHT PREP]','[DSRRL SPECRGB CARRIER]','[DSRRL V357 RESOURCE SOURCE]','[DSRRL V357 BC6H PRODUCER]','[DSRRL V358 PROBE ORIGIN]','[DSRRL PMETAL R19 LERP]','[DSRRL PMETAL ENVSPEC RESOURCE]')) {
             if ($raw.Contains($marker)) { throw "Diagnostic telemetry survived: $marker" }
           }
           Get-FileHash $path -Algorithm SHA256 | Format-List
