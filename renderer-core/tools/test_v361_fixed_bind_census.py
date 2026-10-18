@@ -61,6 +61,6 @@ for marker in (
     "DSRRL_V361_FIXED_BIND_CENSUS.addon64",
 ): check(marker in build,"build lineage incomplete: "+marker)
 check("update material" not in v361.lower(),"must not widen sidecars")
-check("const bool k_clustered_pointlight_runtime_enabled = false;" in v360,
+check("constexpr bool k_clustered_pointlight_runtime_enabled = false;" in v360,
       "keep V360 policy")
 print("V361_EXACT_FIXED_INIT_BIND_ROUTE_IDENTITY_SOURCE_PASS; runtime_pixel_OPEN")
