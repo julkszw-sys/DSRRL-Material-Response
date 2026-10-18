@@ -13,7 +13,7 @@ def one(s,old,new,key):
 
 p=r/"include/dsrrl/runtime/runtime_hot_telemetry.hpp"
 s=p.read_text("utf-8")
-for name in ("hot_enabled","effect_enabled","native_state_verification_enabled"):
+for name in ("hot_enabled","effect_enabled"):
     anchor=f"inline bool {name}() noexcept\n{{"
     s=one(s,anchor,anchor+"\n#if defined(DSRRL_V230_PRODUCTION)\n    return false;\n#else",name)
     # Existing function body is still parsed but unreachable in production.
