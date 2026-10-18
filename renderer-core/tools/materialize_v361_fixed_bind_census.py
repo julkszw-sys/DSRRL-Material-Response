@@ -211,7 +211,7 @@ inject=r"""#if defined(DSRRL_V361_FIXED_BIND_CENSUS)
                 subobject_count,subobjects);
             if (ps!=nullptr && ps->code!=nullptr &&
                 ps->code_size!=0u) {
-                const auto sha=hashing::sha256(
+                const auto sha=dsrrl::operators::legacy_plan::hashing::sha256(
                     static_cast<const std::uint8_t *>(ps->code),
                     ps->code_size);
                 char line[320]{};
