@@ -22,7 +22,9 @@ assert "DSRRL_QPC_SCOPE_SHELL_NO_CLOCK" in qpc
 assert "class scope" in qpc and "mode_(g_mode.load(" in qpc
 assert "g_mode.store(0u, std::memory_order_release);" in qpc
 telemetry=(root/"include/dsrrl/runtime/runtime_hot_telemetry.hpp").read_text("utf8")
-assert telemetry.count("#if defined(DSRRL_V230_PRODUCTION)")>=3
+assert telemetry.count("#if defined(DSRRL_V230_PRODUCTION)")>=2
+assert "inline bool native_state_verification_enabled() noexcept" in telemetry
+assert "DSRRL_RUNTIME_VERIFY_STATE" in telemetry
 core=(root.parent/"build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp").read_text("utf8")
 for fn in ("void log_state(","void log_effect_matrix(","void observe_pointlight_render_target("):
     assert fn in core
