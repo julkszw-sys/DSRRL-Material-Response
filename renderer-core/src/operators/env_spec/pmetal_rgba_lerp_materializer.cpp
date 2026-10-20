@@ -1269,7 +1269,7 @@ bool final_postcondition(
 
     std::size_t envdiffuse_start =
         static_cast<std::size_t>(site.t11_word);
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     if (envdiffuse_start < k_ptde_envdiffuse_lerp_prefix_words)
         return false;
     envdiffuse_start -=
@@ -1929,7 +1929,7 @@ materialize_pmetal_rgba_lerp_receiver(
         words.begin() + static_cast<std::ptrdiff_t>(site->t11_word),
         0x0100003au);
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     // R19 owns the Lerp EnvDiffuse semantic cut. Six NOP dwords from the
     // already-isolated EnvSpec tail provide the exact space needed for the
     // second post-filter RGB/A decode without moving any downstream offset.
@@ -2124,7 +2124,7 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     outcome.envdiffuse_preserved = false;
 #else
     outcome.envdiffuse_preserved = true;
@@ -2418,7 +2418,7 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     // 129 belongs only to the original non-ported EnvDiffuse topology.
     // These exact guards still require unique t12/t14/t11 samples,
     // sufficient NOP room and byte-for-byte PTDE EnvSpec A/B identity.
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     constexpr std::size_t v344_expected_t11_delta =
         129u - k_ptde_envdiffuse_lerp_prefix_words;
 #else
