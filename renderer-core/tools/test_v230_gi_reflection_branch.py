@@ -9,6 +9,9 @@ for needle in ('0x2017F4u','0x12E9D40u','0x0CF290u','0x44,0x89,0x7C,0x24,0x20,0x
 for needle in ('dsrrl_gi_reflection_branch_entry PROC','mov ecx, r9d','mov edx, r15d','call dsrrl_gi_reflection_branch_observer','mov dword ptr [rsp+20h], r15d','call qword ptr [g_dsrrl_gi_reflection_format_call]'):
     assert needle in asm,needle
 assert src.count('reshade::log::level::warning') == 2, 'V230 release strips INFO only; preserve warnings' 
+assert 'mov r8, r12' in asm
+assert 'mapstem=%.39s stem_exact=%u' in src
+assert 'readable_range(mapstem+i,sizeof(wchar_t))' in src
 assert 'DSRRL_V230_GI_REFLECTION_SOURCE_BRANCH' in build
 assert 'test_v230_gi_reflection_branch.py' in wf
 print('V230_GI_REFLECTION_EXACT_SOURCE_BRANCH_CONTRACT_PASS no_alias=1')
