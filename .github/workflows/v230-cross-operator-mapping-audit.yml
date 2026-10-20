@@ -1,0 +1,19 @@
+name: V230 cross-operator mapping source audit
+on:
+  push:
+    branches: [agent/operator-mapping-integrity-audit-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cross-operator-routing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit rejected material slots, cubemap ordinal, SpecRGB, EnvDiffuse, LightBank, HemEnvLerp and PointLight
+        run: python3 renderer-core/tools/audit_v230_cross_operator_mapping.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V230-operator-mapping-audit
+          path: operator_mapping_audit_v230.json
+          if-no-files-found: error
