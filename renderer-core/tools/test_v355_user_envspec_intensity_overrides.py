@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "USER_TEST_OVERRIDE" in experiment.read_text("utf-8")
     lines=[s for s in experiment.read_text("utf-8").splitlines() if s and not s.startswith("#")]
     assert len(lines)==4,lines
-    assert lines[1].split("\\t")[5:7]==["100","170"],lines[1]
+    assert lines[1].split("\t")[5:7]==["100","170"],lines[1]
     unchanged=1246-len(changed)
     print(f"V230_CEASELESS_ENVSPEC_DONOR_PASS changed=3 unchanged={unchanged}"
           " a14_m14_row6=170 a14_m14_row12=130 a17_m17_row18=130"
