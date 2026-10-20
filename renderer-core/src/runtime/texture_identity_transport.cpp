@@ -490,7 +490,7 @@ extern "C" void dsrrl_gi_reflection_branch_observer(
         packed_subarea,local_id,
         packed_subarea*10000u+local_id,
         static_cast<unsigned long long>(count));
-    reshade::log::message(reshade::log::level::info,line);
+    reshade::log::message(reshade::log::level::warning,line);
 }
 
 extern "C" void
@@ -570,7 +570,7 @@ bool install() noexcept
             g_base+k_gi_reflection_formatter_rva);
         g_status.gi_reflection_branch_armed=arm(g_gi_reflection);
     }
-    reshade::log::message(reshade::log::level::info,
+    reshade::log::message(reshade::log::level::warning,
       g_status.gi_reflection_branch_armed
         ? "[DSRRL V230 GI REFLECTION SOURCE HOOK] status=ARMED exact_exe=1 branch_rva=0x2017f4 selector=5 purpose=DIAG_ONLY"
         : "[DSRRL V230 GI REFLECTION SOURCE HOOK] status=FAIL_OPEN branch_byte_or_patch_mismatch");
