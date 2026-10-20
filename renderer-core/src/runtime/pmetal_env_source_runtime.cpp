@@ -1857,10 +1857,6 @@ bool same_hook_source_payload(
     return
         a.a == b.a &&
         a.b == b.b &&
-        a.envdiffuse_a == b.envdiffuse_a &&
-        a.envdiffuse_b == b.envdiffuse_b &&
-        a.envdiffuse_linear_valid ==
-            b.envdiffuse_linear_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -1881,7 +1877,8 @@ void publish_hook_source(
     void *source_a,
     std::int16_t selector_a,
     void *source_b,
-    std::int16_t selector_b) noexcept
+    std::int16_t selector_b,
+    bool envdiffuse_valid) noexcept
 {
     if (!std::isfinite(beta))
         return;
@@ -1899,7 +1896,7 @@ void publish_hook_source(
         envdiffuse_b.y,
         envdiffuse_b.z
     };
-    next.envdiffuse_linear_valid = true;
+    next.envdiffuse_linear_valid = envdiffuse_valid;
     next.beta =
         std::clamp(
             beta,
@@ -2194,7 +2191,7 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    if (donor_ok)
         publish_hook_source(
             donor,
             donor,
@@ -2210,7 +2207,8 @@ void __fastcall envspec_single_hook_entry(
                 selector),
             source,
             static_cast<std::int16_t>(
-                selector));
+                selector),
+            envdiffuse_ok);
 }
 
 void __fastcall envspec_blend_hook_entry(
@@ -2298,7 +2296,7 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    if (donor_ok)
         publish_hook_source(
             a,
             b,
@@ -2312,7 +2310,8 @@ void __fastcall envspec_blend_hook_entry(
             source_a,
             endpoints.a,
             source_b,
-            endpoints.b);
+            endpoints.b,
+            envdiffuse_ok);
 }
 
 bool install_envspec_source_hooks(
@@ -2848,29 +2847,28 @@ void pmetal_env_source_selector_event(
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-    if (!exact_envdiffuse_endpoint(
+    const bool envdiffuse_valid =
+        exact_envdiffuse_endpoint(
             next.bank_signature_a,
             next.row_id_a,
-            envdiffuse_a) ||
-        !exact_envdiffuse_endpoint(
+            envdiffuse_a) &&
+        exact_envdiffuse_endpoint(
             next.bank_signature_b,
             next.row_id_b,
-            envdiffuse_b)) {
-        telemetry::hot_count(
-            g_decode_fail);
-        return;
+            envdiffuse_b);
+    if (envdiffuse_valid) {
+        next.envdiffuse_a = {
+            envdiffuse_a.x,
+            envdiffuse_a.y,
+            envdiffuse_a.z
+        };
+        next.envdiffuse_b = {
+            envdiffuse_b.x,
+            envdiffuse_b.y,
+            envdiffuse_b.z
+        };
+        next.envdiffuse_linear_valid = true;
     }
-    next.envdiffuse_a = {
-        envdiffuse_a.x,
-        envdiffuse_a.y,
-        envdiffuse_a.z
-    };
-    next.envdiffuse_b = {
-        envdiffuse_b.x,
-        envdiffuse_b.y,
-        envdiffuse_b.z
-    };
-    next.envdiffuse_linear_valid = true;
 #endif
 
     next.serial = epoch;
