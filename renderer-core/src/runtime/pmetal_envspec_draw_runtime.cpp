@@ -1166,32 +1166,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
-    const bool exact_envdiffuse_source_required =
-        family ==
-            pmetal_envspec_receiver_family::
-                stable_hemenv
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        || family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp
-#endif
-        ;
-
-    if (!preserve_stock_envdiffuse &&
-        exact_envdiffuse_source_required &&
-        !source.envdiffuse_linear_valid) {
-        telemetry::hot_count(source_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_source);
-        log_prepare_stage_once(
-            1u << 12u,
-            "envdiffuse_linear_source_reject",
-            material,
-            decision,
-            family);
-        return false;
-    }
+    // EnvDiffuse validity is not an EnvSpec activation prerequisite. The exact
+    // P_Metal stock variant preserves native DSR t11/t13 consumer state; its
+    // source carrier is intentionally independent of the EnvDiffuse endpoint.
     effect_latch(effect_receiver_source_ready_);
 
     auto *context =
