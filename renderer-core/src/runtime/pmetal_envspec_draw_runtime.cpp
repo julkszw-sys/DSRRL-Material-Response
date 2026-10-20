@@ -662,24 +662,37 @@ register_lerp_replacement(
         return false;
     }
 
+    auto &replacement_map =
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_lerp_replacements_
+            : lerp_replacements_;
+    auto &sha_map =
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_lerp_replacement_sha256_
+            : lerp_replacement_sha256_;
+    auto &size_map =
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_lerp_replacement_size_
+            : lerp_replacement_size_;
+
     const auto existing =
-        lerp_replacements_.find(
+        replacement_map.find(
             outcome.semantic_receiver_id);
 
     if (existing !=
-            lerp_replacements_.end() &&
+            replacement_map.end() &&
         existing->second != nullptr) {
         const auto sha_it =
-            lerp_replacement_sha256_.find(
+            sha_map.find(
                 outcome.semantic_receiver_id);
         const auto size_it =
-            lerp_replacement_size_.find(
+            size_map.find(
                 outcome.semantic_receiver_id);
         const bool same_payload =
             sha_it !=
-                lerp_replacement_sha256_.end() &&
+                sha_map.end() &&
             size_it !=
-                lerp_replacement_size_.end() &&
+                size_map.end() &&
             sha_it->second ==
                 payload_sha256 &&
             size_it->second ==
@@ -709,13 +722,13 @@ register_lerp_replacement(
         return false;
     }
 
-    lerp_replacements_[
+    replacement_map[
         outcome.semantic_receiver_id] =
         shader;
-    lerp_replacement_sha256_[
+    sha_map[
         outcome.semantic_receiver_id] =
         payload_sha256;
-    lerp_replacement_size_[
+    size_map[
         outcome.semantic_receiver_id] =
         dxbc_size;
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
