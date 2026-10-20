@@ -7,6 +7,7 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/v230_failopen_diagnostic.hpp"
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
@@ -2755,6 +2756,8 @@ bool observe_draw_identity(
     }
 
     if (!owner_ok) {
+        if (rx != nullptr)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_owner_reject,receiver_id,hemenvlerp_bound?1u:0u,0u,out_material.flver_identity_hash,out_material.material_slot);
         hot_count(g_draw_receiver_only);
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
@@ -2803,6 +2806,8 @@ bool observe_draw_identity(
     }
 
     if (!g_mr_ready.load()) {
+        if (rx != nullptr)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::mr_registry_missing,receiver_id,hemenvlerp_bound?1u:0u,0u,out_material.flver_identity_hash,out_material.material_slot);
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
@@ -2908,6 +2913,8 @@ bool observe_draw_identity(
                 mr_identity_line);
         }
     } else {
+        if (rx != nullptr)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::mr_decision_inactive,receiver_id,hemenvlerp_bound?1u:0u,out_decision.route_index,out_material.flver_identity_hash,out_material.material_slot,static_cast<std::uint32_t>(out_decision.reason));
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
@@ -4625,6 +4632,7 @@ bool on_create_pipeline(
                             envspec_payload.data(),
                             envspec_payload.size());
                 if (registered) {
+                    dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::create_stable_ok,envspec.receiver_id);
                     ++g_envspec_payload_materialize_ok;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
                     if (!g_pmetal_full_ptde_create_ok_logged.exchange(
@@ -4644,6 +4652,7 @@ bool on_create_pipeline(
                     }
 #endif
                 } else {
+                    dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::create_stable_register_reject,envspec.receiver_id);
                     ++g_envspec_payload_materialize_fail;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
                     if (!g_pmetal_full_ptde_create_fail_logged.exchange(
@@ -4659,6 +4668,7 @@ bool on_create_pipeline(
                     envspec_result::pass_not_candidate &&
                 envspec.result !=
                     envspec_result::pass_unknown_exact_sha) {
+                dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::create_stable_materialize_reject,envspec.receiver_id,0u,0u,0u,0u,static_cast<std::uint32_t>(envspec.result));
                 ++g_envspec_payload_materialize_fail;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
                 if (!g_pmetal_full_ptde_create_fail_logged.exchange(
@@ -4701,6 +4711,7 @@ bool on_create_pipeline(
                         envspec_lerp,
                         envspec_lerp_payload.data(),
                         envspec_lerp_payload.size());
+                dsrrl::runtime::v230_failopen_diag::hit(r19_registered ? dsrrl::runtime::v230_failopen_diag::stage::create_lerp_ok : dsrrl::runtime::v230_failopen_diag::stage::create_lerp_register_reject,envspec_lerp.semantic_receiver_id,1u);
                 if (r19_registered)
                     ++g_envspec_payload_materialize_ok;
                 else
@@ -6721,6 +6732,8 @@ bool on_draw(
                 decision);
 
     if (!draw_identity_ready) {
+        if (route_candidates != 0u)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_identity_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,route_candidates);
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
@@ -6824,6 +6837,7 @@ bool on_draw(
             material,
             decision,
             prepared)) {
+        dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_batch_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,effect_candidates);
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7257,6 +7271,8 @@ bool on_draw_indexed(
                 decision);
 
     if (!draw_identity_ready) {
+        if (route_candidates != 0u)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_identity_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,route_candidates);
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
@@ -7360,6 +7376,7 @@ bool on_draw_indexed(
             material,
             decision,
             prepared)) {
+        dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_batch_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,effect_candidates);
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7599,6 +7616,7 @@ void on_present(
             1u,
             std::memory_order_relaxed) + 1u;
     g_clustered_pnts.frame_event(present);
+    dsrrl::runtime::v230_failopen_diag::frame();
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
@@ -8227,6 +8245,7 @@ void AddonUninit(
     }
 
     unregister_events();
+    dsrrl::runtime::v230_failopen_diag::report("UNLOAD");
     dsrrl::runtime::qpc_bisect::report();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");

@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
+#include "dsrrl/runtime/v230_failopen_diagnostic.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -1446,6 +1447,7 @@ bool envspec_resource_runtime::prepare_bound(
     if (stock_a == nullptr ||
         (probe_b_required && stock_b == nullptr) ||
         slot >= k_ptde_slots) {
+        v230_failopen_diag::hit(v230_failopen_diag::stage::probe_null_srv,0u,probe_b_required?1u:0u,0u,0u,slot,(stock_a==nullptr?1u:0u)|(stock_b==nullptr?2u:0u)|(slot>=k_ptde_slots?4u:0u));
         telemetry::hot_count(g_prepare_fail);
         return false;
     }
@@ -1509,6 +1511,7 @@ bool envspec_resource_runtime::prepare_bound(
         a_native == nullptr ||
         b_native == nullptr ||
         sampler_native == nullptr) {
+        v230_failopen_diag::hit(v230_failopen_diag::stage::probe_snapshot_reject,0u,probe_b_required?1u:0u,0u,0u,slot,(needs_cube?1u:0u)|(!ready?2u:0u)|(a_native==nullptr?4u:0u)|(b_native==nullptr?8u:0u)|(sampler_native==nullptr?16u:0u));
         if (a_native != nullptr)
             a_native->Release();
         if (b_native != nullptr)

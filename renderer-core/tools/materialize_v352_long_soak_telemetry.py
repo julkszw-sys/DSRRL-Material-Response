@@ -32,10 +32,12 @@ once('''    g_present_count.store(0);
 #endif
     g_mr_draw_eval.store(0);''',"reset")
 once('''    g_clustered_pnts.frame_event(present);
+    dsrrl::runtime::v230_failopen_diag::frame();
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {''',
 '''    g_clustered_pnts.frame_event(present);
+    dsrrl::runtime::v230_failopen_diag::frame();
 #if defined(DSRRL_V352_LONG_SOAK_PRESENT)
     const bool telemetry_window = g_v352_soak.present();
 #else
