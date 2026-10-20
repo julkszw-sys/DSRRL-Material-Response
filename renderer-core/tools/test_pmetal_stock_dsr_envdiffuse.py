@@ -30,8 +30,9 @@ require("option(\n    DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE" in cmake,
         "missing opt-in CMake option")
 require("NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG" in cmake and
         "NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW" in cmake and
-        "NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE" in cmake,
-        "missing cumulative-lineage dependency guard")
+        "if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)" in cmake and
+        "must not enable the R19 PTDE EnvDiffuse consumer" in cmake,
+        "missing cumulative-lineage or operator-isolation guard")
 require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE" in cmake,
         "missing compile definition")
 
@@ -99,8 +100,9 @@ require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_P
         "header b12 cache width is not stock-mode aware")
 
 # The candidate is reproducible and remains a single integrated addon.
-require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=ON" in builder,
-        "builder does not enable stock DSR EnvDiffuse")
+require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=ON" in builder and
+        "-DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=OFF" in builder,
+        "builder does not enable stock EnvDiffuse and disable the PTDE EnvDiffuse consumer")
 require("DSRRL_V359_STOCK_DSR_ENVDIFFUSE.addon64" in builder and
         "DSRRL PMETAL STOCK DSR ENVDIFFUSE" in builder,
         "builder output identity/marker is missing")
