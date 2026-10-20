@@ -1,3 +1,4 @@
+#include "dsrrl/runtime/pmetal_stock_dsr_envdiffuse_variant.hpp"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -104,7 +105,7 @@ bool capture_linear_envdiffuse(
             host_out + 8,
             b);
 }
-#else
+#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
 constexpr char k_ptde_envdiffuse_donor_relative_path[] =
     "DSRRL\\EnvSpec\\PackedGI\\PMETAL_PTDE_ENVDIFFUSE_DONOR_V1.bin";
 constexpr std::uint64_t k_ptde_envdiffuse_donor_size = 15296ull;
@@ -1908,7 +1909,11 @@ void publish_hook_source(
         envdiffuse_b.y,
         envdiffuse_b.z
     };
+#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    next.envdiffuse_linear_valid = false;
+#else
     next.envdiffuse_linear_valid = true;
+#endif
     next.beta =
         std::clamp(
             beta,
@@ -2171,7 +2176,7 @@ void __fastcall envspec_single_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2179,6 +2184,10 @@ void __fastcall envspec_single_hook_entry(
             row,
             envdiffuse_a);
     envdiffuse_b = envdiffuse_a;
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // Stock-EnvDiffuse mode is independent of the host EnvDiffuse payload.
+    // Never let EnvDiffuse capture/validation suppress the EnvSpec source.
+    const bool envdiffuse_ok = true;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2270,7 +2279,7 @@ void __fastcall envspec_blend_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2281,6 +2290,10 @@ void __fastcall envspec_blend_hook_entry(
             bank_b,
             row_b,
             envdiffuse_b);
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // Stock-EnvDiffuse mode is independent of the host EnvDiffuse payload.
+    // Never let EnvDiffuse capture/validation suppress the EnvSpec source.
+    const bool envdiffuse_ok = true;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2421,7 +2434,7 @@ void pmetal_env_source_cache_invalidate() noexcept
 
 bool pmetal_env_source_runtime::install() noexcept
 {
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if (!load_exact_envdiffuse_donor()) {
         reshade::log::message(
             reshade::log::level::warning,
@@ -2836,7 +2849,7 @@ void pmetal_env_source_selector_event(
     next.beta =
         endpoints.beta;
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
     if (!exact_envdiffuse_endpoint(

@@ -1,3 +1,4 @@
+#include "dsrrl/runtime/pmetal_stock_dsr_envdiffuse_variant.hpp"
 #include "dsrrl/core/renderer_core.hpp"
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
@@ -279,7 +280,7 @@ std::atomic_bool g_lerp_once_batch_ready{false};
 std::atomic_bool g_lerp_once_draw_issued{false};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_ok{0};
 std::atomic<std::uint64_t> g_envspec_payload_materialize_fail{0};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
 std::atomic_bool g_pmetal_full_ptde_create_ok_logged{false};
 std::atomic_bool g_pmetal_full_ptde_create_fail_logged{false};
 #endif
@@ -4626,7 +4627,7 @@ bool on_create_pipeline(
                             envspec_payload.size());
                 if (registered) {
                     ++g_envspec_payload_materialize_ok;
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
                     if (!g_pmetal_full_ptde_create_ok_logged.exchange(
                             true,
                             std::memory_order_relaxed)) {
@@ -4645,7 +4646,7 @@ bool on_create_pipeline(
 #endif
                 } else {
                     ++g_envspec_payload_materialize_fail;
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
                     if (!g_pmetal_full_ptde_create_fail_logged.exchange(
                             true,
                             std::memory_order_relaxed))
@@ -4660,7 +4661,7 @@ bool on_create_pipeline(
                 envspec.result !=
                     envspec_result::pass_unknown_exact_sha) {
                 ++g_envspec_payload_materialize_fail;
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
                 if (!g_pmetal_full_ptde_create_fail_logged.exchange(
                         true,
                         std::memory_order_relaxed)) {
