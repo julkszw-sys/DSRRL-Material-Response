@@ -44,8 +44,8 @@ require("if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)\n    find_package(Python3 COMPONENT
         "set(V286_HEADER" in cmake and
         "target_include_directories(dsrrl_renderer_core_integrated PRIVATE\n    \"${CMAKE_CURRENT_BINARY_DIR}/generated\")" in cmake,
         "V315 shared whitelist generation/include path is still nested under V285")
-present_anchor_start = physical_cut_generator.index("` ` `    if (present == 1u ||".replace("` ",""))
-present_anchor_end = physical_cut_generator.index("` ` `", present_anchor_start + 3).replace("` ","")
+present_anchor_start = physical_cut_generator.index("'''    if (present == 1u ||")
+present_anchor_end = physical_cut_generator.index("'''", present_anchor_start + 3)
 present_anchor = physical_cut_generator[present_anchor_start:present_anchor_end]
 require("        (g_hot_telemetry_enabled &&\n         (present % 300u) == 0u)) {" in present_anchor and
         "            (g_hot_telemetry_enabled &&\n             (present % 300u) == 0u)) {" not in present_anchor,
