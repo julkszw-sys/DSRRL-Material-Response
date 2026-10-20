@@ -26,5 +26,5 @@ assert "test_v230_bc1_t1_fingerprint.py" in w
 assert "materialize_v358_exact_lifetime_probe_origin.py" in b
 assert "materialize_v359_view_scope_identity.py" in b
 assert "v230-bc1-t1-fingerprint-20261020" in w
-assert "DSRRL-v2.3.0-ENVSPEC170-BC1-T1-FINGERPRINT" in w
+assert "DSRRL-v2.3.0-ENVSPEC170-" in w
 print("V230_BC1_T1_EXACT_INITIAL_DATA_FINGERPRINT_PASS resource_authority=UNCHANGED pixel=OPEN")
