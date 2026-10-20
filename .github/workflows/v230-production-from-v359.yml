@@ -1,7 +1,7 @@
-name: V230 EnvSpec170 Fail-Open Diagnostics single addon
+name: V230 EnvSpec170 Parallel Fail-Open Rootcause single addon
 on:
   push:
-    branches: [release/v2.3.0-v359-prep, agent/v230-stock-dsr-envdiffuse-isolated-20261020, agent/v230-demon-ruins-upper-envspec-170-20261020, agent/v230-envspec170-failopen-diagnostics-20261020]
+    branches: [release/v2.3.0-v359-prep, agent/v230-stock-dsr-envdiffuse-isolated-20261020, agent/v230-demon-ruins-upper-envspec-170-20261020, agent/v230-envspec170-failopen-diagnostics-20261020, agent/v230-parallel-failopen-rootcause-20261020]
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,6 +16,7 @@ jobs:
           python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py renderer-core/tools/test_v230_stock_envdiffuse_contract.py
           python3 renderer-core/tools/test_v230_stock_envdiffuse_contract.py
           python3 renderer-core/tools/test_v355_user_envspec_intensity_overrides.py
+          python3 renderer-core/tools/test_v230_parallel_failopen_diagnostics.py
           python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
           python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
           python3 renderer-core/tools/test_v351_fallback_census.py --output v230_fallback_census.json
@@ -44,7 +45,7 @@ jobs:
           $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
           if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE output' }
           $raw=[Text.Encoding]::ASCII.GetString($bytes)
-          foreach($marker in @('2.3.0','v230_production','[DSRRL V230 STOCK DSR ENVDIFFUSE]')) {
+          foreach($marker in @('2.3.0','v230_production','[DSRRL V230 STOCK DSR ENVDIFFUSE]','[DSRRL PROBE ROOT]','[DSRRL SPECRGB ROOT]','[DSRRL DONOR ROUTE]','[DSRRL MR ROOT]'')) {
             if (!$raw.Contains($marker)) { throw "Missing identity $marker" }
           }
           foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]')) {
@@ -53,6 +54,6 @@ jobs:
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v2.3.0-ENVSPEC170-FAILOPEN-DIAGNOSTICS
+          name: DSRRL-v2.3.0-ENVSPEC170-PARALLEL-FAILOPEN-ROOTCAUSE
           path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
           if-no-files-found: error
