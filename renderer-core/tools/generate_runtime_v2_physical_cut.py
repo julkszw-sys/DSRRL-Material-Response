@@ -190,15 +190,15 @@ def main() -> None:
         text = replace_once(
             text,
             '''    if (present == 1u ||
-            (g_hot_telemetry_enabled &&
-             (present % 300u) == 0u)) {
+        (g_hot_telemetry_enabled &&
+         (present % 300u) == 0u)) {
     ''',
             '''    if (present == 1u ||
     #ifdef DSRRL_FLVER_SELECTOR_PROFILE
-            (present % 300u) == 0u ||
+        (present % 300u) == 0u ||
     #endif
-            (g_hot_telemetry_enabled &&
-             (present % 300u) == 0u)) {
+        (g_hot_telemetry_enabled &&
+         (present % 300u) == 0u)) {
     ''',
             "FLVER selector profile periodic present log")
 
