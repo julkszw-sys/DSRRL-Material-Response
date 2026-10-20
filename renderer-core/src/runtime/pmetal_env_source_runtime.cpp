@@ -2169,7 +2169,7 @@ void __fastcall envspec_single_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2177,6 +2177,9 @@ void __fastcall envspec_single_hook_entry(
             row,
             envdiffuse_a);
     envdiffuse_b = envdiffuse_a;
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // The stock consumer does not consume this optional carrier.
+    const bool envdiffuse_ok = false;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2185,11 +2188,7 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if (donor_ok)
-#else
-    if (donor_ok)
-#endif
         publish_hook_source(
             donor,
             donor,
@@ -2273,7 +2272,7 @@ void __fastcall envspec_blend_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2284,6 +2283,9 @@ void __fastcall envspec_blend_hook_entry(
             bank_b,
             row_b,
             envdiffuse_b);
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // The stock consumer does not consume this optional carrier.
+    const bool envdiffuse_ok = false;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2292,11 +2294,7 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if (donor_ok)
-#else
-    if (donor_ok)
-#endif
         publish_hook_source(
             a,
             b,
@@ -2850,7 +2848,7 @@ void pmetal_env_source_selector_event(
     next.beta =
         endpoints.beta;
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
     const bool envdiffuse_valid =
