@@ -1,0 +1,17 @@
+name: V230 BC1 T1 Source Asset Crossmatch
+on:
+  push:
+    branches:
+      - agent/v230-bc1-t1-exact-dsr-asset-crossmatch-20261020
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bc1-exact-matcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check BC1 source matcher syntax
+        run: python3 -m py_compile renderer-core/tools/match_v230_bc1_mip0_dsr_archive.py renderer-core/tools/test_v230_bc1_mip0_matcher.py
+      - name: Assert exact BND3/TPF/DDX source identity and rejection
+        run: python3 renderer-core/tools/test_v230_bc1_mip0_matcher.py
