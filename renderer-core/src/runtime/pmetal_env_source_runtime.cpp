@@ -1866,10 +1866,6 @@ bool same_hook_source_payload(
     return
         a.a == b.a &&
         a.b == b.b &&
-        a.envdiffuse_a == b.envdiffuse_a &&
-        a.envdiffuse_b == b.envdiffuse_b &&
-        a.envdiffuse_linear_valid ==
-            b.envdiffuse_linear_valid &&
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -2192,7 +2188,7 @@ void __fastcall envspec_single_hook_entry(
 #if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if (donor_ok)
 #else
-    if (donor_ok && envdiffuse_ok)
+    if (donor_ok)
 #endif
         publish_hook_source(
             donor,
@@ -2299,7 +2295,7 @@ void __fastcall envspec_blend_hook_entry(
 #if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if (donor_ok)
 #else
-    if (donor_ok && envdiffuse_ok)
+    if (donor_ok)
 #endif
         publish_hook_source(
             a,
@@ -2433,25 +2429,22 @@ void pmetal_env_source_cache_invalidate() noexcept
 
 bool pmetal_env_source_runtime::install() noexcept
 {
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    const bool envdiffuse_donor_ready =
-        load_exact_envdiffuse_donor();
-    if (!envdiffuse_donor_ready) {
-#if !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // EnvDiffuse donor data is consumed only by the independent PTDE
+    // EnvDiffuse operator. Its absence must not prevent EnvSpec hook install.
+    if (!load_exact_envdiffuse_donor()) {
         reshade::log::message(
             reshade::log::level::warning,
-            "DSRRL Full PTDE HemEnv: exact PTDE EnvDiffuse LightBank donor sidecar unavailable or invalid; source carrier fails open.");
-        return false;
-#else
-        reshade::log::message(
-            reshade::log::level::warning,
-            "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] PTDE EnvDiffuse donor unavailable; stock P_Metal variant remains eligible, EnvDiffuse-dependent aliases fail open.");
-#endif
+            "DSRRL PTDE EnvDiffuse donor unavailable; EnvSpec source observer remains independently installable.");
     } else {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse LightBank donor admitted for default variant.");
+            "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse LightBank donor admitted for the PTDE EnvDiffuse variant.");
     }
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] EnvDiffuse donor/load path disabled; EnvSpec source is independent.");
 #endif
     pmetal_env_source_cache_invalidate();
     clear_hook_source();
