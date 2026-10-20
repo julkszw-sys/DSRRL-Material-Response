@@ -801,7 +801,7 @@ bool pmetal_lerp_materialworkflow_postcondition(
 }
 #endif
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
 constexpr std::size_t k_ptde_envdiffuse_lerp_prefix_words = 6u;
 
 bool apply_exact_ptde_envdiffuse_lerp_consumer(
@@ -1132,14 +1132,16 @@ bool add_bridge_rdef(
     std::size_t code_index,
     const std::vector<std::uint32_t> &words,
     bool compose_upper_lower,
+    bool preserve_stock_envdiffuse,
     std::vector<std::uint8_t> &output) noexcept
 {
     auto *rdef = unique_rdef(chunks);
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    constexpr std::uint32_t k_material_carrier_bytes = 96u;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    const std::uint32_t k_material_carrier_bytes =
+        preserve_stock_envdiffuse ? 64u : 96u;
 #else
-    constexpr std::uint32_t k_material_carrier_bytes = 64u;
+    const std::uint32_t k_material_carrier_bytes = 64u;
 #endif
 
     if (rdef == nullptr ||
@@ -1207,7 +1209,8 @@ bool final_postcondition(
 #if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
     const pmetal_lerp_materialworkflow_assertions &materialworkflow_assertions,
 #endif
-    bool upper_lower_composed) noexcept
+    bool upper_lower_composed,
+    bool preserve_stock_envdiffuse) noexcept
 {
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
@@ -1231,15 +1234,15 @@ bool final_postcondition(
     const auto material_carrier_bytes =
         material_carrier_rdef_byte_size(
             rdef->payload);
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    if (!material_carrier_bytes.has_value() ||
-        *material_carrier_bytes != 96u)
-        return false;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    const std::uint32_t expected_material_carrier_bytes =
+        preserve_stock_envdiffuse ? 64u : 96u;
 #else
-    if (!material_carrier_bytes.has_value() ||
-        *material_carrier_bytes != 64u)
-        return false;
+    const std::uint32_t expected_material_carrier_bytes = 64u;
 #endif
+    if (!material_carrier_bytes.has_value() ||
+        *material_carrier_bytes != expected_material_carrier_bytes)
+        return false;
 
     const bool has_cb13 =
         legacy_plan::dxbc::rdef::has_constant_buffer_binding(
@@ -1269,11 +1272,13 @@ bool final_postcondition(
 
     std::size_t envdiffuse_start =
         static_cast<std::size_t>(site.t11_word);
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    if (envdiffuse_start < k_ptde_envdiffuse_lerp_prefix_words)
-        return false;
-    envdiffuse_start -=
-        k_ptde_envdiffuse_lerp_prefix_words;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (!preserve_stock_envdiffuse) {
+        if (envdiffuse_start < k_ptde_envdiffuse_lerp_prefix_words)
+            return false;
+        envdiffuse_start -=
+            k_ptde_envdiffuse_lerp_prefix_words;
+    }
 #endif
 
     if (envdiffuse_start <
@@ -1727,7 +1732,8 @@ materialize_pmetal_rgba_lerp_receiver(
     const core::feature_registry &features,
     const std::uint8_t *stock_source,
     std::size_t stock_size,
-    std::vector<std::uint8_t> &output) noexcept
+    std::vector<std::uint8_t> &output,
+    bool preserve_stock_envdiffuse) noexcept
 {
     pmetal_rgba_lerp_materialize_outcome outcome{};
     output.clear();
@@ -1929,33 +1935,35 @@ materialize_pmetal_rgba_lerp_receiver(
         words.begin() + static_cast<std::ptrdiff_t>(site->t11_word),
         0x0100003au);
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    // R19 owns the Lerp EnvDiffuse semantic cut. Six NOP dwords from the
-    // already-isolated EnvSpec tail provide the exact space needed for the
-    // second post-filter RGB/A decode without moving any downstream offset.
-    if (!apply_exact_ptde_envdiffuse_lerp_consumer(
-            words,
-            *site,
-            preserved_envdiffuse)) {
-        outcome.result =
-            pmetal_rgba_lerp_materialize_result::
-                fail_operator_precondition;
-        return outcome;
-    }
-#else
-    // The independent EnvDiffuse A/B+beta block and its common merge are
-    // outside the responsible EnvSpec cut and must remain byte-identical.
-    if (!std::equal(
-            preserved_envdiffuse.begin(),
-            preserved_envdiffuse.end(),
-            words.begin() + static_cast<std::ptrdiff_t>(
-                site->t11_word))) {
-        outcome.result =
-            pmetal_rgba_lerp_materialize_result::
-                fail_operator_precondition;
-        return outcome;
-    }
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (!preserve_stock_envdiffuse) {
+        // R19 owns the PTDE Lerp EnvDiffuse semantic cut only for the
+        // default variant. The stock variant keeps this A/B+beta block.
+        if (!apply_exact_ptde_envdiffuse_lerp_consumer(
+                words,
+                *site,
+                preserved_envdiffuse)) {
+            outcome.result =
+                pmetal_rgba_lerp_materialize_result::
+                    fail_operator_precondition;
+            return outcome;
+        }
+    } else
 #endif
+    {
+        // The independent EnvDiffuse A/B+beta block and its common merge are
+        // outside the stock variant's EnvSpec cut and remain byte-identical.
+        if (!std::equal(
+                preserved_envdiffuse.begin(),
+                preserved_envdiffuse.end(),
+                words.begin() + static_cast<std::ptrdiff_t>(
+                    site->t11_word))) {
+            outcome.result =
+                pmetal_rgba_lerp_materialize_result::
+                    fail_operator_precondition;
+            return outcome;
+        }
+    }
 
 #if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
     if (!apply_exact_ptde_lerp_materialworkflow_r15_r16_r17(
@@ -2017,11 +2025,11 @@ materialize_pmetal_rgba_lerp_receiver(
         return outcome;
     }
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    // b12[0..3] retain the existing stable/EnvSpec ABI. Lerp needs two
-    // additional PTDE EnvDiffuse endpoints, so extend only this exact
-    // receiver shader's declaration to b12[0..5].
-    words[14] = 6u;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    // Only the default R19 PTDE EnvDiffuse variant needs the two endpoint
+    // vectors. The stock variant retains the original 64-byte b12 ABI.
+    if (!preserve_stock_envdiffuse)
+        words[14] = 6u;
 #endif
 
     if (compose_upper_lower) {
@@ -2049,6 +2057,7 @@ materialize_pmetal_rgba_lerp_receiver(
             code_index,
             words,
             compose_upper_lower,
+            preserve_stock_envdiffuse,
             envspec_base)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::fail_b12_rdef;
@@ -2118,14 +2127,15 @@ materialize_pmetal_rgba_lerp_receiver(
 #if defined(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
             materialworkflow_assertions,
 #endif
-            compose_upper_lower)) {
+            compose_upper_lower,
+            preserve_stock_envdiffuse)) {
         outcome.result =
             pmetal_rgba_lerp_materialize_result::fail_postcondition;
         return outcome;
     }
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    outcome.envdiffuse_preserved = false;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    outcome.envdiffuse_preserved = preserve_stock_envdiffuse;
 #else
     outcome.envdiffuse_preserved = true;
 #endif
@@ -2418,9 +2428,11 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     // 129 belongs only to the original non-ported EnvDiffuse topology.
     // These exact guards still require unique t12/t14/t11 samples,
     // sufficient NOP room and byte-for-byte PTDE EnvSpec A/B identity.
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    constexpr std::size_t v344_expected_t11_delta =
-        129u - k_ptde_envdiffuse_lerp_prefix_words;
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    const std::size_t v344_expected_t11_delta =
+        preserve_stock_envdiffuse
+            ? 129u
+            : 129u - k_ptde_envdiffuse_lerp_prefix_words;
 #else
     constexpr std::size_t v344_expected_t11_delta = 129u;
 #endif
