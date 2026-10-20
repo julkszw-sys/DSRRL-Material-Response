@@ -103,16 +103,23 @@ require("struct b12_context_key" in runtime_header and
         "stock_envdiffuse_lerp_replacements_" in runtime_header,
         "variant maps or size-keyed b12 cache are missing")
 
-# Stock P_Metal can use the EnvSpec source without an EnvDiffuse row. The
-# candidate builder disables V285/V289/V293 so non-P_Metal aliases fail open at
-# the exact material gate before this sidecar path can activate.
-require("next.envdiffuse_linear_valid =\n        envdiffuse_linear_valid;" in pmetal_source and
+# EnvSpec source publication, cache identity, and hook installation are
+# independent of the optional EnvDiffuse endpoint. In stock mode the donor is
+# not loaded, EnvDiffuse validity remains false, and source publication still
+# proceeds from authenticated EnvSpec values.
+require("next.envdiffuse_linear_valid =\\n        envdiffuse_linear_valid;" in pmetal_source and
         "if (donor_ok)" in pmetal_source and
-        "envdiffuse_ok," in pmetal_source,
-        "source carrier validity is not per-source")
-require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)\n    const bool envdiffuse_donor_ready =" in pmetal_source and
-        "EnvDiffuse-dependent aliases fail open" in pmetal_source,
-        "stock mode does not attempt optional donor loading for default aliases")
+        "envdiffuse_ok," in pmetal_source and
+        "if (donor_ok && envdiffuse_ok)" not in pmetal_source,
+        "EnvSpec publication is still coupled to EnvDiffuse validity")
+require("a.envdiffuse_a == b.envdiffuse_a" not in pmetal_source and
+        "a.envdiffuse_linear_valid ==" not in pmetal_source,
+        "EnvDiffuse changes still invalidate the EnvSpec source cache")
+require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in pmetal_source and
+        "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] EnvDiffuse donor/load path disabled" in pmetal_source,
+        "stock mode does not disable the EnvDiffuse donor prerequisite")
+require("envdiffuse_linear_source_reject" not in runtime,
+        "EnvDiffuse validity still rejects an authenticated EnvSpec draw")
 require("envspec_source_finite &&" in v351_materializer and
         "(preserve_stock_envdiffuse ||" in v351_materializer and
         "envdiffuse_source_finite" in v351_materializer,
