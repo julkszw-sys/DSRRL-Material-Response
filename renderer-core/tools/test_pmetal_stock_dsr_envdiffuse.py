@@ -133,7 +133,7 @@ require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETA
         "stock mode does not disable the EnvDiffuse donor prerequisite")
 require("envdiffuse_linear_source_reject" not in runtime,
         "EnvDiffuse validity still rejects an authenticated EnvSpec draw")
-require("if (!source.envdiffuse_linear_valid &&\\n        exact_pmetal_material(material) &&" in runtime and
+require("if (!source.envdiffuse_linear_valid &&\n        exact_pmetal_material(material) &&" in runtime and
         "envdiffuse_resource_and_stock_fallback_reject" in runtime and
         "PTDE EnvDiffuse resources unavailable; exact P_Metal EnvSpec continues with stock DSR EnvDiffuse." in runtime,
         "missing EnvDiffuse source/resources do not select the stock DSR fallback")
