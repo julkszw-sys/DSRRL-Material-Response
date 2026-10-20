@@ -18,8 +18,8 @@ for marker in ("reject_stage = 1u;", "g_device == nullptr ? 2u", "reject_stage =
     assert marker in probe,marker
 assert "g_resource_by_view.find(view_key)" in probe
 assert "v230_failopen_diag::probe_reason" in probe
-for marker in ("[DSRRL SPECRGB ROOT]","[DSRRL DONOR ROUTE]",
-               "[DSRRL CEASELESS ROW6 CONSUMED]","source_.latest(material, source)",
+for marker in ("[DSRRL SPECRGB ROOT]","[DSRRL DONOR SOURCE]",
+               "[DSRRL CEASELESS ROW6 SOURCE_READY]","[DSRRL CEASELESS ROW6 REQUEST_READY]","source_.latest(material, source)",
                "material_resources_.probe_exact_specular_companion(context)"):
     assert marker in draw,marker
 assert "[DSRRL MR ROOT]" in mr
