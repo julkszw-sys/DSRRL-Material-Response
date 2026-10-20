@@ -142,6 +142,10 @@ require(runtime.index("env_resources_.prepare_envdiffuse(") <
         "stock_envdiffuse_lerp_replacements_.find(" in runtime and
         "stock_envdiffuse_replacements_.find(" in runtime,
         "EnvDiffuse resource preflight does not precede b12 payload creation or select both stock receiver families")
+require("stock_envdiffuse_for_draw = true;" in runtime and
+        "preserve_stock_envdiffuse = true;" in runtime and
+        "#elif defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)" in runtime,
+        "missing stock fallback for invalid source or absent default PTDE replacement")
 selector_start = pmetal_source.index("const bool envdiffuse_valid =")
 selector_end = pmetal_source.index("next.serial = epoch", selector_start)
 selector_block = pmetal_source[selector_start:selector_end]
