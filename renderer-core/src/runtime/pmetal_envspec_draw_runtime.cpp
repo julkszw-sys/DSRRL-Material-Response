@@ -1191,13 +1191,35 @@ bool pmetal_envspec_draw_runtime::prepare(
                 stock_envdiffuse_for_draw
                     ? stock_envdiffuse_lerp_replacements_
                     : lerp_replacements_;
-            const auto found =
+            auto found =
                 selected_lerp_replacements.find(
                     decision.receiver_id);
 
-            if (found ==
+            if ((found ==
                     selected_lerp_replacements.end() ||
-                found->second == nullptr) {
+                 found->second == nullptr) &&
+                !stock_envdiffuse_for_draw &&
+                !preserve_stock_envdiffuse &&
+                exact_pmetal_material(material) &&
+                exact_pmetal_decision(decision)) {
+                const auto stock_found =
+                    stock_envdiffuse_lerp_replacements_.find(
+                        decision.receiver_id);
+                if (stock_found !=
+                        stock_envdiffuse_lerp_replacements_.end() &&
+                    stock_found->second != nullptr) {
+                    stock_envdiffuse_for_draw = true;
+                    preserve_stock_envdiffuse = true;
+                    shader = stock_found->second;
+                }
+            }
+
+            if (shader == nullptr &&
+                found != selected_lerp_replacements.end() &&
+                found->second != nullptr)
+                shader = found->second;
+
+            if (shader == nullptr) {
                 ++lerp_replacement_register_fail_;
                 effect_fail(
                     effect_fail_mask_,
@@ -1210,8 +1232,6 @@ bool pmetal_envspec_draw_runtime::prepare(
                     family);
                 return false;
             }
-
-            shader = found->second;
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
             // Dedicated Lerp variant only; stock R19 remains P_Metal's.
             if (!stock_envdiffuse_for_draw &&
@@ -1237,13 +1257,40 @@ bool pmetal_envspec_draw_runtime::prepare(
                 stock_envdiffuse_for_draw
                     ? stock_envdiffuse_replacements_
                     : replacements_;
-            const auto found =
+            auto found =
                 selected_replacements.find(
                     decision.receiver_id);
 
-            if (found ==
+            if ((found ==
                     selected_replacements.end() ||
-                found->second.shader == nullptr) {
+                 found->second.shader == nullptr) &&
+                !stock_envdiffuse_for_draw &&
+                !preserve_stock_envdiffuse &&
+                exact_pmetal_material(material) &&
+                exact_pmetal_decision(decision)) {
+                const auto stock_found =
+                    stock_envdiffuse_replacements_.find(
+                        decision.receiver_id);
+                if (stock_found !=
+                        stock_envdiffuse_replacements_.end() &&
+                    stock_found->second.shader != nullptr) {
+                    stock_envdiffuse_for_draw = true;
+                    preserve_stock_envdiffuse = true;
+                    shader = stock_found->second.shader;
+                    composed_owners =
+                        stock_found->second.composed_owners;
+                }
+            }
+
+            if (shader == nullptr &&
+                found != selected_replacements.end() &&
+                found->second.shader != nullptr) {
+                shader = found->second.shader;
+                composed_owners =
+                    found->second.composed_owners;
+            }
+
+            if (shader == nullptr) {
                 ++replacement_register_fail_;
                 effect_fail(
                     effect_fail_mask_,
@@ -1256,10 +1303,6 @@ bool pmetal_envspec_draw_runtime::prepare(
                     family);
                 return false;
             }
-
-            shader = found->second.shader;
-            composed_owners =
-                found->second.composed_owners;
             shader->AddRef();
         }
     }
