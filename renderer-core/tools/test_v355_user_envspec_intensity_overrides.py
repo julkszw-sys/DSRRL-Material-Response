@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V355: verify authorized experimental 130 EnvSpec list changes ONLY 3 donor rows.
+"""V230: verify scoped 170 Ceaseless EnvSpec experiment changes ONLY one of 3 overridden rows.
 No addon build. Original PTDE source and v300 provenance remain unmodified.
 """
 from pathlib import Path
@@ -34,17 +34,20 @@ with tempfile.TemporaryDirectory() as tmp:
     # v13 bank slices, independently enumerated from immutable input source.
     banks=[tuple(int(v,16 if j==0 else 10) for j,v in enumerate(m.groups()))
         for m in re.finditer(r"\{(0x[0-9a-fA-F]+)ULL,(\d+)u,(\d+)u\}",source.read_text("utf-8"))]
-    expected={(8,6):(255,235,155),(8,12):(255,255,200),(16,18):(255,255,255)}
+    expected={(8,6):((255,235,155),170),(8,12):((255,255,200),130),(16,18):((255,255,255),130)}
     seen=set()
     for _i,a,b in changed:
-        for (bank,row),rgb in expected.items():
+        for (bank,row),(rgb,new_m) in expected.items():
             signature,first,count=banks[bank]
             if _i != first+row: continue
-            assert row<count and a==(row,*rgb,100) and b==(row,*rgb,130),(bank,row,a,b)
+            assert row<count and a==(row,*rgb,100) and b==(row,*rgb,new_m),(bank,row,a,b)
             seen.add((bank,row))
     assert seen==set(expected),(seen,expected)
     assert "USER_TEST_OVERRIDE" in experiment.read_text("utf-8")
+    lines=[s for s in experiment.read_text("utf-8").splitlines() if s and not s.startswith("#")]
+    assert len(lines)==4,lines
+    assert lines[1].split("\\t")[5:7]==["100","170"],lines[1]
     unchanged=1246-len(changed)
-    print(f"V355_DONOR_OVERRIDE_PASS changed=3 unchanged={unchanged}"
-          " values=130 bank8_rows6_12=PASS bank16_row18=PASS"
+    print(f"V230_CEASELESS_ENVSPEC_DONOR_PASS changed=3 unchanged={unchanged}"
+          " a14_m14_row6=170 a14_m14_row12=130 a17_m17_row18=130"
           " raw_PTDE_immutable=PASS addon_rebuild=NOT_PERFORMED")
