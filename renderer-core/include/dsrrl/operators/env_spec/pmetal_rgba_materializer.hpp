@@ -49,6 +49,7 @@ materialize_pmetal_rgba_receiver(
     const std::uint8_t *stock_source,
     std::size_t stock_size,
     bool compose_upper_lower,
-    std::vector<std::uint8_t> &output) noexcept;
+    std::vector<std::uint8_t> &output,
+    bool preserve_stock_envdiffuse = false) noexcept;
 
 } // namespace dsrrl::operators::env_spec
