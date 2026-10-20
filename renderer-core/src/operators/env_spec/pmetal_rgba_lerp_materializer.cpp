@@ -801,7 +801,7 @@ bool pmetal_lerp_materialworkflow_postcondition(
 }
 #endif
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
 constexpr std::size_t k_ptde_envdiffuse_lerp_prefix_words = 6u;
 
 bool apply_exact_ptde_envdiffuse_lerp_consumer(
