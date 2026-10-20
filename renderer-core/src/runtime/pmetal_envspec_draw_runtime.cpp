@@ -2230,7 +2230,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 #endif
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     if (stock_envdiffuse_for_draw) {
         // Read-only witness of the native resources consumed by the stock
         // EnvDiffuse instructions. These references are never rebound.
@@ -2243,7 +2243,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     prepared.ready = true;
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     if (stock_envdiffuse_for_draw &&
         !g_stock_dsr_envdiffuse_logged.exchange(
             true,
