@@ -16,6 +16,8 @@ cmake = read("integrated/CMakeLists.txt")
 stable = read("src/operators/env_spec/pmetal_rgba_materializer.cpp")
 lerp = read("src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp")
 runtime = read("src/runtime/pmetal_envspec_draw_runtime.cpp")
+pmetal_source = read("src/runtime/pmetal_env_source_runtime.cpp")
+v351_materializer = read("tools/materialize_v351_typed_lightbank_modified_renderer.py")
 header = read("include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp")
 builder = read("tools/build_v359_stock_dsr_envdiffuse.ps1")
 base_builder = read("tools/build_v350_gpu_resident_pointlight_off_rc2.ps1")
@@ -81,6 +83,16 @@ require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETA
 require("envspec=t12_t14=ptde" in runtime and
         "[DSRRL PMETAL STOCK DSR ENVDIFFUSE]" in runtime,
         "stock-mode runtime identity marker is missing")
+require("#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in pmetal_source,
+        "stock mode still compiles the EnvDiffuse donor loader as its active source path")
+require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    if (!load_exact_envdiffuse_donor())" in pmetal_source,
+        "stock mode still attempts to load the PTDE EnvDiffuse donor at install")
+require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    // Stock EnvDiffuse is supplied by the untouched DSR t11/t13 path." in pmetal_source,
+        "stock mode still requires EnvDiffuse donor during source-hook publication")
+require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n            // EnvSpec still needs the exact PTDE endpoints and beta" in v351_materializer,
+        "V351 typed-source gate still requires EnvDiffuse endpoints")
+require("next.envdiffuse_linear_valid = false;" in pmetal_source,
+        "stock source carrier does not mark EnvDiffuse endpoints unused")
 require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    std::array<std::uint32_t,24> payload_bits{};" in runtime,
         "runtime b12 payload width is not stock-mode aware")
 require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n        std::array<std::uint32_t,24> payload_bits{};" in header,
