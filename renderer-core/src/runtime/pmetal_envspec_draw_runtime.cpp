@@ -70,6 +70,91 @@ std::atomic<std::uint32_t> g_spec_rgb_root_first{0u};
 std::atomic<std::uint32_t> g_donor_route_first{0u};
 std::atomic<std::uint32_t> g_donor_ceaseless_hit{0u};
 std::atomic<std::uint32_t> g_donor_ceaseless_request_hit{0u};
+#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN) && defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
+std::atomic<std::uint32_t> g_v230_missing_source_first{0u};
+
+// Negative-path producer witness, limited to a first failure in each RX x
+// receiver-family x exact-P_Metal/other bucket. No resampling or resource
+// admission. Native SRV and resource identity come from the ACTUAL D3D draw.
+void v230_trace_missing_source(
+    ID3D11DeviceContext *context,
+    std::uint32_t binding,
+    std::uint32_t receiver,
+    std::uint32_t route,
+    std::uint32_t slot,
+    bool lerp) noexcept
+{
+    if (context == nullptr || (binding!=1u && binding!=12u)) return;
+    const std::uint32_t receiver_key=(receiver>=33u && receiver<=35u)
+        ? receiver-33u : 3u;
+    const std::uint32_t bucket=receiver_key+
+        (lerp?4u:0u)+(route==345u?8u:0u)+(binding==1u?16u:0u);
+    const std::uint32_t bit=1u<<bucket;
+    if (g_v230_missing_source_first.fetch_or(bit,std::memory_order_relaxed)&bit)
+        return;
+
+    ID3D11ShaderResourceView *srv=nullptr;
+    context->PSGetShaderResources(binding,1u,&srv);
+    D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+    ID3D11Resource *resource=nullptr;
+    ID3D11Device *dev=nullptr;
+    if(srv!=nullptr) {
+        srv->GetDesc(&vd);
+        srv->GetResource(&resource);
+        srv->GetDevice(&dev);
+    }
+
+    v358_probe_origin_snapshot origin{};
+    const bool life=srv!=nullptr &&
+        v358_probe_origin_for_native_view(srv,origin);
+    std::array<wchar_t,257> named{};
+    std::size_t name_size=0u;
+    const auto name_state=(resource!=nullptr && dev!=nullptr)
+        ? v214_resource_provenance::instance().snapshot(
+            reinterpret_cast<std::uintptr_t>(dev),
+            reinterpret_cast<std::uintptr_t>(resource),named,name_size)
+        : v214_resource_provenance::status::missing;
+    char source_name[96]{};
+    if(name_state==v214_resource_provenance::status::exact) {
+        const auto n=std::min<std::size_t>(name_size,sizeof(source_name)-1u);
+        for(std::size_t i=0;i<n;++i) {
+            const auto ch=named[i];
+            source_name[i]=(ch>=33 && ch<=126)
+                ?static_cast<char>(ch):'?';
+        }
+    }
+    char sha[65]{};
+    constexpr char digits[]="0123456789abcdef";
+    for(std::size_t i=0;i<origin.creation_sha256.size();++i) {
+        sha[2u*i]=digits[origin.creation_sha256[i]>>4u];
+        sha[2u*i+1u]=digits[origin.creation_sha256[i]&15u];
+    }
+    char line[760]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V230 MISSING SOURCE] t=%u rx=%u route=%u slot=%u lerp=%u"
+        " srv=%016llx backing=%016llx"
+        " dim=%u fmt=%u exact_lifetime=%u serial=%llu"
+        " creation_data_exact=%u native_probe_certified=%u native_probe=%u sha256=%s"
+        " original_name=%s name=%.95s"
+        " action=FAIL_OPEN_NO_ALIAS",
+        binding,receiver,route,slot,lerp?1u:0u,
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(srv)),
+        static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(resource)),
+        static_cast<unsigned>(vd.ViewDimension),
+        static_cast<unsigned>(vd.Format),life?1u:0u,
+        static_cast<unsigned long long>(origin.lifetime_serial),
+        origin.initial_data_exact?1u:0u,
+        origin.certified_native_probe?1u:0u,origin.certified_probe,
+        life&&origin.initial_data_exact?sha:"UNAVAILABLE",
+        name_state==v214_resource_provenance::status::exact?"EXACT":
+        name_state==v214_resource_provenance::status::ambiguous?"AMBIGUOUS":"UNKNOWN",
+        source_name);
+    reshade::log::message(reshade::log::level::warning,line);
+    if(dev!=nullptr) dev->Release();
+    if(resource!=nullptr) resource->Release();
+    if(srv!=nullptr) srv->Release();
+}
+#endif
 #endif
 std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
@@ -1360,6 +1445,11 @@ bool pmetal_envspec_draw_runtime::prepare(
             material,
             decision,
             family);
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS) && defined(DSRRL_V358_EXACT_PROBE_ORIGIN) && defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
+        v230_trace_missing_source(context,12u,decision.receiver_id,
+            material.route_index,material.material_slot,
+            family==pmetal_envspec_receiver_family::hemenvlerp);
+#endif
         return false;
     }
     effect_latch(effect_probe_ready_);
@@ -1455,6 +1545,11 @@ bool pmetal_envspec_draw_runtime::prepare(
                 probe.companion_ready?1u:0u,
                 static_cast<unsigned long long>(probe.logical_hash));
             reshade::log::message(reshade::log::level::warning,line);
+#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN) && defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
+            v230_trace_missing_source(context,1u,decision.receiver_id,
+                material.route_index,material.material_slot,
+                family==pmetal_envspec_receiver_family::hemenvlerp);
+#endif
         }
 #endif
         env_resources_.release(
