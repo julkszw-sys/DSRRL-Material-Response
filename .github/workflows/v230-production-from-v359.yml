@@ -1,7 +1,7 @@
-name: V230 V359 stock DSR EnvDiffuse isolated diagnostic addon
+name: V230 Demon Ruins Upper EnvSpec 170 + stock DSR EnvDiffuse addon
 on:
   push:
-    branches: [release/v2.3.0-v359-prep, agent/v230-stock-dsr-envdiffuse-isolated-20261020]
+    branches: [release/v2.3.0-v359-prep, agent/v230-stock-dsr-envdiffuse-isolated-20261020, agent/v230-demon-ruins-upper-envspec-170-20261020]
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,6 +15,7 @@ jobs:
         run: |
           python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py renderer-core/tools/test_v230_stock_envdiffuse_contract.py
           python3 renderer-core/tools/test_v230_stock_envdiffuse_contract.py
+          python3 renderer-core/tools/test_v355_user_envspec_intensity_overrides.py
           python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
           python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
           python3 renderer-core/tools/test_v351_fallback_census.py --output v230_fallback_census.json
@@ -52,6 +53,6 @@ jobs:
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v2.3.0-V359-STOCK-ENVDIFFUSE-ISOLATED-DIAGNOSTIC
+          name: DSRRL-v2.3.0-STOCK-ENVDIFFUSE-DEMON-RUINS-UPPER-ENVSPEC170
           path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
           if-no-files-found: error
