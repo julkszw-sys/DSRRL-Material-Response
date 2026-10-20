@@ -636,16 +636,14 @@ register_lerp_replacement(
     }
 
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
-    // The default variant is shared with the verified nonmetal aliases.
-    // The stock-EnvDiffuse variant is P_Metal-only and must retain its own
-    // exact shader payload rather than be rebuilt through the unified path.
+    // Apply the same downstream Material/SpecRGB fixes to both variants.
+    // The separate registry preserves the P_Metal-only EnvDiffuse semantic cut.
     std::vector<std::uint8_t> unified;
-    if (!stock_envdiffuse_variant &&
-        (!operators::env_spec::
+    if (!operators::env_spec::
             materialize_nonmetal_lerp_r8_spec_linear_candidate(
                 static_cast<const std::uint8_t *>(dxbc),
                 dxbc_size, unified) ||
-         unified.empty())) {
+        unified.empty()) {
         ++lerp_replacement_register_fail_;
         char log[256]{};
 #if defined(DSRRL_V346_LERP_REJECT_STAGE)
@@ -666,10 +664,8 @@ register_lerp_replacement(
         reshade::log::message(reshade::log::level::warning,log);
         return false;
     }
-    if (!stock_envdiffuse_variant) {
-        dxbc=unified.data();
-        dxbc_size=unified.size();
-    }
+    dxbc=unified.data();
+    dxbc_size=unified.size();
 #endif
     const auto payload_sha256 =
         hashing::sha256(
