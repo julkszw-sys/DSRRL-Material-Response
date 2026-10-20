@@ -11,7 +11,7 @@ ledger=read("include/dsrrl/runtime/v230_failopen_diagnostic.hpp")
 donors=read("data/provenance/user_envspec_intensity_overrides_v355.tsv")
 build=read("tools/build_v230_production.ps1")
 assert probe.count("snapshot_ready_envspec(")==3 # declaration and two calls
-for marker in ("reject_stage = 1u;", "reject_stage = 2u", "reject_stage = 5u;",
+for marker in ("reject_stage = 1u;", "g_device == nullptr ? 2u", "reject_stage = 5u;",
                "reject_stage = 6u;", "reject_stage = 8u;", "reject_stage = 9u;",
                "v230_failopen_diag::probe_reason(final_stage,initial_reject_stage"):
     assert marker in probe,marker
