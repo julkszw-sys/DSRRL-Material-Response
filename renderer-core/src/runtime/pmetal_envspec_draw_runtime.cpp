@@ -1725,7 +1725,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     effect_latch(effect_b12_ready_);
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (!preserve_stock_envdiffuse) {
     // Probe identity is inherited from the already-authenticated EnvSpec
     // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
     // probe ordinal and never derives assignment from DSR t11 content.
@@ -1797,7 +1798,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             reshade::log::level::info,
             line);
     }
-#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    }
+#elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     // Legacy diagnostic ownership: explicitly rebind native DSR EnvDiffuse.
     ID3D11ShaderResourceView *native_envdiffuse_a = nullptr;
     ID3D11ShaderResourceView *native_envdiffuse_b = nullptr;
