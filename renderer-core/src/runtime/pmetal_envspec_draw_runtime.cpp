@@ -69,6 +69,7 @@ std::atomic_bool g_source_frontier_logged{false};
 std::atomic<std::uint32_t> g_spec_rgb_root_first{0u};
 std::atomic<std::uint32_t> g_donor_route_first{0u};
 std::atomic<std::uint32_t> g_donor_ceaseless_hit{0u};
+std::atomic<std::uint32_t> g_donor_ceaseless_request_hit{0u};
 #endif
 std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
@@ -1091,7 +1092,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         if (!(g_donor_route_first.fetch_or(bit,std::memory_order_relaxed)&bit)) {
             char line[560]{};
             std::snprintf(line,sizeof(line),
-                "[DSRRL DONOR ROUTE] rx=%u family=%u route=%u row_a=%u sig_a=%016llx rgb_a=%.7g,%.7g,%.7g row_b=%u sig_b=%016llx rgb_b=%.7g,%.7g,%.7g beta=%.7g",
+                "[DSRRL DONOR SOURCE] rx=%u family=%u route=%u row_a=%u sig_a=%016llx rgb_a=%.7g,%.7g,%.7g row_b=%u sig_b=%016llx rgb_b=%.7g,%.7g,%.7g beta=%.7g",
                 decision.receiver_id,static_cast<unsigned>(family),material.route_index,
                 source.row_id_a,static_cast<unsigned long long>(source.bank_signature_a),
                 source.a[0],source.a[1],source.a[2],source.row_id_b,
@@ -1108,7 +1109,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         if ((g_donor_ceaseless_hit.fetch_or(bit,std::memory_order_relaxed)&bit)!=bit) {
             char line[400]{};
             std::snprintf(line,sizeof(line),
-                "[DSRRL CEASELESS ROW6 CONSUMED] rx=%u family=%u route=%u a=%u b=%u beta=%.8g rgb_a=%.8g,%.8g,%.8g rgb_b=%.8g,%.8g,%.8g",
+                "[DSRRL CEASELESS ROW6 SOURCE_READY] rx=%u family=%u route=%u a=%u b=%u beta=%.8g rgb_a=%.8g,%.8g,%.8g rgb_b=%.8g,%.8g,%.8g",
                 decision.receiver_id,static_cast<unsigned>(family),material.route_index,
                 witness_a?1u:0u,witness_b?1u:0u,source.beta,
                 source.a[0],source.a[1],source.a[2],
@@ -2226,6 +2227,26 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     prepared.ready = true;
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    // Source-ready alone is NOT proof that EnvSpec reached an executable
+    // draw. Witness the same exact row only after all resource/CB gates pass.
+    if ((source.bank_signature_a==0xc9b879a8c5e624d0ULL &&
+         source.row_id_a==6u) ||
+        (source.bank_signature_b==0xc9b879a8c5e624d0ULL &&
+         source.row_id_b==6u)) {
+        const auto first=g_donor_ceaseless_request_hit.fetch_or(
+            1u<<(static_cast<unsigned>(family)),
+            std::memory_order_relaxed);
+        if (!(first&(1u<<static_cast<unsigned>(family)))) {
+            char line[296]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL CEASELESS ROW6 REQUEST_READY] rx=%u family=%u route=%u row_a=%u row_b=%u beta=%.7g",
+                decision.receiver_id,static_cast<unsigned>(family),
+                decision.route_index,source.row_id_a,source.row_id_b,source.beta);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
 
