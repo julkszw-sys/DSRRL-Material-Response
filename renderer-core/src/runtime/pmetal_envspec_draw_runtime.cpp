@@ -1523,7 +1523,8 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 
-    if (!g_native_envdiffuse_logged.exchange(
+    if (!stock_envdiffuse_for_draw &&
+        !g_native_envdiffuse_logged.exchange(
             true,
             std::memory_order_relaxed)) {
         char line[512]{};
