@@ -935,10 +935,13 @@ endif()
 
 if(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
-       NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
-       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+       NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
         message(FATAL_ERROR
             "Stock DSR EnvDiffuse variant requires the cumulative P_Metal EnvSpec + R19 MaterialWorkflow lineage")
+    endif()
+    if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR
+            "Stock DSR EnvDiffuse must not enable the R19 PTDE EnvDiffuse consumer")
     endif()
     if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG OR
        DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG OR
