@@ -79,7 +79,10 @@ The runtime's `exact_pmetal_envspec_candidate` accepts the exact P_Metal gate fi
 
 Do not re-enable those aliases as a workaround for the current build error. If non-P_Metal support is pursued later, it requires its own exact owner/FLVER/slot/MTD/resource/consumer proof and a separate candidate, not a silent widening of this bridge.
 
-## 5. Current native-build failure — concrete blocker
+## 5. Earlier native-build failure — repair applied, validation pending
+
+The failure below was observed before the current decoupling revision. The current branch now generates the shared V286 whitelist and adds its generated include directory independently of `DSRRL_V285_ATOMIC_NONMETAL_DIAG` (`renderer-core/integrated/CMakeLists.txt`, commit `cae99b65c7e837191d9e9253e6470516d4c964bf`). The source-contract test now checks this separation. Treat the repair as **implemented but not yet build-confirmed** until the dedicated Windows workflow completes.
+
 
 Latest dedicated run: [39412696183](https://github.com/julkszw-sys/DSRRL-Material-Response/actions/runs/39412696183), native job ID `118594281513`.
 
@@ -107,7 +110,10 @@ Decouple the shared V315 whitelist-header generation/include dependency from the
 
 Before changing code, inspect all generated headers and include directories currently nested under V285 for similar hidden build dependencies. Add a source/build contract that specifically verifies the stock candidate can build with V285/V289/V293 OFF; string-only flag assertions are insufficient.
 
-## 6. Secondary CI issue
+## 6. Earlier integrated-CMake anchor failure — repair applied, validation pending
+
+The generator anchor mismatch below was observed before the current revision. `generate_runtime_v2_physical_cut.py` now matches the actual indentation in `integrated_addon.cpp` (commit `0ac31c1e1e5fc4644c981b95bee82b06270e68a0`), and the stock EnvDiffuse source-contract test checks the input anchor. The generic integrated configure must still pass on the current head before compatibility can be promoted.
+
 
 The generic integrated workflow run `39412696189` failed during CMake configure, before compiling the addon:
 
@@ -131,10 +137,10 @@ This is distinct from the dedicated candidate's C1083 missing-header failure. In
 
 ## 8. Required next steps
 
-1. Fix the V315 generated-header dependency while keeping non-P_Metal gates OFF.
+1. Confirm the V315 generated-header dependency fix in the dedicated Windows build while keeping non-P_Metal gates OFF.
 2. Run the source-contract suite and the dedicated Windows single-addon workflow again.
 3. Require successful artifact identity checks, exact source-commit marker, stock EnvDiffuse marker, single-addon assertion, and published artifact SHA-256 before calling construction PASS.
-4. Triage the generic integrated CMake anchor mismatch separately.
+4. Confirm the physical-cut generator anchor repair in the generic integrated workflow.
 5. Review stable and Lerp fail-open paths explicitly: invalid material/route, receiver mismatch, missing or invalid source/probe, missing replacement, device/context mismatch, invalid CB payload size, and transaction/mutation failure must all preserve stock DSR for that draw.
 6. Keep the statuses separate: construction, compatibility, runtime liveness, receiver hit, bridge activation, operator changed, and PTDE-visible pixel improvement. A build PASS is not a runtime or pixel PASS.
 7. Do not require new user captures for this construction task. Use permitted existing evidence and code/build validation; leave pixel behavior OPEN unless existing evidence actually supports promotion.
