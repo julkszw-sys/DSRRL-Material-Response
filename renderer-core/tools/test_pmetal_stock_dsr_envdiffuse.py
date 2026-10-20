@@ -111,7 +111,7 @@ require("struct b12_context_key" in runtime_header and
 # independent of the optional EnvDiffuse endpoint. In stock mode the donor is
 # not loaded, EnvDiffuse validity remains false, and source publication still
 # proceeds from authenticated EnvSpec values.
-require("next.envdiffuse_linear_valid =\\n        envdiffuse_linear_valid;" in pmetal_source and
+require("next.envdiffuse_linear_valid =\n        envdiffuse_linear_valid;" in pmetal_source and
         "if (donor_ok)" in pmetal_source and
         "envdiffuse_ok," in pmetal_source and
         "if (donor_ok && envdiffuse_ok)" not in pmetal_source,
