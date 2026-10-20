@@ -6837,6 +6837,7 @@ bool on_draw(
             material,
             decision,
             prepared)) {
+        dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_batch_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,effect_candidates);
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7375,6 +7376,7 @@ bool on_draw_indexed(
             material,
             decision,
             prepared)) {
+        dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_batch_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,effect_candidates);
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
