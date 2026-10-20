@@ -1970,23 +1970,25 @@ bool pmetal_envspec_draw_runtime::prepare(
         1u;
 
     std::uint32_t request_srv_count = 0u;
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    prepared.request.srvs[
-        request_srv_count++] = {
-            11u,
-            prepared.envdiffuse_resources.ptde_a
-        };
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (!preserve_stock_envdiffuse) {
         prepared.request.srvs[
             request_srv_count++] = {
-                13u,
-                prepared.envdiffuse_resources.ptde_b
+                11u,
+                prepared.envdiffuse_resources.ptde_a
             };
-    }
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        if (family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp) {
+            prepared.request.srvs[
+                request_srv_count++] = {
+                    13u,
+                    prepared.envdiffuse_resources.ptde_b
+                };
+        }
 #endif
+    }
     prepared.request.srvs[
         request_srv_count++] = {
             12u,
@@ -1997,7 +1999,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             14u,
             prepared.env_resources.ptde_b
         };
-#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+#elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     prepared.request.srvs[
         request_srv_count++] = {
             11u,
@@ -2099,23 +2101,25 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            11u,
-            prepared.envdiffuse_resources.sampler
-        };
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (!preserve_stock_envdiffuse) {
         prepared.request.samplers[
             request_sampler_count++] = {
-                13u,
+                11u,
                 prepared.envdiffuse_resources.sampler
             };
-    }
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        if (family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp) {
+            prepared.request.samplers[
+                request_sampler_count++] = {
+                    13u,
+                    prepared.envdiffuse_resources.sampler
+                };
+        }
 #endif
+    }
     prepared.request.samplers[
         request_sampler_count++] = {
             12u,
