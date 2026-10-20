@@ -2913,6 +2913,8 @@ bool observe_draw_identity(
                 mr_identity_line);
         }
     } else {
+        if (rx != nullptr)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::mr_decision_inactive,receiver_id,hemenvlerp_bound?1u:0u,out_decision.route_index,out_material.flver_identity_hash,out_material.material_slot,static_cast<std::uint32_t>(out_decision.reason));
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
