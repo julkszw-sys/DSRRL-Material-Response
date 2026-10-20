@@ -4654,6 +4654,40 @@ bool on_create_pipeline(
                             "[DSRRL PMETAL FULL PTDE HEMENV] create_register_reject");
 #endif
                 }
+#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+                // Build a second create-time shader for exact P_Metal draws.
+                // The default payload above remains the PTDE EnvDiffuse
+                // variant used by the verified nonmetal aliases.
+                std::vector<std::uint8_t> envspec_stock_payload;
+                const auto envspec_stock =
+                    dsrrl::operators::env_spec::
+                        materialize_pmetal_rgba_receiver(
+                            g_core.features(),
+                            source,
+                            pixel_shader->code_size,
+                            false,
+                            envspec_stock_payload,
+                            true);
+                if (envspec_stock.result ==
+                    envspec_result::applied) {
+                    const bool stock_registered =
+                        g_pmetal_envspec.register_replacement(
+                            envspec_stock,
+                            envspec_stock_payload.data(),
+                            envspec_stock_payload.size(),
+                            true);
+                    if (stock_registered)
+                        ++g_envspec_payload_materialize_ok;
+                    else
+                        ++g_envspec_payload_materialize_fail;
+                } else if (
+                    envspec_stock.result !=
+                        envspec_result::pass_not_candidate &&
+                    envspec_stock.result !=
+                        envspec_result::pass_unknown_exact_sha) {
+                    ++g_envspec_payload_materialize_fail;
+                }
+#endif
             } else if (
                 envspec.result !=
                     envspec_result::pass_not_candidate &&
@@ -4722,6 +4756,39 @@ bool on_create_pipeline(
                         candidate ? reshade::log::level::info :
                             reshade::log::level::warning,
                         line);
+                }
+#endif
+#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+                // Keep the default R19/PTDE-EnvDiffuse payload for the
+                // nonmetal aliases and register a separate 64-byte-b12
+                // stock-EnvDiffuse payload for exact P_Metal draws.
+                std::vector<std::uint8_t> envspec_lerp_stock_payload;
+                const auto envspec_lerp_stock =
+                    dsrrl::operators::env_spec::
+                        materialize_pmetal_rgba_lerp_receiver(
+                            g_core.features(),
+                            source,
+                            pixel_shader->code_size,
+                            envspec_lerp_stock_payload,
+                            true);
+                if (envspec_lerp_stock.result ==
+                    envspec_lerp_result::applied) {
+                    const bool stock_registered =
+                        g_pmetal_envspec.register_lerp_replacement(
+                            envspec_lerp_stock,
+                            envspec_lerp_stock_payload.data(),
+                            envspec_lerp_stock_payload.size(),
+                            true);
+                    if (stock_registered)
+                        ++g_envspec_payload_materialize_ok;
+                    else
+                        ++g_envspec_payload_materialize_fail;
+                } else if (
+                    envspec_lerp_stock.result !=
+                        envspec_lerp_result::pass_not_candidate &&
+                    envspec_lerp_stock.result !=
+                        envspec_lerp_result::pass_unknown_exact_sha) {
+                    ++g_envspec_payload_materialize_fail;
                 }
 #endif
             } else if (
