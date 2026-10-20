@@ -30,7 +30,8 @@ bnd=bytearray(0x80)
 bnd[:10]=b"BND307D7R6"
 struct.pack_into("<I",bnd,0x10,1)
 struct.pack_into("<IIIIII",bnd,0x20,0x40,len(tpf),0x80,42,0x38,len(tpf))
-bnd[0x38:0x38+22]=b"C:\\DSR\\fixture.tpf\0"
+name=b"C:\\DSR\\fixture.tpf\0"
+bnd[0x38:0x38+len(name)]=name
 bnd.extend(tpf)
 target=hashlib.sha256(top).hexdigest()
 ok=report()
