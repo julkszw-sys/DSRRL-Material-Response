@@ -2202,7 +2202,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
     prepared.ready = true;
 #if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    if (!g_stock_dsr_envdiffuse_logged.exchange(
+    if (stock_envdiffuse_for_draw &&
+        !g_stock_dsr_envdiffuse_logged.exchange(
             true,
             std::memory_order_relaxed)) {
         reshade::log::message(
