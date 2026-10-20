@@ -61,6 +61,11 @@ struct rgba_cube {
 };
 
 std::mutex g_mutex;
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+std::mutex g_v230_bc1_mutex;
+std::unordered_map<std::uint64_t,v230_bc1_origin_snapshot> g_v230_bc1;
+std::atomic<std::uint64_t> g_v230_bc1_serial{1u};
+#endif
 std::unordered_map<std::uint64_t,native_probe_record>
     g_native_resources;
 std::unordered_map<std::uint64_t,native_view_record>
