@@ -92,7 +92,8 @@ require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=ON" in builder,
 require("DSRRL_V359_STOCK_DSR_ENVDIFFUSE.addon64" in builder and
         "DSRRL PMETAL STOCK DSR ENVDIFFUSE" in builder,
         "builder output identity/marker is missing")
-require("Expected exactly one addon" in base_builder,
+require("$files.Count -ne 1" in base_builder and
+        "Expected one addon, got" in base_builder,
         "inherited base builder does not enforce a single addon")
 require("out-v359-stock-dsr-envdiffuse" in builder,
         "stock builder does not select its isolated output directory")
