@@ -146,6 +146,12 @@ require("stock_envdiffuse_for_draw = true;" in runtime and
         "preserve_stock_envdiffuse = true;" in runtime and
         "#elif defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)" in runtime,
         "missing stock fallback for invalid source or absent default PTDE replacement")
+require(runtime.index("envdiffuse_resource_and_stock_fallback_reject") <
+            runtime.index("const std::array<f4,6> payload") and
+        runtime.index("const std::array<f4,6> payload") <
+            runtime.index("prepared.request.srvs[") and
+        "if (!preserve_stock_envdiffuse)" in runtime,
+        "resource fallback does not settle the stock/PTDE variant before SRV transaction assembly")
 selector_start = pmetal_source.index("const bool envdiffuse_valid =")
 selector_end = pmetal_source.index("next.serial = epoch", selector_start)
 selector_block = pmetal_source[selector_start:selector_end]
