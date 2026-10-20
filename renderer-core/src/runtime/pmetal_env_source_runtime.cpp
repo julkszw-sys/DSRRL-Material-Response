@@ -1,3 +1,4 @@
+#include "dsrrl/runtime/pmetal_stock_dsr_envdiffuse_variant.hpp"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
