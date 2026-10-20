@@ -8,6 +8,7 @@ probe=read("src/runtime/envspec_resource_runtime.cpp")
 draw=read("src/runtime/pmetal_envspec_draw_runtime.cpp")
 mr=read("integrated/integrated_addon.cpp")
 ledger=read("include/dsrrl/runtime/v230_failopen_diagnostic.hpp")
+stable=read("src/operators/env_spec/pmetal_rgba_materializer.cpp")
 donors=read("data/provenance/user_envspec_intensity_overrides_v355.tsv")
 build=read("tools/build_v230_production.ps1")
 assert probe.count("snapshot_ready_envspec(")==3 # declaration and two calls
@@ -22,6 +23,8 @@ for marker in ("[DSRRL SPECRGB ROOT]","[DSRRL DONOR ROUTE]",
                "material_resources_.probe_exact_specular_companion(context)"):
     assert marker in draw,marker
 assert "[DSRRL MR ROOT]" in mr
+assert "A correctly materialized HemEnvLerp shader" in stable
+assert "pmetal_rgba_materialize_result::pass_not_candidate" in stable
 assert 'inline void probe_reason(' in ledger and 'k_probe_names' in ledger
 assert "/DDSRRL_V230_FAILOPEN_DIAGNOSTICS" in build
 assert "8\ta14\tm14_LightBank.param\tc9b879a8c5e624d0\t6\t100\t170" in donors
