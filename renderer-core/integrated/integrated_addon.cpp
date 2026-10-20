@@ -2806,6 +2806,8 @@ bool observe_draw_identity(
     }
 
     if (!g_mr_ready.load()) {
+        if (rx != nullptr)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::mr_registry_missing,receiver_id,hemenvlerp_bound?1u:0u,0u,out_material.flver_identity_hash,out_material.material_slot);
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
             hot_count(rx->fail_open);
