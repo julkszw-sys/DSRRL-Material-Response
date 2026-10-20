@@ -1430,6 +1430,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
+        if (shader != nullptr)
+            shader->Release();
 #if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
         const auto bucket=(decision.receiver_id>=33u && decision.receiver_id<=35u?
             decision.receiver_id-33u:3u)+
@@ -1454,8 +1456,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             reshade::log::message(reshade::log::level::warning,line);
         }
 #endif
-        if (shader != nullptr)
-            shader->Release();
         env_resources_.release(
             prepared.env_resources);
         material_resources_.
