@@ -7600,6 +7600,7 @@ void on_present(
             1u,
             std::memory_order_relaxed) + 1u;
     g_clustered_pnts.frame_event(present);
+    dsrrl::runtime::v230_failopen_diag::frame();
     if (present == 1u ||
         (g_hot_telemetry_enabled &&
          (present % 300u) == 0u)) {
