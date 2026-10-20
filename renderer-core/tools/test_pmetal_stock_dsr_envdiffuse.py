@@ -187,7 +187,7 @@ require("exact_pmetal_material(material)" in candidate_gate and
 
 # Reproducible single-addon candidate; no release identity or source tree is
 # overwritten. Construction is not runtime or pixel proof.
-require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=ON" in builder and
+require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=OFF" in builder and
         "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON" in builder,
         "builder does not preserve R19 lineage while enabling stock mode")
 require("DSRRL_V359_STOCK_DSR_ENVDIFFUSE.addon64" in builder and
