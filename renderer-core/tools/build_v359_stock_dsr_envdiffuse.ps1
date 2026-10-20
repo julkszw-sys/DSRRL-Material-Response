@@ -15,6 +15,12 @@ Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=
 $oldEnvdiffuseArg = "    '-DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON',"
 $newEnvdiffuseArg = "$oldEnvdiffuseArg`n    '-DDSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=ON',"
 Once $oldEnvdiffuseArg $newEnvdiffuseArg
+# Keep this candidate P_Metal-only: unknown/non-P_Metal EnvSpec aliases must fail open.
+Once "    '-DDSRRL_V285_ATOMIC_NONMETAL_DIAG=ON'," "    '-DDSRRL_V285_ATOMIC_NONMETAL_DIAG=OFF',"
+Once "    '-DDSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=ON'," "    '-DDSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=OFF',"
+Once "    '-DDSRRL_V293_PARSER_EXACT_FLVER_ALIAS=ON'," "    '-DDSRRL_V293_PARSER_EXACT_FLVER_ALIAS=OFF',"
+Once '# V338 release gate: fail if the repaired nonmetal RX33-35 shader is not enabled.' '# Stock EnvDiffuse candidate gate: nonmetal RX33-35 alias extension remains disabled.'
+Once 'if (-not (($argsList -join '' '').Contains(''-DDSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=ON''))) { throw "Nonmetal R8 missing" }' 'if (-not (($argsList -join '' '').Contains(''-DDSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=OFF''))) { throw "Stock candidate must keep nonmetal R8 disabled" }
 Once 'python renderer-core/tools/test_v304_typed_donor_contract.py' @'
 python renderer-core/tools/test_v304_typed_donor_contract.py
 if ($LASTEXITCODE -ne 0) { throw 'V304 contract failed' }
