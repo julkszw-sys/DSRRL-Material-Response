@@ -129,13 +129,23 @@ void v230_trace_missing_source(
         sha[2u*i]=digits[origin.creation_sha256[i]>>4u];
         sha[2u*i+1u]=digits[origin.creation_sha256[i]&15u];
     }
-    char line[760]{};
+    v230_bc1_origin_snapshot bc1{};
+    const bool bc1_found=(binding==1u && srv!=nullptr) &&
+        v230_bc1_origin_for_native_view(srv,bc1);
+    char bc1_sha[65]{};
+    for(std::size_t i=0u;i<bc1.mip0_sha.size();++i) {
+        bc1_sha[2u*i]=digits[bc1.mip0_sha[i]>>4u];
+        bc1_sha[2u*i+1u]=digits[bc1.mip0_sha[i]&15u];
+    }
+    char line[1024]{};
     std::snprintf(line,sizeof(line),
         "[DSRRL V230 MISSING SOURCE] t=%u rx=%u route=%u slot=%u lerp=%u"
         " srv=%016llx backing=%016llx"
         " dim=%u fmt=%u exact_lifetime=%u serial=%llu"
         " creation_data_exact=%u native_probe_certified=%u native_probe=%u sha256=%s"
         " original_name=%s name=%.95s"
+        " bc1_record=%u bc1_serial=%llu bc1_width=%u bc1_height=%u bc1_mips=%u"
+        " bc1_mip0_exact=%u bc1_mip0_sha256=%s"
         " action=FAIL_OPEN_NO_ALIAS",
         binding,receiver,route,slot,lerp?1u:0u,
         static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(srv)),
@@ -148,7 +158,11 @@ void v230_trace_missing_source(
         life&&origin.initial_data_exact?sha:"UNAVAILABLE",
         name_state==v214_resource_provenance::status::exact?"EXACT":
         name_state==v214_resource_provenance::status::ambiguous?"AMBIGUOUS":"UNKNOWN",
-        source_name);
+        source_name,bc1_found?1u:0u,
+        static_cast<unsigned long long>(bc1.serial),
+        bc1.width,bc1.height,bc1.mips,
+        bc1_found&&bc1.mip0_exact?1u:0u,
+        bc1_found&&bc1.mip0_exact?bc1_sha:"UNAVAILABLE");
     reshade::log::message(reshade::log::level::warning,line);
     if(dev!=nullptr) dev->Release();
     if(resource!=nullptr) resource->Release();
