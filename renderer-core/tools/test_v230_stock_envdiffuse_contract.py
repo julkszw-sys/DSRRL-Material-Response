@@ -27,8 +27,10 @@ require("builder", builder,
         "/DDSRRL_V230_PRODUCTION", "/DDSRRL_V230_STOCK_DSR_ENVDIFFUSE",
         "[DSRRL V230 STOCK DSR ENVDIFFUSE]",
         "test_v230_stock_envdiffuse_contract.py")
-require("native EnvSpec/SpecRGB flags retained", builder,
-        "DSRRL_V359_ATTESTED_GI_NAME_ALIAS",
+require("native EnvSpec/V359 flags retained", builder,
+        "DSRRL_V359_ATTESTED_GI_NAME_ALIAS")
+require("V350 PTDE Lerp SpecRGB channel fix retained",
+        read("tools/build_v350_gpu_resident_pointlight_off_rc2.ps1"),
         "DSRRL_V350_PTDE_LERP_RGB_COMPONENT_SWIZZLE")
 require("EnvSpec source producer kept", src,
         "latest_hook_source(", "publish_hook_source(",
