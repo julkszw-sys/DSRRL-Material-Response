@@ -707,6 +707,9 @@ void on_init_resource(
     resource_usage,
     resource resource_handle)
 {
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    v230_capture_bc1_origin(device_ptr,desc,initial_data,resource_handle);
+#endif
     if (device_ptr == nullptr ||
         resource_handle.handle == 0u ||
         !is_native_envspec_desc(desc))
