@@ -4705,6 +4705,7 @@ bool on_create_pipeline(
                         envspec_lerp,
                         envspec_lerp_payload.data(),
                         envspec_lerp_payload.size());
+                dsrrl::runtime::v230_failopen_diag::hit(r19_registered ? dsrrl::runtime::v230_failopen_diag::stage::create_lerp_ok : dsrrl::runtime::v230_failopen_diag::stage::create_lerp_register_reject,envspec_lerp.semantic_receiver_id,1u);
                 if (r19_registered)
                     ++g_envspec_payload_materialize_ok;
                 else
