@@ -939,9 +939,9 @@ if(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
         message(FATAL_ERROR
             "Stock DSR EnvDiffuse variant requires the cumulative P_Metal EnvSpec + R19 MaterialWorkflow lineage")
     endif()
-    if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if(NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         message(FATAL_ERROR
-            "Stock DSR EnvDiffuse must not enable the R19 PTDE EnvDiffuse consumer")
+            "Stock DSR EnvDiffuse variant requires the cumulative R19 Lerp feature lineage; the stock-mode guard disables only its P_Metal EnvDiffuse rewrite")
     endif()
     if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG OR
        DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG OR
