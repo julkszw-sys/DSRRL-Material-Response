@@ -27,7 +27,7 @@ enum class stage : std::uint8_t {
     probe_invalid_input, probe_null_srv, probe_snapshot_reject,
     probe_sampler_or_srv_missing, probe_native_binding_reject,
     draw_batch_reject, draw_transaction_reject, draw_issued,
-    disabled_by_policy, count
+    native_wrapper_armed, disabled_by_policy, count
 };
 
 struct description { const char *name; const char *layer; bool failure; };
@@ -68,6 +68,7 @@ inline constexpr std::array<description,
     {"draw_batch_reject","DRAW_BATCH",true},
     {"draw_transaction_reject","D3D11_TRANSACTION",true},
     {"draw_issued","D3D11_TRANSACTION",false},
+    {"native_wrapper_armed","D3D11_NATIVE_WRAPPER",false},
     {"disabled_by_policy","POLICY_INTENTIONAL",false},
 }};
 inline constexpr std::size_t k_count = k_descriptions.size();
@@ -109,6 +110,40 @@ inline void hit(stage what, std::uint32_t rx = 0u,
 #endif
 }
 
+// Probe identity stage census, separate first-hits per rejection substage.
+// No D3D objects are inspected or changed in this log-only facility.
+inline constexpr std::array<const char *,12> k_probe_names{{
+    "none", "invalid_slot_or_input", "device_missing",
+    "packedgi_unavailable", "sampler_unavailable",
+    "stock_t12_unmapped", "stock_t14_unmapped",
+    "probe_ordinal_out_of_range", "ptde_cube_a_not_resident",
+    "ptde_cube_b_not_resident", "native_object_null",
+    "ptde_cube_materialization_failed"
+}};
+inline std::array<std::atomic<std::uint64_t>,12> g_probe_reason_count{};
+inline std::array<std::atomic<std::uint64_t>,12> g_probe_reason_reported{};
+inline std::array<std::atomic<std::uint32_t>,12> g_probe_reason_first{};
+
+inline void probe_reason(std::uint32_t reason, std::uint32_t initial,
+                         std::uint32_t slot, bool blended,
+                         std::uint32_t probe_a, std::uint32_t probe_b) noexcept
+{
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    if (reason == 0u || reason >= k_probe_names.size()) return;
+    g_probe_reason_count[reason].fetch_add(1u,std::memory_order_relaxed);
+    const auto scope_bit = (slot<4u ? slot*2u : 8u)+(blended?1u:0u);
+    if ((g_probe_reason_first[reason].fetch_or(1u<<scope_bit,
+            std::memory_order_relaxed)&(1u<<scope_bit))!=0u) return;
+    char line[368]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL PROBE ROOT] failure=%s stage=%u initial_stage=%u slot=%u blend=%u probe_a=%u probe_b=%u",
+        k_probe_names[reason],reason,initial,slot,blended?1u:0u,probe_a,probe_b);
+    reshade::log::message(reshade::log::level::warning,line);
+#else
+    (void)reason;(void)initial;(void)slot;(void)blended;(void)probe_a;(void)probe_b;
+#endif
+}
+
 inline void report(const char *phase) noexcept
 {
 #if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
@@ -131,6 +166,20 @@ inline void report(const char *phase) noexcept
             static_cast<unsigned long long>(total >= old ? total-old : 0u));
         reshade::log::message(reshade::log::level::info,msg);
     }
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    for (std::size_t k=1u;k<k_probe_names.size();++k) {
+        const auto total=g_probe_reason_count[k].load(std::memory_order_relaxed);
+        if (!total) continue;
+        const auto previous=g_probe_reason_reported[k].exchange(total,std::memory_order_relaxed);
+        if (previous==total && phase[0]!='U') continue;
+        char line[300]{};
+        std::snprintf(line,sizeof(line),
+            "[DSRRL PROBE ROOT SUMMARY] phase=%s failure=%s count=%llu delta=%llu",
+            phase,k_probe_names[k],static_cast<unsigned long long>(total),
+            static_cast<unsigned long long>(total>=previous?total-previous:0u));
+        reshade::log::message(reshade::log::level::info,line);
+    }
+#endif
     const auto created=g_counts[static_cast<std::size_t>(stage::create_stable_ok)].load()+
                        g_counts[static_cast<std::size_t>(stage::create_lerp_ok)].load();
     const auto draws=g_counts[static_cast<std::size_t>(stage::pmetal_prepared_ok)].load();

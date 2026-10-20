@@ -829,8 +829,10 @@ bool snapshot_ready_envspec(
     ID3D11ShaderResourceView *&ptde_a,
     ID3D11ShaderResourceView *&ptde_b,
     ID3D11SamplerState *&sampler_native,
-    bool &needs_cube) noexcept
+    bool &needs_cube,
+    std::uint32_t &reject_stage) noexcept
 {
+    reject_stage = 0u;
     probe_a = 0u;
     probe_b = 0u;
     ptde_a = nullptr;
@@ -839,8 +841,10 @@ bool snapshot_ready_envspec(
     needs_cube = false;
 
     if (stock_a == nullptr ||
-        slot >= k_ptde_slots)
+        slot >= k_ptde_slots) {
+        reject_stage = 1u;
         return false;
+    }
 
     const auto stock_a_key =
         reinterpret_cast<std::uintptr_t>(
@@ -909,19 +913,25 @@ bool snapshot_ready_envspec(
     if (g_device == nullptr ||
         !g_pack_ready ||
         !g_sampler_ready ||
-        g_sampler.handle == 0u)
+        g_sampler.handle == 0u) {
+        reject_stage = g_device == nullptr ? 2u : !g_pack_ready ? 3u : 4u;
         return false;
+    }
 
     if (!resolve_probe_locked(
             stock_a,
-            probe_a))
+            probe_a)) {
+        reject_stage = 5u;
         return false;
+    }
 
     if (probe_b_required) {
         if (!resolve_probe_locked(
                 stock_b,
-                probe_b))
+                probe_b)) {
+            reject_stage = 6u;
             return false;
+        }
     } else {
         probe_b = probe_a;
     }
@@ -929,8 +939,10 @@ bool snapshot_ready_envspec(
     if (probe_a >=
             env::k_legacy_envspec_probe_count ||
         probe_b >=
-            env::k_legacy_envspec_probe_count)
+            env::k_legacy_envspec_probe_count) {
+        reject_stage = 7u;
         return false;
+    }
 
     const auto key_a =
         static_cast<std::uint32_t>(
@@ -949,6 +961,7 @@ bool snapshot_ready_envspec(
     if (found_a == g_ptde_cubes.end() ||
         found_a->second.view.handle == 0u) {
         needs_cube = true;
+        reject_stage = 8u;
         return false;
     }
 
@@ -962,6 +975,7 @@ bool snapshot_ready_envspec(
         if (found_b == g_ptde_cubes.end() ||
             found_b->second.view.handle == 0u) {
             needs_cube = true;
+            reject_stage = 9u;
             return false;
         }
 
@@ -991,6 +1005,7 @@ bool snapshot_ready_envspec(
         ptde_a = nullptr;
         ptde_b = nullptr;
         sampler_native = nullptr;
+        reject_stage = 10u;
         return false;
     }
 
@@ -1458,6 +1473,10 @@ bool envspec_resource_runtime::prepare_bound(
     ID3D11ShaderResourceView *b_native = nullptr;
     ID3D11SamplerState *sampler_native = nullptr;
     bool needs_cube = false;
+    std::uint32_t reject_stage = 0u;
+    std::uint32_t initial_reject_stage = 0u;
+    bool attempted_materialization = false;
+    bool materialized = false;
 
     bool ready =
         snapshot_ready_envspec(
@@ -1470,11 +1489,14 @@ bool envspec_resource_runtime::prepare_bound(
             a_native,
             b_native,
             sampler_native,
-            needs_cube);
+            needs_cube,
+            reject_stage);
+    initial_reject_stage = reject_stage;
 
     if (!ready && needs_cube) {
         resource_view ignored{};
-        bool materialized =
+        attempted_materialization = true;
+        materialized =
             get_ptde_cube(
                 probe_a,
                 slot,
@@ -1503,7 +1525,8 @@ bool envspec_resource_runtime::prepare_bound(
                     a_native,
                     b_native,
                     sampler_native,
-                    needs_cube);
+                    needs_cube,
+                    reject_stage);
         }
     }
 
@@ -1512,6 +1535,11 @@ bool envspec_resource_runtime::prepare_bound(
         b_native == nullptr ||
         sampler_native == nullptr) {
         v230_failopen_diag::hit(v230_failopen_diag::stage::probe_snapshot_reject,0u,probe_b_required?1u:0u,0u,0u,slot,(needs_cube?1u:0u)|(!ready?2u:0u)|(a_native==nullptr?4u:0u)|(b_native==nullptr?8u:0u)|(sampler_native==nullptr?16u:0u));
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+        const auto final_stage = (!materialized && attempted_materialization) ? 11u : reject_stage;
+        v230_failopen_diag::probe_reason(final_stage,initial_reject_stage,
+            slot,probe_b_required,probe_a,probe_b);
+#endif
         if (a_native != nullptr)
             a_native->Release();
         if (b_native != nullptr)

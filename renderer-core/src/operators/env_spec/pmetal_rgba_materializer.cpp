@@ -4634,6 +4634,17 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
+    // The integrated create pipeline calls the stable and Lerp EnvSpec
+    // materializers independently. A correctly materialized HemEnvLerp shader
+    // is not a failed stable HemEnv shader: its separate Lerp consumer owns
+    // this receiver. Do not label this expected family exclusion fail-open.
+    if (mr.result == mr_result::applied &&
+        mr.family ==
+            material_response::diffuse_v1_family::hemenvlerp) {
+        outcome.result =
+            pmetal_rgba_materialize_result::pass_not_candidate;
+        return outcome;
+    }
     if (mr.result !=
             mr_result::applied ||
         mr.family !=

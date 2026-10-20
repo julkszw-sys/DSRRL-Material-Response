@@ -65,6 +65,12 @@ std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+std::atomic<std::uint32_t> g_spec_rgb_root_first{0u};
+std::atomic<std::uint32_t> g_donor_route_first{0u};
+std::atomic<std::uint32_t> g_donor_ceaseless_hit{0u};
+std::atomic<std::uint32_t> g_donor_ceaseless_request_hit{0u};
+#endif
 std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
 std::atomic<std::uint32_t> g_value_cut_log_mask{0u};
@@ -1075,6 +1081,43 @@ bool pmetal_envspec_draw_runtime::prepare(
 
         return false;
     }
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    // Witness the actual consumed donor row, not just the compiled donor list.
+    // Each P_Metal/NONMETAL x Stable/Lerp x RX33-35 is emitted once.
+    if (decision.receiver_id >= 33u && decision.receiver_id <= 35u) {
+        const auto index=(decision.receiver_id-33u)+
+            (family==pmetal_envspec_receiver_family::hemenvlerp?3u:0u)+
+            (material.route_index==345u?6u:0u);
+        const auto bit=1u<<index;
+        if (!(g_donor_route_first.fetch_or(bit,std::memory_order_relaxed)&bit)) {
+            char line[560]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL DONOR SOURCE] rx=%u family=%u route=%u row_a=%u sig_a=%016llx rgb_a=%.7g,%.7g,%.7g row_b=%u sig_b=%016llx rgb_b=%.7g,%.7g,%.7g beta=%.7g",
+                decision.receiver_id,static_cast<unsigned>(family),material.route_index,
+                source.row_id_a,static_cast<unsigned long long>(source.bank_signature_a),
+                source.a[0],source.a[1],source.a[2],source.row_id_b,
+                static_cast<unsigned long long>(source.bank_signature_b),
+                source.b[0],source.b[1],source.b[2],source.beta);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+    constexpr std::uint64_t ceaseless_bank=0xc9b879a8c5e624d0ULL;
+    const auto witness_a=source.bank_signature_a==ceaseless_bank && source.row_id_a==6u;
+    const auto witness_b=source.bank_signature_b==ceaseless_bank && source.row_id_b==6u;
+    if (witness_a || witness_b) {
+        const auto bit=(witness_a?1u:0u)|(witness_b?2u:0u);
+        if ((g_donor_ceaseless_hit.fetch_or(bit,std::memory_order_relaxed)&bit)!=bit) {
+            char line[400]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL CEASELESS ROW6 SOURCE_READY] rx=%u family=%u route=%u a=%u b=%u beta=%.8g rgb_a=%.8g,%.8g,%.8g rgb_b=%.8g,%.8g,%.8g",
+                decision.receiver_id,static_cast<unsigned>(family),material.route_index,
+                witness_a?1u:0u,witness_b?1u:0u,source.beta,
+                source.a[0],source.a[1],source.a[2],
+                source.b[0],source.b[1],source.b[2]);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
     effect_latch(effect_source_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
@@ -1390,6 +1433,30 @@ bool pmetal_envspec_draw_runtime::prepare(
         !prepared.material_resources.spec_rgb) {
         if (shader != nullptr)
             shader->Release();
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+        const auto bucket=(decision.receiver_id>=33u && decision.receiver_id<=35u?
+            decision.receiver_id-33u:3u)+
+            (family==pmetal_envspec_receiver_family::hemenvlerp?4u:0u)+
+            (material.route_index==345u?8u:0u);
+        const auto mask=1u<<bucket;
+        if (!(g_spec_rgb_root_first.fetch_or(mask,std::memory_order_relaxed)&mask)) {
+            // Read only once per exact receiver/family/route. No gate relaxed.
+            const auto probe=material_resources_.probe_exact_specular_companion(context);
+            char line[580]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL SPECRGB ROOT] rx=%u family=%u route=%u slot=%u material_ready=%u spec_request=%u requests=%u shadow_t0_t2=%u owner_tuple_exact=%u actual_mtd_exact=%u material_valid=%u bound_t1=%u logical_known=%u name_allowed=%u companion_ready=%u t1_hash=%016llx",
+                decision.receiver_id,static_cast<unsigned>(family),material.route_index,
+                material.material_slot,material_ready?1u:0u,
+                prepared.material_resources.spec_rgb?1u:0u,
+                prepared.material_resources.request_count,shadow_material_ready?1u:0u,
+                material.owner_tuple_exact?1u:0u,material.actual_material_exact?1u:0u,
+                material.valid?1u:0u,probe.stock_bound?1u:0u,
+                probe.snapshot_resolved?1u:0u,probe.logical_hash_allowed?1u:0u,
+                probe.companion_ready?1u:0u,
+                static_cast<unsigned long long>(probe.logical_hash));
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+#endif
         env_resources_.release(
             prepared.env_resources);
         material_resources_.
@@ -2160,6 +2227,26 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     prepared.ready = true;
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    // Source-ready alone is NOT proof that EnvSpec reached an executable
+    // draw. Witness the same exact row only after all resource/CB gates pass.
+    if ((source.bank_signature_a==0xc9b879a8c5e624d0ULL &&
+         source.row_id_a==6u) ||
+        (source.bank_signature_b==0xc9b879a8c5e624d0ULL &&
+         source.row_id_b==6u)) {
+        const auto first=g_donor_ceaseless_request_hit.fetch_or(
+            1u<<(static_cast<unsigned>(family)),
+            std::memory_order_relaxed);
+        if (!(first&(1u<<static_cast<unsigned>(family)))) {
+            char line[296]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL CEASELESS ROW6 REQUEST_READY] rx=%u family=%u route=%u row_a=%u row_b=%u beta=%.7g",
+                decision.receiver_id,static_cast<unsigned>(family),
+                decision.route_index,source.row_id_a,source.row_id_b,source.beta);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
 

@@ -2913,6 +2913,31 @@ bool observe_draw_identity(
                 mr_identity_line);
         }
     } else {
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+        // Owner/MTD route classification. Do not loosen any MR material gate.
+        static std::atomic<std::uint32_t> seen_mr_reject{0u};
+        if (rx != nullptr && receiver_id >= 33u && receiver_id <= 35u) {
+            const auto index=(receiver_id-33u)+
+                (hemenvlerp_bound?3u:0u)+
+                (out_decision.reason==dsrrl::operators::material_response::decision_reason::ptde_companion_required?6u:0u)+
+                (out_decision.reason==dsrrl::operators::material_response::decision_reason::unknown_material?12u:0u);
+            const auto bit=1u<<index;
+            if (!(seen_mr_reject.fetch_or(bit,std::memory_order_relaxed)&bit)) {
+                char line[448]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL MR ROOT] rx=%u lerp=%u reason=%u material_valid=%u owner_exact=%u actual_mtd_exact=%u slot=%u slot_valid=%u route=%u sem=%016llx owner=%016llx",
+                    receiver_id,hemenvlerp_bound?1u:0u,
+                    static_cast<unsigned>(out_decision.reason),
+                    out_material.valid?1u:0u,out_material.owner_tuple_exact?1u:0u,
+                    out_material.actual_material_exact?1u:0u,
+                    out_material.material_slot,out_material.material_slot_valid?1u:0u,
+                    out_material.route_index,
+                    static_cast<unsigned long long>(out_material.semantic_name_hash),
+                    static_cast<unsigned long long>(out_material.flver_identity_hash));
+                reshade::log::message(reshade::log::level::warning,line);
+            }
+        }
+#endif
         if (rx != nullptr)
             dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::mr_decision_inactive,receiver_id,hemenvlerp_bound?1u:0u,out_decision.route_index,out_material.flver_identity_hash,out_material.material_slot,static_cast<std::uint32_t>(out_decision.reason));
         hot_count(g_mr_fail_open);
@@ -7030,6 +7055,14 @@ bool on_draw(
             hemenvlerp_bound ? 1u : 0u);
 #endif
 
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v230_failopen_diag::hit(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? dsrrl::runtime::v230_failopen_diag::stage::draw_issued
+                : dsrrl::runtime::v230_failopen_diag::stage::draw_transaction_reject,
+            receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,
+            material.flver_identity_hash,material.material_slot,
+            static_cast<std::uint32_t>(dispatch.transaction));
     const bool mr_in_batch =
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
@@ -7449,6 +7482,11 @@ bool on_draw_indexed(
             dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
                 "native_armed",material,decision,prepared.envspec);
 #endif
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v230_failopen_diag::hit(
+                dsrrl::runtime::v230_failopen_diag::stage::native_wrapper_armed,
+                receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,
+                material.flver_identity_hash,material.material_slot);
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade executes exactly one original
@@ -7522,6 +7560,14 @@ bool on_draw_indexed(
             material, decision, hemenvlerp_bound ? 1u : 0u);
 #endif
 
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v230_failopen_diag::hit(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? dsrrl::runtime::v230_failopen_diag::stage::draw_issued
+                : dsrrl::runtime::v230_failopen_diag::stage::draw_transaction_reject,
+            receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,
+            material.flver_identity_hash,material.material_slot,
+            static_cast<std::uint32_t>(dispatch.transaction));
     const bool mr_in_batch =
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
