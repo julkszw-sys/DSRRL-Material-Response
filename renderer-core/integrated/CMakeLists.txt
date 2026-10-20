@@ -177,6 +177,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE
+    "P_Metal stock-EnvDiffuse variant: preserve native DSR EnvDiffuse resources and consumer while retaining the PTDE EnvSpec/SpecRGB/MaterialWorkflow island"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -926,6 +931,26 @@ if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
+endif()
+
+if(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR
+            "Stock DSR EnvDiffuse variant requires the cumulative P_Metal EnvSpec + R19 MaterialWorkflow lineage")
+    endif()
+    if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG OR
+       DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG OR
+       DSRRL_PMETAL_V13_PTDE_PACKEDGI_MATERIAL_MOD_DIAG)
+        message(FATAL_ERROR
+            "Stock DSR EnvDiffuse production candidate cannot be combined with V13 diagnostic lineages")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
