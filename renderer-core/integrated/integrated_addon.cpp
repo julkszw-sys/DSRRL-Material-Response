@@ -7055,6 +7055,14 @@ bool on_draw(
             hemenvlerp_bound ? 1u : 0u);
 #endif
 
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v230_failopen_diag::hit(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? dsrrl::runtime::v230_failopen_diag::stage::draw_issued
+                : dsrrl::runtime::v230_failopen_diag::stage::draw_transaction_reject,
+            receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,
+            material.flver_identity_hash,material.material_slot,
+            static_cast<std::uint32_t>(dispatch.transaction));
     const bool mr_in_batch =
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
@@ -7474,6 +7482,11 @@ bool on_draw_indexed(
             dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
                 "native_armed",material,decision,prepared.envspec);
 #endif
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v230_failopen_diag::hit(
+                dsrrl::runtime::v230_failopen_diag::stage::native_wrapper_armed,
+                receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,
+                material.flver_identity_hash,material.material_slot);
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade executes exactly one original
@@ -7547,6 +7560,14 @@ bool on_draw_indexed(
             material, decision, hemenvlerp_bound ? 1u : 0u);
 #endif
 
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v230_failopen_diag::hit(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? dsrrl::runtime::v230_failopen_diag::stage::draw_issued
+                : dsrrl::runtime::v230_failopen_diag::stage::draw_transaction_reject,
+            receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,
+            material.flver_identity_hash,material.material_slot,
+            static_cast<std::uint32_t>(dispatch.transaction));
     const bool mr_in_batch =
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
