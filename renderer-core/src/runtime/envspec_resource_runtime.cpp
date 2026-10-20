@@ -1537,9 +1537,8 @@ bool envspec_resource_runtime::prepare_bound(
         v230_failopen_diag::hit(v230_failopen_diag::stage::probe_snapshot_reject,0u,probe_b_required?1u:0u,0u,0u,slot,(needs_cube?1u:0u)|(!ready?2u:0u)|(a_native==nullptr?4u:0u)|(b_native==nullptr?8u:0u)|(sampler_native==nullptr?16u:0u));
 #if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
         const auto final_stage = (!materialized && attempted_materialization) ? 11u : reject_stage;
-        v230_failopen_diag::hit(v230_failopen_diag::stage::probe_snapshot_stage,
-            0u,probe_b_required?1u:0u,0u,0u,slot,
-            final_stage | (initial_reject_stage << 8u));
+        v230_failopen_diag::probe_reason(final_stage,initial_reject_stage,
+            slot,probe_b_required,probe_a,probe_b);
 #endif
         if (a_native != nullptr)
             a_native->Release();
