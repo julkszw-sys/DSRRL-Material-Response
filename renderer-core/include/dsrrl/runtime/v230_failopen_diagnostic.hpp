@@ -27,7 +27,7 @@ enum class stage : std::uint8_t {
     probe_invalid_input, probe_null_srv, probe_snapshot_reject,
     probe_sampler_or_srv_missing, probe_native_binding_reject,
     draw_batch_reject, draw_transaction_reject, draw_issued,
-    disabled_by_policy, count
+    native_wrapper_armed, disabled_by_policy, count
 };
 
 struct description { const char *name; const char *layer; bool failure; };
@@ -68,6 +68,7 @@ inline constexpr std::array<description,
     {"draw_batch_reject","DRAW_BATCH",true},
     {"draw_transaction_reject","D3D11_TRANSACTION",true},
     {"draw_issued","D3D11_TRANSACTION",false},
+    {"native_wrapper_armed","D3D11_NATIVE_WRAPPER",false},
     {"disabled_by_policy","POLICY_INTENTIONAL",false},
 }};
 inline constexpr std::size_t k_count = k_descriptions.size();
