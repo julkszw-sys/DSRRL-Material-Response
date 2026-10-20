@@ -942,32 +942,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
-    const bool exact_envdiffuse_source_required =
-        family ==
-            pmetal_envspec_receiver_family::
-                stable_hemenv
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        || family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp
-#endif
-        ;
-
-    if (!k_v13_preserve_stock_envdiffuse &&
-        exact_envdiffuse_source_required &&
-        !source.envdiffuse_linear_valid) {
-        telemetry::hot_count(source_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_source);
-        log_prepare_stage_once(
-            1u << 12u,
-            "envdiffuse_linear_source_reject",
-            material,
-            decision,
-            family);
-        return false;
-    }
+    // EnvDiffuse is an independent operator. Its source availability must
+    // never gate activation of the already-authenticated EnvSpec receiver.
+    // The EnvDiffuse consumer itself retains its own resource/source checks.
     effect_latch(effect_receiver_source_ready_);
 
     auto *context =
