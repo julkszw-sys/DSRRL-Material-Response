@@ -112,9 +112,11 @@ require("next.envdiffuse_linear_valid =\\n        envdiffuse_linear_valid;" in p
         "envdiffuse_ok," in pmetal_source and
         "if (donor_ok && envdiffuse_ok)" not in pmetal_source,
         "EnvSpec publication is still coupled to EnvDiffuse validity")
-require("a.envdiffuse_a == b.envdiffuse_a" not in pmetal_source and
-        "a.envdiffuse_linear_valid ==" not in pmetal_source,
-        "EnvDiffuse changes still invalidate the EnvSpec source cache")
+require("#if !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in pmetal_source and
+        "a.envdiffuse_a == b.envdiffuse_a" in pmetal_source and
+        pmetal_source.index("#if !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)") <
+            pmetal_source.index("a.envdiffuse_a == b.envdiffuse_a"),
+        "EnvDiffuse freshness is not scoped away from the stock EnvSpec source cache")
 require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in pmetal_source and
         "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] EnvDiffuse donor/load path disabled" in pmetal_source,
         "stock mode does not disable the EnvDiffuse donor prerequisite")
