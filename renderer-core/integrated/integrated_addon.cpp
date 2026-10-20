@@ -4680,7 +4680,7 @@ bool on_create_pipeline(
 #endif
             }
 
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
             // Try the stock variant independently: it can remain valid even
             // when the default PTDE EnvDiffuse rewrite fails its own precondition.
             std::vector<std::uint8_t> envspec_stock_payload;
@@ -4766,7 +4766,7 @@ bool on_create_pipeline(
                 ++g_envspec_payload_materialize_fail;
             }
 
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
             // Build the stock variant independently of the default R19
             // EnvDiffuse patch result; both share the downstream SpecRGB fix.
             std::vector<std::uint8_t> envspec_lerp_stock_payload;
