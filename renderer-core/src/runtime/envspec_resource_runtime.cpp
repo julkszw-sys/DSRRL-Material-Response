@@ -1418,6 +1418,26 @@ envspec_resource_runtime::~envspec_resource_runtime()
     unregister_events();
 }
 
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+bool v230_bc1_origin_for_native_view(ID3D11ShaderResourceView *view,v230_bc1_origin_snapshot &out) noexcept
+{
+    out={};
+    if(view==nullptr) return false;
+    ID3D11Resource *resource=nullptr;
+    view->GetResource(&resource);
+    if(resource==nullptr) return false;
+    const auto key=static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(resource));
+    bool found=false;
+    {
+        std::lock_guard<std::mutex> lock(g_v230_bc1_mutex);
+        const auto it=g_v230_bc1.find(key);
+        if(it!=g_v230_bc1.end()) {out=it->second; found=true;}
+    }
+    resource->Release();
+    return found;
+}
+#endif
+
 bool envspec_resource_runtime::register_events() noexcept
 {
     if (g_registered)
