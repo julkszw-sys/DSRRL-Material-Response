@@ -4626,6 +4626,7 @@ bool on_create_pipeline(
                             envspec_payload.data(),
                             envspec_payload.size());
                 if (registered) {
+                    dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::create_stable_ok,envspec.receiver_id);
                     ++g_envspec_payload_materialize_ok;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
                     if (!g_pmetal_full_ptde_create_ok_logged.exchange(
