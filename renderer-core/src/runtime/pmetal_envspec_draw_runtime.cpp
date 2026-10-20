@@ -1111,6 +1111,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_blend);
+        v230_failopen_diag::hit(v230_failopen_diag::stage::pmetal_blend_reject,decision.receiver_id,static_cast<std::uint32_t>(family),decision.route_index,material.flver_identity_hash,material.material_slot);
         return false;
     }
 #endif
@@ -1528,6 +1529,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_device);
+        v230_failopen_diag::hit(v230_failopen_diag::stage::pmetal_device_reject,decision.receiver_id,static_cast<std::uint32_t>(family),decision.route_index,material.flver_identity_hash,material.material_slot);
         return false;
     }
 
@@ -1568,6 +1570,7 @@ bool pmetal_envspec_draw_runtime::prepare(
             effect_fail(
                 effect_fail_mask_,
                 k_effect_fail_device);
+            v230_failopen_diag::hit(v230_failopen_diag::stage::pmetal_device_reject,decision.receiver_id,static_cast<std::uint32_t>(family),decision.route_index,material.flver_identity_hash,material.material_slot,1u);
             return false;
         }
 
