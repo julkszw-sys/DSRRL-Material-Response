@@ -2196,15 +2196,41 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 #endif
+#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    if (stock_envdiffuse_for_draw) {
+        // Read-only witness of the native resources consumed by the stock
+        // EnvDiffuse instructions. These references are never rebound.
+        context->PSGetShaderResources(
+            11u, 1u, &prepared.native_dsr_envdiffuse_a);
+        if (family ==
+            pmetal_envspec_receiver_family::hemenvlerp)
+            context->PSGetShaderResources(
+                13u, 1u, &prepared.native_dsr_envdiffuse_b);
+    }
+#endif
     prepared.ready = true;
 #if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if (stock_envdiffuse_for_draw &&
         !g_stock_dsr_envdiffuse_logged.exchange(
             true,
             std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] mode=stock_consumer_and_resources family=%u rx=%u route=%u t11=%016llx t13=%016llx envspec=t12_t14=ptde fail_open=stock",
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    prepared.native_dsr_envdiffuse_a)),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    prepared.native_dsr_envdiffuse_b)));
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] mode=stock_consumer_and_resources t11_t13=untouched envspec=t12_t14=ptde exact_pmetal=ON fail_open=stock");
+            line);
     }
 #endif
     effect_latch(effect_request_ready_);
