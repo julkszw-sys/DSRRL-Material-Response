@@ -8229,6 +8229,7 @@ void AddonUninit(
     }
 
     unregister_events();
+    dsrrl::runtime::v230_failopen_diag::report("UNLOAD");
     dsrrl::runtime::qpc_bisect::report();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
