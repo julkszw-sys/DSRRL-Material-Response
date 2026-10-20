@@ -1108,12 +1108,14 @@ bool pmetal_envspec_draw_runtime::prepare(
 
         return false;
     }
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     if (!source.envdiffuse_linear_valid &&
         exact_pmetal_material(material) &&
         exact_pmetal_decision(decision)) {
         stock_envdiffuse_for_draw = true;
         preserve_stock_envdiffuse = true;
     }
+#endif
     effect_latch(effect_source_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
