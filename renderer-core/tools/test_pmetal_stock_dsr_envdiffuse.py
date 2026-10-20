@@ -131,7 +131,7 @@ require("register_lerp_nonmetal_r8_candidate(" in integrated and
         "nonmetal R8 no longer uses the default EnvDiffuse payload")
 
 r8_candidate_start = lerp.index("bool materialize_nonmetal_lerp_r8_spec_linear_candidate(")
-r8_candidate_end = lerp.index("\\n#undef DSRRL_V346_FAIL", r8_candidate_start)
+r8_candidate_end = lerp.index("\n#undef DSRRL_V346_FAIL", r8_candidate_start)
 r8_candidate = lerp[r8_candidate_start:r8_candidate_end]
 require("preserve_stock_envdiffuse" not in r8_candidate and
         "129u - k_ptde_envdiffuse_lerp_prefix_words" in r8_candidate,
