@@ -6723,6 +6723,8 @@ bool on_draw(
                 decision);
 
     if (!draw_identity_ready) {
+        if (route_candidates != 0u)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_identity_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,route_candidates);
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
@@ -7259,6 +7261,8 @@ bool on_draw_indexed(
                 decision);
 
     if (!draw_identity_ready) {
+        if (route_candidates != 0u)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_identity_reject,receiver_id,hemenvlerp_bound?1u:0u,decision.route_index,material.flver_identity_hash,material.material_slot,route_candidates);
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
