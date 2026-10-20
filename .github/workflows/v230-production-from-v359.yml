@@ -45,7 +45,7 @@ jobs:
           $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
           if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE output' }
           $raw=[Text.Encoding]::ASCII.GetString($bytes)
-          foreach($marker in @('2.3.0','v230_production','[DSRRL V230 STOCK DSR ENVDIFFUSE]','[DSRRL PROBE ROOT]','[DSRRL SPECRGB ROOT]','[DSRRL DONOR ROUTE]','[DSRRL MR ROOT]'')) {
+          foreach($marker in @('2.3.0','v230_production','[DSRRL V230 STOCK DSR ENVDIFFUSE]','[DSRRL PROBE ROOT]','[DSRRL SPECRGB ROOT]','[DSRRL DONOR ROUTE]','[DSRRL MR ROOT]')) {
             if (!$raw.Contains($marker)) { throw "Missing identity $marker" }
           }
           foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]')) {
