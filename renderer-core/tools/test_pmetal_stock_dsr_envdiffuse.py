@@ -121,10 +121,10 @@ require("envspec_source_finite &&" in v351_materializer and
 # still derived from the default PTDE-EnvDiffuse Lerp payload.
 require("envspec_stock_payload" in integrated and
         "envspec_stock_payload.size()," in integrated and
-        "envspec_stock_payload.size(),\n                            true" in integrated,
+        "envspec_stock_payload.size(),\n                        true" in integrated,
         "stable stock variant is not separately materialized/registered")
 require("envspec_lerp_stock_payload" in integrated and
-        "envspec_lerp_stock_payload.size(),\n                            true" in integrated,
+        "envspec_lerp_stock_payload.size(),\n                        true" in integrated,
         "Lerp stock variant is not separately materialized/registered")
 require("register_lerp_nonmetal_r8_candidate(" in integrated and
         "envspec_lerp_payload.data()" in integrated,
