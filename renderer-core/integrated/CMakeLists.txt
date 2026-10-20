@@ -4,6 +4,17 @@ project(DSRRLCoreIslands LANGUAGES CXX ASM_MASM)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_LIST_DIR}/../tools/audit_stock_dsr_envdiffuse_variant.py"
+    RESULT_VARIABLE DSRRL_STOCK_DSR_ENVDIFFUSE_AUDIT_RESULT
+    OUTPUT_VARIABLE DSRRL_STOCK_DSR_ENVDIFFUSE_AUDIT_OUTPUT
+    ERROR_VARIABLE DSRRL_STOCK_DSR_ENVDIFFUSE_AUDIT_ERROR)
+if(NOT DSRRL_STOCK_DSR_ENVDIFFUSE_AUDIT_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "Stock DSR EnvDiffuse source audit failed: ${DSRRL_STOCK_DSR_ENVDIFFUSE_AUDIT_OUTPUT}${DSRRL_STOCK_DSR_ENVDIFFUSE_AUDIT_ERROR}")
+endif()
+
 if(NOT WIN32)
     message(FATAL_ERROR "DSRRL Core+Islands addon is Windows-only.")
 endif()
