@@ -113,7 +113,7 @@ void v230_trace_missing_source(
         ? v214_resource_provenance::instance().snapshot(
             reinterpret_cast<std::uintptr_t>(dev),
             reinterpret_cast<std::uintptr_t>(resource),named,name_size)
-        : v214_resource_provenance::status::missing;
+        : v214_resource_provenance::status::absent;
     char source_name[96]{};
     if(name_state==v214_resource_provenance::status::exact) {
         const auto n=std::min<std::size_t>(name_size,sizeof(source_name)-1u);
