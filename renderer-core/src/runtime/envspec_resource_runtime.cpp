@@ -269,7 +269,7 @@ bool load_envdiffuse_pack(
 {
     out.clear();
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     return false;
 #else
     try {
@@ -619,7 +619,7 @@ void on_init_device(
             "DSRRL EnvSpec: PTDE sampler creation failed; EnvSpec fails open to stock DSR.");
     }
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     if (!envdiffuse_pack_ready) {
         reshade::log::message(
             reshade::log::level::warning,
@@ -1184,7 +1184,7 @@ bool get_ptde_envdiffuse_cube(
 {
     view = {};
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     (void)probe;
     return false;
 #else
@@ -1684,7 +1684,7 @@ bool envspec_resource_runtime::prepare_envdiffuse(
 {
     prepared = {};
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     (void)probe_a;
     (void)probe_b;
     (void)probe_b_required;
