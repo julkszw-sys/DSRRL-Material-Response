@@ -1499,11 +1499,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         carrier3 = {{0.0f,0.0f,0.0f}};
 #endif
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const std::array<f4,6> payload{{
-#else
-    const std::array<f4,4> payload{{
-#endif
         {
             decision.c101,
             decision.c101,
@@ -1535,27 +1531,26 @@ bool pmetal_envspec_draw_runtime::prepare(
             carrier3[1],
             carrier3[2],
             source.beta
-        }
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-        ,
+        },
         {
-            source.envdiffuse_a[0],
-            source.envdiffuse_a[1],
-            source.envdiffuse_a[2],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_a[0],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_a[1],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_a[2],
             0.0f
         },
         {
-            source.envdiffuse_b[0],
-            source.envdiffuse_b[1],
-            source.envdiffuse_b[2],
-            source.beta
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_b[0],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_b[1],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_b[2],
+            preserve_stock_envdiffuse ? 0.0f : source.beta
         }
-#endif
     }};
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     static_assert(sizeof(payload) == 96u);
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    const std::uint32_t payload_bytes =
+        preserve_stock_envdiffuse ? 64u : 96u;
 #else
-    static_assert(sizeof(payload) == 64u);
+    const std::uint32_t payload_bytes = 64u;
 #endif
 
     ID3D11Device *device = nullptr;
@@ -1576,23 +1571,18 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     std::array<std::uint32_t,24> payload_bits{};
-#else
-    std::array<std::uint32_t,16> payload_bits{};
-#endif
-    static_assert(
-        sizeof(payload_bits) == sizeof(payload));
     std::memcpy(
         payload_bits.data(),
         payload.data(),
-        sizeof(payload));
+        payload_bytes);
 
     ID3D11Buffer *b12 = nullptr;
     bool upload_required = true;
-    const auto b12_key =
-        reinterpret_cast<std::uintptr_t>(
-            context);
+    const b12_context_key b12_key{
+        reinterpret_cast<std::uintptr_t>(context),
+        payload_bytes
+    };
 
     {
         std::lock_guard<std::mutex> lock(
@@ -1620,29 +1610,25 @@ bool pmetal_envspec_draw_runtime::prepare(
             b12_by_context_.find(
                 b12_key);
 
-        if (found !=
-                b12_by_context_.end() &&
-            found->second.buffer != nullptr) {
-            b12 =
-                found->second.buffer;
+        if (found != b12_by_context_.end() &&
+            found->second.buffer != nullptr &&
+            found->second.payload_bytes == payload_bytes) {
+            b12 = found->second.buffer;
             b12->AddRef();
             upload_required =
                 !found->second.payload_valid ||
-                found->second.payload_bits !=
-                    payload_bits;
+                !std::equal(
+                    payload_bits.begin(),
+                    payload_bits.begin() +
+                        static_cast<std::ptrdiff_t>(
+                            payload_bytes / sizeof(std::uint32_t)),
+                    found->second.payload_bits.begin());
         } else {
             D3D11_BUFFER_DESC desc{};
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-            desc.ByteWidth = 96u;
-#else
-            desc.ByteWidth = 64u;
-#endif
-            desc.Usage =
-                D3D11_USAGE_DYNAMIC;
-            desc.BindFlags =
-                D3D11_BIND_CONSTANT_BUFFER;
-            desc.CPUAccessFlags =
-                D3D11_CPU_ACCESS_WRITE;
+            desc.ByteWidth = payload_bytes;
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
             if (FAILED(
                     device_->CreateBuffer(
@@ -1668,7 +1654,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 
             b12_context_cache entry{};
             entry.buffer = b12;
-            b12_by_context_.emplace(
+            entry.payload_bytes = payload_bytes;
+            b12_by_context_.insert_or_assign(
                 b12_key,
                 entry);
             b12->AddRef();
@@ -1706,7 +1693,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::memcpy(
             mapped.pData,
             payload.data(),
-            sizeof(payload));
+            payload_bytes);
 
         context->Unmap(
             b12,
@@ -1723,6 +1710,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                 found->second.buffer == b12) {
                 found->second.payload_bits =
                     payload_bits;
+                found->second.payload_bytes =
+                    payload_bytes;
                 found->second.payload_valid = true;
             }
         }
