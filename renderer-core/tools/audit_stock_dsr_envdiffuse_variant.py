@@ -21,22 +21,22 @@ require(MATERIALIZER.startswith('#include "dsrrl/runtime/pmetal_stock_dsr_envdif
 require(INTEGRATED.startswith('#include "dsrrl/runtime/pmetal_stock_dsr_envdiffuse_variant.hpp"'),
         "integrated addon TU must include variant policy before logging gates")
 
-require("#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\nconstexpr char k_ptde_envdiffuse_donor_relative_path[]" in RUNTIME,
+require("#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\nconstexpr char k_ptde_envdiffuse_donor_relative_path[]" in RUNTIME,
         "EnvDiffuse donor loader must be compiled out in stock mode")
 install = RUNTIME.index("if (!load_exact_envdiffuse_donor())")
 install_prefix = RUNTIME[max(0, install - 180):install]
 require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in install_prefix,
         "install must not require the EnvDiffuse donor in stock mode")
 
-require(RUNTIME.count("#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    // Stock-EnvDiffuse mode is independent of the host EnvDiffuse payload.") == 2,
+require(RUNTIME.count("#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    // Stock-EnvDiffuse mode is independent of the host EnvDiffuse payload.") == 2,
         "single and blend packers must not validate/capture EnvDiffuse for EnvSpec publication")
-require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    next.envdiffuse_linear_valid = false;" in RUNTIME,
+require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    next.envdiffuse_linear_valid = false;" in RUNTIME,
         "stock mode must not advertise a valid PTDE EnvDiffuse carrier")
 
-marker = "#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    // Explicit stock-host mode:"
+marker = "#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    // Explicit stock-host mode:"
 require(marker in MATERIALIZER, "materializer stock mode branch must exist")
 start = MATERIALIZER.index(marker)
-end = MATERIALIZER.index("#else\\n    // Legacy diagnostic-only translation", start)
+end = MATERIALIZER.index("#else\n    // Legacy diagnostic-only translation", start)
 stock_body = MATERIALIZER[start:end]
 require("apply_exact_ptde_envdiffuse_consumer" not in stock_body,
         "stock mode must not apply exact PTDE EnvDiffuse")
