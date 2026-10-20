@@ -194,9 +194,7 @@ def patch_header(src: str) -> str:
 
 
 def patch_draw(src: str) -> str:
-    src=replace_once(src,
-        '    const bool env_resource_ready =\n',
-        '    bool env_resource_ready =\n', "resource readiness const")
+    # V354 has already made env_resource_ready mutable for a guarded source resnapshot.
     anchor='    if (!env_resource_ready) {\n'
     addition=(
         f'#if defined({FLAG})\n'
