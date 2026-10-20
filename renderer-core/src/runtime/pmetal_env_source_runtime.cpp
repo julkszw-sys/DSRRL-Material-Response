@@ -2881,14 +2881,11 @@ void pmetal_env_source_selector_event(
         };
         next.envdiffuse_linear_valid = true;
     } else {
-#if !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+        // EnvDiffuse endpoint decode is independent. Keep publishing the
+        // authenticated EnvSpec source; the draw runtime selects the exact
+        // stock-DSR-EnvDiffuse shader variant when this carrier is invalid.
         telemetry::hot_count(g_decode_fail);
-        return;
-#else
-        // P_Metal's stock variant needs only the EnvSpec source. Draws that
-        // still require PTDE EnvDiffuse will fail-open on this validity bit.
         next.envdiffuse_linear_valid = false;
-#endif
     }
 #endif
 
