@@ -1866,6 +1866,14 @@ bool same_hook_source_payload(
     return
         a.a == b.a &&
         a.b == b.b &&
+#if !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+        // The PTDE EnvDiffuse variant has its own payload freshness. The
+        // stock variant deliberately excludes this independent operator.
+        a.envdiffuse_a == b.envdiffuse_a &&
+        a.envdiffuse_b == b.envdiffuse_b &&
+        a.envdiffuse_linear_valid ==
+            b.envdiffuse_linear_valid &&
+#endif
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
