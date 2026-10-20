@@ -1,10 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(DSRRLRendererCoreV1 LANGUAGES CXX)
 
-option(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE
-    "Keep the stock DSR EnvDiffuse operator while retaining the isolated P_Metal EnvSpec bridge"
-    OFF)
-
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_package(Threads REQUIRED)
 
@@ -297,13 +293,6 @@ target_include_directories(dsrrl_renderer_core PUBLIC
     ${DSRRL_GENERATED_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(dsrrl_renderer_core PUBLIC cxx_std_17)
-
-if(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    target_compile_definitions(
-        dsrrl_renderer_core
-        PRIVATE
-        DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-endif()
 
 add_executable(dsrrl_renderer_material_owner_tests tests/material_owner_producer_tests.cpp)
 add_executable(dsrrl_renderer_material_owner_selection_tests
