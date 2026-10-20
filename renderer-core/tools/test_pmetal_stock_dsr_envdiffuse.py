@@ -13,6 +13,7 @@ def require(condition: bool, message: str) -> None:
 
 
 cmake = read("integrated/CMakeLists.txt")
+physical_cut_generator = read("tools/generate_runtime_v2_physical_cut.py")
 stable = read("src/operators/env_spec/pmetal_rgba_materializer.cpp")
 stable_header = read("include/dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp")
 lerp = read("src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp")
@@ -43,6 +44,9 @@ require("if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)\n    find_package(Python3 COMPONENT
         "set(V286_HEADER" in cmake and
         "target_include_directories(dsrrl_renderer_core_integrated PRIVATE\n    \"${CMAKE_CURRENT_BINARY_DIR}/generated\")" in cmake,
         "V315 shared whitelist generation/include path is still nested under V285")
+require("        (g_hot_telemetry_enabled &&\\n         (present % 300u) == 0u)) {" in physical_cut_generator and
+        "            (g_hot_telemetry_enabled &&\\n             (present % 300u) == 0u)) {" not in physical_cut_generator,
+        "physical-cut generator Present anchor is stale")
 
 # The default PTDE payload remains part of the cumulative source lineage, but
 # this candidate disables nonmetal alias routing. Only exact P_Metal may select
