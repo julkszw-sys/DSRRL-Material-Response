@@ -1,7 +1,7 @@
-name: V230 Demon Ruins Upper EnvSpec 170 + stock DSR EnvDiffuse addon
+name: V230 EnvSpec170 Fail-Open Diagnostics single addon
 on:
   push:
-    branches: [release/v2.3.0-v359-prep, agent/v230-stock-dsr-envdiffuse-isolated-20261020, agent/v230-demon-ruins-upper-envspec-170-20261020]
+    branches: [release/v2.3.0-v359-prep, agent/v230-stock-dsr-envdiffuse-isolated-20261020, agent/v230-demon-ruins-upper-envspec-170-20261020, agent/v230-envspec170-failopen-diagnostics-20261020]
   workflow_dispatch:
 permissions:
   contents: read
@@ -53,6 +53,6 @@ jobs:
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v2.3.0-STOCK-ENVDIFFUSE-DEMON-RUINS-UPPER-ENVSPEC170
+          name: DSRRL-v2.3.0-ENVSPEC170-FAILOPEN-DIAGNOSTICS
           path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
           if-no-files-found: error
