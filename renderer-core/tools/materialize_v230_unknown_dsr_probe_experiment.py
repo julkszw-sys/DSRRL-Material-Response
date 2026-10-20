@@ -53,10 +53,7 @@ def patch_cpp(src: str) -> str:
         '        g_v230_unknown_native_resources.clear();\n'
         '        g_v230_unknown_native_views.clear();\n'
         '#endif', "device cleanup")
-    anchor = ('    if (!probe.has_value()) {\n'
-              '        ++g_native_hash_miss;\n'
-              '        return;\n'
-              '    }')
+    anchor = '    if (!probe.has_value()) {'
     src = replace_once(src, anchor, (
         '    if (!probe.has_value()) {\n'
         f'#if defined({FLAG})\n'
@@ -71,9 +68,7 @@ def patch_cpp(src: str) -> str:
         '                g_v230_unknown_native_resources.insert(resource_handle.handle);\n'
         '        }\n'
         '#endif\n'
-        '        ++g_native_hash_miss;\n'
-        '        return;\n'
-        '    }'), "unknown DSR SHA registry")
+        '        // Existing V357/V358 unknown-resource forensics and fail-open continue below.\n'), "unknown DSR SHA registry")
     anchor = ('    g_native_resources.erase(\n'
               '        resource_handle.handle);\n')
     src = replace_once(src, anchor, anchor+(
