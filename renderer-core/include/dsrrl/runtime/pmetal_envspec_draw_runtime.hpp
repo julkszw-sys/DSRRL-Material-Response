@@ -170,11 +170,8 @@ private:
 
     struct b12_context_cache {
         ID3D11Buffer *buffer = nullptr;
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
         std::array<std::uint32_t,24> payload_bits{};
-#else
-        std::array<std::uint32_t,16> payload_bits{};
-#endif
+        std::uint32_t payload_bytes = 0u;
         bool payload_valid = false;
     };
 
@@ -192,8 +189,12 @@ private:
     ID3D11SamplerState *shadow_sampler_ = nullptr;
     std::unordered_map<std::uint32_t,replacement_record>
         replacements_;
+    std::unordered_map<std::uint32_t,replacement_record>
+        stock_envdiffuse_replacements_;
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_replacements_;
+    std::unordered_map<std::uint32_t,ID3D11PixelShader *>
+        stock_envdiffuse_lerp_replacements_;
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_nonmetal_r8_replacements_;
@@ -202,6 +203,10 @@ private:
         lerp_replacement_sha256_;
     std::unordered_map<std::uint32_t,std::size_t>
         lerp_replacement_size_;
+    std::unordered_map<std::uint32_t,core::sha256_digest>
+        stock_envdiffuse_lerp_replacement_sha256_;
+    std::unordered_map<std::uint32_t,std::size_t>
+        stock_envdiffuse_lerp_replacement_size_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
 
