@@ -18,6 +18,7 @@ lerp = read("src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp")
 runtime = read("src/runtime/pmetal_envspec_draw_runtime.cpp")
 header = read("include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp")
 builder = read("tools/build_v359_stock_dsr_envdiffuse.ps1")
+base_builder = read("tools/build_v350_gpu_resident_pointlight_off_rc2.ps1")
 workflow = read("../.github/workflows/v359-stock-dsr-envdiffuse.yml")
 contract = read("docs/PMETAL_STOCK_DSR_ENVDIFFUSE_CONTRACT.md")
 
@@ -91,8 +92,10 @@ require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=ON" in builder,
 require("DSRRL_V359_STOCK_DSR_ENVDIFFUSE.addon64" in builder and
         "DSRRL PMETAL STOCK DSR ENVDIFFUSE" in builder,
         "builder output identity/marker is missing")
-require("Expected exactly one addon" in builder,
-        "builder does not enforce a single addon")
+require("Expected exactly one addon" in base_builder,
+        "inherited base builder does not enforce a single addon")
+require("out-v359-stock-dsr-envdiffuse" in builder,
+        "stock builder does not select its isolated output directory")
 require("build_v359_stock_dsr_envdiffuse.ps1" in workflow and
         "actions/upload-artifact@v4" in workflow,
         "workflow does not build and publish the integrated addon")
