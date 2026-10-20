@@ -1621,6 +1621,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 effect_fail(
                     effect_fail_mask_,
                     k_effect_fail_b12);
+                v230_failopen_diag::hit(v230_failopen_diag::stage::pmetal_cb_create_reject,decision.receiver_id,static_cast<std::uint32_t>(family),decision.route_index,material.flver_identity_hash,material.material_slot);
                 return false;
             }
 
