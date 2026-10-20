@@ -701,8 +701,12 @@ void v230_capture_bc1_origin(
             }
         }
     }
-    std::lock_guard<std::mutex> lock(g_v230_bc1_mutex);
-    g_v230_bc1[handle.handle]=snapshot;
+    try {
+        std::lock_guard<std::mutex> lock(g_v230_bc1_mutex);
+        g_v230_bc1[handle.handle]=snapshot;
+    } catch (...) {
+        // Diagnostic resource census is always fail-open, never fatal.
+    }
 }
 #endif
 
