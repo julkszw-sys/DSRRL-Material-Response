@@ -11,6 +11,7 @@
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
 #endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/v230_failopen_diagnostic.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #if defined(DSRRL_V336_WANDERER_SRV_AUDIT)
 #include "dsrrl/runtime/v336_wanderer_srv_witness.hpp"
@@ -75,6 +76,25 @@ void log_prepare_stage_once(
     const mr::decision &decision,
     pmetal_envspec_receiver_family family) noexcept
 {
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    using S = v230_failopen_diag::stage;
+    S reason = S::pmetal_candidate_reject;
+    if (std::strcmp(stage,"request_ready")==0) reason=S::pmetal_prepared_ok;
+    else if (std::strcmp(stage,"feature_reject")==0) reason=S::pmetal_feature_disabled;
+    else if (std::strcmp(stage,"lerp_feature_reject")==0) reason=S::pmetal_lerp_feature_disabled;
+    else if (std::strcmp(stage,"semantic_reject")==0) reason=S::pmetal_semantic_reject;
+    else if (std::strcmp(stage,"source_reject")==0) reason=S::pmetal_source_reject;
+    else if (std::strcmp(stage,"blend_hold")==0 || std::strcmp(stage,"full_ptde_stable_only_hold")==0) reason=S::pmetal_blend_reject;
+    else if (std::strcmp(stage,"context_reject")==0) reason=S::pmetal_context_reject;
+    else if (std::strcmp(stage,"replacement_reject")==0) reason=S::pmetal_shader_missing;
+    else if (std::strcmp(stage,"probe_reject")==0) reason=S::pmetal_probe_reject;
+    else if (std::strcmp(stage,"spec_rgb_reject")==0 || std::strcmp(stage,"spec_rgb_filter_reject")==0) reason=S::pmetal_spec_rgb_reject;
+    else if (std::strcmp(stage,"shadow_s7_reject")==0) reason=S::pmetal_shadow_reject;
+    else if (std::strcmp(stage,"mutation_reject")==0) reason=S::pmetal_transaction_reject;
+    else if (std::strcmp(stage,"native_envdiffuse_reject")==0 || std::strcmp(stage,"ptde_envdiffuse_resource_reject")==0) reason=S::pmetal_probe_reject;
+    v230_failopen_diag::hit(reason,decision.receiver_id,static_cast<std::uint32_t>(family),
+        decision.route_index,material.flver_identity_hash,material.material_slot);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     if (material.route_index != 345u) {
         // Previous global stage bit masked Lerp family1 after Stable family0
