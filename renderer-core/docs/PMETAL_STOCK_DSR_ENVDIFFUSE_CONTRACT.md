@@ -8,7 +8,7 @@ This candidate is derived from the pinned V359-RC1 source lineage and preserves 
 
 For exact P_Metal routing only (route 345, verified P_Metal MTD identity, receivers 33–35):
 
-- **EnvDiffuse:** retain the stock DSR shader instructions and currently bound native DSR resources/samplers at t11/t13. Do not load or bind PTDE EnvDiffuse sidecar resources, do not transport PTDE EnvDiffuse endpoints through b12[3..5], and do not claim EnvDiffuse resource/CB ownership in the draw transaction.
+- **EnvDiffuse:** retain the stock DSR shader instructions and currently bound native DSR resources/samplers at t11/t13. Do not load the PTDE EnvDiffuse LightBank donor, prepare/bind PTDE EnvDiffuse sidecar resources, transport PTDE EnvDiffuse endpoints through b12[3..5], or claim EnvDiffuse resource/CB ownership in the draw transaction. The source bridge still publishes the independent PTDE EnvSpec endpoints with `envdiffuse_linear_valid=false`.
 - **EnvSpec:** retain the existing PTDE EnvSpec sidecar at t12/t14 and its existing materializer path.
 - **Material Response / SpecRGB:** retain exact material/owner gates and the existing P_Metal material response path.
 - **HemEnvLerp:** retain the R19 MaterialWorkflow and terminal-SAT path while preserving the original stock EnvDiffuse block byte-for-byte; b12 remains 64 bytes rather than being extended solely for EnvDiffuse endpoints.
