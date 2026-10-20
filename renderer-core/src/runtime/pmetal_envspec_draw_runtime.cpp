@@ -1117,28 +1117,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_source_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-#if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    // Stable-only lineage: HemEnvLerp must fail open until either the complete
-    // two-endpoint PTDE EnvDiffuse island or the explicit stock-DSR variant is compiled in.
-    if (family !=
-            pmetal_envspec_receiver_family::
-                stable_hemenv) {
-        telemetry::hot_count(
-            blended_receiver_hold_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_blend);
-        log_prepare_stage_once(
-            1u << 5u,
-            "full_ptde_stable_only_hold",
-            material,
-            decision,
-            family);
-        return false;
-    }
-#else
-    // R19 admits only the two exact P_Metal receiver families. Unknown
-    // families still fail open rather than inheriting the Lerp bridge.
+    // Both exact receiver families have independent PTDE-EnvDiffuse and
+    // stock-DSR-EnvDiffuse payloads. EnvDiffuse feature availability does not
+    // gate EnvSpec receiver admission; unknown families still fail open.
     if (family !=
             pmetal_envspec_receiver_family::
                 stable_hemenv &&
@@ -1152,7 +1133,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             k_effect_fail_blend);
         return false;
     }
-#endif
 #endif
 
     if (family ==
