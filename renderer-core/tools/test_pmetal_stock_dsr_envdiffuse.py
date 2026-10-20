@@ -115,7 +115,7 @@ require("build_v359_stock_dsr_envdiffuse.ps1" in workflow and
         "actions/upload-artifact@v4" in workflow,
         "workflow does not build and publish the integrated addon")
 require("shared R5 normal basis" in contract and
-        "pixel equivalence remains OPEN" in contract,
+        "Pixel equivalence remains OPEN" in contract,
         "contract must state the shared-input and pixel-validation limits")
 
 print("PMETAL_STOCK_DSR_ENVDIFFUSE_CONTRACT_PASS")
