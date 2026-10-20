@@ -491,6 +491,7 @@ add_custom_command(
         "${DSRRL_RENDERER_CORE_ROOT}/tools/generate_pmetal_env_source_authority.py"
         "${DSRRL_RENDERER_CORE_ROOT}/provenance/mr145/SOURCE_V13_PTDE_DONOR.cpp"
         "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/pmetal_env_source_layout_v1.tsv"
+        "${DSRRL_RENDERER_CORE_ROOT}/data/provenance/user_envspec_intensity_overrides_v355.tsv"
     VERBATIM)
 
 add_custom_target(
