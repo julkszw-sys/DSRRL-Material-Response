@@ -20,7 +20,7 @@ At the EnvDiffuse semantic cut, the candidate leaves the DSR t11/t13 resource an
 
 ## Important scope limit
 
-“Stock DSR EnvDiffuse” here means **stock DSR EnvDiffuse consumer instructions and t11/t13 resources at the operator cut**, not a claim that the final EnvDiffuse pixel is bit-identical to unmodified vanilla DSR. The existing R5 normal-basis bridge is a shared input used by environment consumers, and existing R3/R11 changes remain downstream. They are intentionally preserved so this candidate changes only the EnvDiffuse carrier/consumer rewrite; separating the shared normal basis would require a separately verified operator split.
+“Stock DSR EnvDiffuse” here means **stock DSR EnvDiffuse consumer instructions and t11/t13 resources at the operator cut**, not a claim that the final EnvDiffuse pixel is bit-identical to unmodified vanilla DSR. The shared R5 normal basis bridge is an input used by environment consumers, and existing R3/R11 changes remain downstream. They are intentionally preserved so this candidate changes only the EnvDiffuse carrier/consumer rewrite; separating the shared normal basis would require a separately verified operator split.
 
 ## Validation status
 
