@@ -47,8 +47,7 @@ def patch_cpp(src: str) -> str:
         'std::unordered_map<std::uint64_t,std::uint64_t> g_v230_unknown_native_views;\n'
         '#endif\n')
     src = replace_once(src, anchor, anchor+insert, "resource registries")
-    anchor = ('        g_native_resources.clear();\n'
-              '        g_resource_by_view.clear();')
+    anchor = '        g_resource_by_view.clear();'
     src = replace_once(src, anchor,
         anchor+f'\n#if defined({FLAG})\n'
         '        g_v230_unknown_native_resources.clear();\n'
