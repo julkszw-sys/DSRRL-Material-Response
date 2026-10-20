@@ -1,3 +1,4 @@
+#include "dsrrl/runtime/pmetal_stock_dsr_envdiffuse_variant.hpp"
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
 
 #include "dsrrl/operators/env_spec/pmetal_rgba_authority.hpp"
