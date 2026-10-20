@@ -18,7 +18,7 @@ The runtime selects the stock payload only after the exact P_Metal material and 
 - **Material Response / SpecRGB / MaterialWorkflow / terminal SAT:** preserve the existing exact material/owner gates and cumulative operator islands.
 - **Other operators:** keep R3/R5/R6/R7/R11 and the existing independent PointLight, Upper/Lower, Subsurface and atmosphere/fog behavior unchanged. No global renderer rollback is introduced.
 
-The stock P_Metal path may consume a valid EnvSpec source even when the PTDE EnvDiffuse endpoint is unavailable; EnvDiffuse donor validity is not a prerequisite for the stock consumer variant. Lerp remains guarded by exact receiver identity, feature gates, source/probe validity, and registered replacement availability. Missing or mismatched state fails open. Non-P_Metal alias routes are disabled in this candidate rather than being granted a broad exception.
+The stock P_Metal path consumes only the authenticated EnvSpec source. In this build, the PTDE EnvDiffuse donor is not loaded, the EnvDiffuse linear carrier is explicitly invalid, and neither hook publication nor selector publication waits for EnvDiffuse endpoint decode. EnvSpec source-cache identity excludes EnvDiffuse fields in stock mode, so an unrelated EnvDiffuse change cannot invalidate the EnvSpec carrier. Lerp remains guarded by exact receiver identity, feature gates, EnvSpec source/probe validity, and registered replacement availability. Missing or mismatched EnvSpec state fails open. Non-P_Metal alias routes are disabled in this candidate rather than being granted a broad exception.
 
 ## Pipeline and remaining semantic limit
 
