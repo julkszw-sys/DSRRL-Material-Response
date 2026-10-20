@@ -53,7 +53,7 @@ struct f4 {
     float w = 0.0f;
 };
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool inverse_envdiffuse_endpoint(
     const float *src,
     f4 &out) noexcept
@@ -104,7 +104,7 @@ bool capture_linear_envdiffuse(
             host_out + 8,
             b);
 }
-#else
+#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
 constexpr char k_ptde_envdiffuse_donor_relative_path[] =
     "DSRRL\\EnvSpec\\PackedGI\\PMETAL_PTDE_ENVDIFFUSE_DONOR_V1.bin";
 constexpr std::uint64_t k_ptde_envdiffuse_donor_size = 15296ull;
