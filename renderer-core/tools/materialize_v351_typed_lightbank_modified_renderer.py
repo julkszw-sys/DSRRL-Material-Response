@@ -73,6 +73,13 @@ modified='''#if defined(DSRRL_V351_TYPED_DSR_ONLY_OPERATOR)
         // the existing MODIFIED PTDE shader/CB/sidecar composition.
         // The provenance type is not an operator-disable decision.
         const bool typed_source_valid =
+#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+            // EnvSpec still needs the exact PTDE endpoints and beta, but the
+            // stock-EnvDiffuse variant must not depend on EnvDiffuse donors.
+            std::isfinite(source.a[0]) && std::isfinite(source.a[1]) &&
+            std::isfinite(source.a[2]) && std::isfinite(source.b[0]) &&
+            std::isfinite(source.b[1]) && std::isfinite(source.b[2]);
+#else
             source.envdiffuse_linear_valid &&
             std::isfinite(source.a[0]) && std::isfinite(source.a[1]) &&
             std::isfinite(source.a[2]) && std::isfinite(source.b[0]) &&
@@ -83,6 +90,7 @@ modified='''#if defined(DSRRL_V351_TYPED_DSR_ONLY_OPERATOR)
             std::isfinite(source.envdiffuse_b[0]) &&
             std::isfinite(source.envdiffuse_b[1]) &&
             std::isfinite(source.envdiffuse_b[2]);
+#endif
         if (!typed_source_valid) {
             telemetry::hot_count(source_rejects_);
             effect_fail(effect_fail_mask_,k_effect_fail_source);
