@@ -94,7 +94,7 @@ require("if (stock_envdiffuse_for_draw &&" in runtime and
 require("const std::array<f4,6> payload" in runtime and
         "const std::uint32_t payload_bytes =" in runtime and
         "desc.ByteWidth = payload_bytes;" in runtime and
-        "std::memcpy( mapped.pData, payload.data(), payload_bytes)" not in runtime,
+        "mapped.pData,\n            payload.data(),\n            payload_bytes);" in runtime,
         "b12 ABI must switch exactly between 64 and 96 bytes")
 require("struct b12_context_key" in runtime_header and
         "std::uint32_t payload_bytes = 0u;" in runtime_header and
