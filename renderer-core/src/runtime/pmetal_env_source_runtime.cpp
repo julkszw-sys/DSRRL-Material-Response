@@ -2171,7 +2171,7 @@ void __fastcall envspec_single_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2179,6 +2179,9 @@ void __fastcall envspec_single_hook_entry(
             row,
             envdiffuse_a);
     envdiffuse_b = envdiffuse_a;
+#elif defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
+    // Stock cb0/t11 owns EnvDiffuse; do not load a PTDE donor here.
+    const bool envdiffuse_ok = donor_ok;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2270,7 +2273,7 @@ void __fastcall envspec_blend_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2281,6 +2284,9 @@ void __fastcall envspec_blend_hook_entry(
             bank_b,
             row_b,
             envdiffuse_b);
+#elif defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
+    // Keep exact A/B, beta, and EnvSpec transport, not the unused endpoint.
+    const bool envdiffuse_ok = donor_ok;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2421,7 +2427,7 @@ void pmetal_env_source_cache_invalidate() noexcept
 
 bool pmetal_env_source_runtime::install() noexcept
 {
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     if (!load_exact_envdiffuse_donor()) {
         reshade::log::message(
             reshade::log::level::warning,
@@ -2836,7 +2842,7 @@ void pmetal_env_source_selector_event(
     next.beta =
         endpoints.beta;
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
     if (!exact_envdiffuse_endpoint(
