@@ -177,8 +177,13 @@ if override_path.is_file():
         if row_id >= count or row_id < 0:
             raise SystemExit("V355 donor row out of range")
         src_id, red, green, blue, intensity = rows[first + row_id]
-        if src_id != row_id or intensity != old_m or old_m != 100 or new_m != 130:
-            raise SystemExit("V355 PTDE baseline or authorized value mismatch")
+        # V230 user experiment: only m14 B1 Ceaseless upper row6 is
+        # increased +40 intensity units from its previous 130 to 170.
+        # The two preexisting 130 overrides remain byte-for-byte unchanged.
+        expected_m = 170 if (index, row_id) == (8, 6) else 130
+        if (src_id != row_id or intensity != old_m or
+                old_m != 100 or new_m != expected_m):
+            raise SystemExit("V230 scoped EnvSpec intensity authorization mismatch")
         if patch["origin"] != "USER_TEST_OVERRIDE":
             raise SystemExit("V355 cannot claim PTDE donor provenance")
         rows[first + row_id] = (src_id, red, green, blue, new_m)
