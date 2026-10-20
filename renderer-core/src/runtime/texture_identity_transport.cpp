@@ -475,20 +475,36 @@ void capture_name(
 } // namespace
 
 extern "C" void dsrrl_gi_reflection_branch_observer(
-    std::uint32_t packed_subarea, std::uint32_t local_id) noexcept
+    std::uint32_t packed_subarea, std::uint32_t local_id,
+    const wchar_t *mapstem) noexcept
 {
     const auto count = g_gi_reflection_branch_hits.fetch_add(
         1u, std::memory_order_relaxed) + 1u;
     if (count > 12u && count % 65536u != 0u)
         return;
-    char line[300]{};
+    char observed_stem[40]{};
+    bool stem_exact=false;
+    if (mapstem!=nullptr) {
+        for(std::size_t i=0u;i<sizeof(observed_stem)-1u;++i) {
+            if(!readable_range(mapstem+i,sizeof(wchar_t))) break;
+            const auto ch=mapstem[i];
+            if(ch==L'\0') {stem_exact=true;break;}
+            if((ch>=L'A'&&ch<=L'Z')||(ch>=L'a'&&ch<=L'z')||
+               (ch>=L'0'&&ch<=L'9')||ch==L'_'||ch==L'-')
+                observed_stem[i]=static_cast<char>(ch);
+            else break;
+        }
+    }
+    char line[350]{};
     std::snprintf(line,sizeof(line),
         "[DSRRL V230 GI REFLECTION PRODUCER] stage=RETAIL_FORMAT_BRANCH"
         " class=GI_Reflection selector=5 subarea=%u local=%u packed=%u"
+        " mapstem=%.39s stem_exact=%u"
         " hit=%llu source_to_native_join=NOT_ESTABLISHED"
         " action=OBSERVE_ONLY_NO_ALIAS",
         packed_subarea,local_id,
         packed_subarea*10000u+local_id,
+        observed_stem,stem_exact?1u:0u,
         static_cast<unsigned long long>(count));
     reshade::log::message(reshade::log::level::warning,line);
 }
