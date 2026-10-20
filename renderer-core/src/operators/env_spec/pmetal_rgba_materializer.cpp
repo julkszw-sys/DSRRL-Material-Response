@@ -4788,7 +4788,12 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
+    // Stock DSR EnvDiffuse: retain the exact original 29-DWORD producer,
+    // t11/s11 sample and b0[3]*b0[79] consumer from the stock shader.
+    // Build131 still ports EnvSpec and material response independently.
+    outcome.envdiffuse_linear_consumer_diag = false;
+#elif defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
     // Complete stable-HemEnv PTDE EnvDiffuse island: exact raw PTDE t11
     // resource, filter RGBA, post-filter RGB/A decode and exact PTDE c86
     // endpoint carried in b12[3].xyz.
@@ -4810,7 +4815,9 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 #endif
+#if !defined(DSRRL_V230_STOCK_DSR_ENVDIFFUSE)
     outcome.envdiffuse_linear_consumer_diag = true;
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
     if (!remove_dsr_postmerge_visibility_scalar_r3(
