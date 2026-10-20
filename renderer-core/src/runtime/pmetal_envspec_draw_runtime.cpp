@@ -151,8 +151,7 @@ constexpr bool k_stock_dsr_envdiffuse = true;
 constexpr bool k_stock_dsr_envdiffuse = false;
 #endif
 constexpr bool k_preserve_stock_envdiffuse =
-    k_v13_preserve_stock_envdiffuse ||
-    k_stock_dsr_envdiffuse;
+    k_v13_preserve_stock_envdiffuse;
 
 void effect_latch(std::atomic_bool &flag) noexcept
 {
@@ -894,6 +893,17 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_material_ready_);
 
+    // The stock-EnvDiffuse variant is selected only for the authenticated
+    // P_Metal route/material tuple. Verified nonmetal aliases keep the default
+    // PTDE EnvDiffuse sidecar variant and its independent feature path.
+    const bool stock_envdiffuse_for_draw =
+        k_stock_dsr_envdiffuse &&
+        exact_pmetal_material(material) &&
+        exact_pmetal_decision(decision);
+    const bool preserve_stock_envdiffuse =
+        k_preserve_stock_envdiffuse ||
+        stock_envdiffuse_for_draw;
+
     if (!core_.features().enabled(
             core::operator_id::env_spec)) {
         effect_fail(
@@ -1171,7 +1181,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
         ;
 
-    if (!k_preserve_stock_envdiffuse &&
+    if (!preserve_stock_envdiffuse &&
         exact_envdiffuse_source_required &&
         !source.envdiffuse_linear_valid) {
         telemetry::hot_count(source_rejects_);
@@ -1219,12 +1229,16 @@ bool pmetal_envspec_draw_runtime::prepare(
         if (family ==
             pmetal_envspec_receiver_family::
                 hemenvlerp) {
+            const auto &selected_lerp_replacements =
+                stock_envdiffuse_for_draw
+                    ? stock_envdiffuse_lerp_replacements_
+                    : lerp_replacements_;
             const auto found =
-                lerp_replacements_.find(
+                selected_lerp_replacements.find(
                     decision.receiver_id);
 
             if (found ==
-                    lerp_replacements_.end() ||
+                    selected_lerp_replacements.end() ||
                 found->second == nullptr) {
                 ++lerp_replacement_register_fail_;
                 effect_fail(
@@ -1242,7 +1256,8 @@ bool pmetal_envspec_draw_runtime::prepare(
             shader = found->second;
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
             // Dedicated Lerp variant only; stock R19 remains P_Metal's.
-            if (material.route_index != 345u &&
+            if (!stock_envdiffuse_for_draw &&
+                material.route_index != 345u &&
                 (
                     v203_equipment::exact_envspec36_material(material)
 #if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
@@ -1260,12 +1275,16 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
             shader->AddRef();
         } else {
+            const auto &selected_replacements =
+                stock_envdiffuse_for_draw
+                    ? stock_envdiffuse_replacements_
+                    : replacements_;
             const auto found =
-                replacements_.find(
+                selected_replacements.find(
                     decision.receiver_id);
 
             if (found ==
-                    replacements_.end() ||
+                    selected_replacements.end() ||
                 found->second.shader == nullptr) {
                 ++replacement_register_fail_;
                 effect_fail(
@@ -1458,12 +1477,13 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
 
     const bool stable_envdiffuse_consumer_diag =
-#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         false;
 #else
         family ==
             pmetal_envspec_receiver_family::
-                stable_hemenv;
+                stable_hemenv &&
+        !preserve_stock_envdiffuse;
 #endif
 
     std::array<float,3> carrier3{{
