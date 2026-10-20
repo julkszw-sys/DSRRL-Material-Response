@@ -14,108 +14,140 @@ def require(condition: bool, message: str) -> None:
 
 cmake = read("integrated/CMakeLists.txt")
 stable = read("src/operators/env_spec/pmetal_rgba_materializer.cpp")
+stable_header = read("include/dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp")
 lerp = read("src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp")
+lerp_header = read("include/dsrrl/operators/env_spec/pmetal_rgba_lerp_materializer.hpp")
 runtime = read("src/runtime/pmetal_envspec_draw_runtime.cpp")
+runtime_header = read("include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp")
 pmetal_source = read("src/runtime/pmetal_env_source_runtime.cpp")
 v351_materializer = read("tools/materialize_v351_typed_lightbank_modified_renderer.py")
-header = read("include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp")
+integrated = read("integrated/integrated_addon.cpp")
 builder = read("tools/build_v359_stock_dsr_envdiffuse.ps1")
 base_builder = read("tools/build_v350_gpu_resident_pointlight_off_rc2.ps1")
 workflow = read("../.github/workflows/v359-stock-dsr-envdiffuse.yml")
 contract = read("docs/PMETAL_STOCK_DSR_ENVDIFFUSE_CONTRACT.md")
 
-# The mode is opt-in and can only be built on top of the cumulative P_Metal
-# EnvSpec + R19 MaterialWorkflow lineage, never as a global EnvDiffuse switch.
+# The stock mode is opt-in and retains the R19 feature lineage because V285/V289
+# still use it. Only the EnvDiffuse cut selected for the exact P_Metal draw changes.
 require("option(\n    DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE" in cmake,
         "missing opt-in CMake option")
 require("NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG" in cmake and
         "NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW" in cmake and
         "if(NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)" in cmake and
         "disables only its P_Metal EnvDiffuse rewrite" in cmake,
-        "missing R19 lineage dependency or P_Metal-only override guard")
+        "missing cumulative-lineage or P_Metal-only override guard")
 require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE" in cmake,
         "missing compile definition")
 
-# Stable HemEnv: preserve the existing PTDE EnvSpec/SpecRGB shader island,
-# skip only the EnvDiffuse rewrite, and keep independent downstream transforms.
-require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in stable,
-        "stable PTDE EnvDiffuse consumer is not excluded in stock mode")
-require("#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in stable,
-        "legacy EnvDiffuse consumer can still run in stock mode")
-require("outcome.envdiffuse_linear_consumer_diag = false;" in stable,
-        "stable stock-mode outcome does not preserve EnvDiffuse")
-require("if (!apply_build131(" in stable and
-        "compose_exact_phn_scene_encoding(base)" in stable and
-        "compose_exact_terminal_rgb_sat(base)" in stable,
-        "EnvSpec or terminal output islands were accidentally removed")
+# Both shader materializers must be able to build two payloads from one exact
+# stock shader: default PTDE EnvDiffuse for verified aliases, and stock DSR
+# EnvDiffuse for the exact P_Metal route.
+require("bool preserve_stock_envdiffuse = false" in stable_header and
+        "bool preserve_stock_envdiffuse) noexcept" in stable,
+        "stable materializer lacks per-payload mode")
+require("if (!preserve_stock_envdiffuse)" in stable and
+        "outcome.envdiffuse_linear_consumer_diag =\n        !preserve_stock_envdiffuse;" in stable,
+        "stable EnvDiffuse cut is not selected per payload")
+require("apply_build131(" in stable and
+        "apply_exact_ptde_normal_basis_r5(" in stable and
+        "remove_dsr_sao_surface_multiplier_r11(" in stable,
+        "stable EnvSpec/R5/R11 cumulative operators were removed")
 
-# HemEnvLerp: keep the original t11/t13 EnvDiffuse block byte-identical,
-# do not extend b12 for EnvDiffuse endpoints, and keep MaterialWorkflow,
-# SpecRGB and terminal-SAT materialization.
-require(lerp.count("DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)") >= 6,
-        "R19 b12/topology guards are incomplete")
-require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    // R19 owns the Lerp EnvDiffuse semantic cut." in lerp,
-        "Lerp EnvDiffuse rewrite is not gated")
-require("apply_exact_ptde_lerp_materialworkflow_r15_r16_r17(" in lerp,
-        "R19 MaterialWorkflow path is missing")
-require("apply_exact_terminal_rgb_sat(" in lerp and
+require("bool preserve_stock_envdiffuse = false" in lerp_header and
+        "bool preserve_stock_envdiffuse) noexcept" in lerp,
+        "Lerp materializer lacks per-payload mode")
+require("if (!preserve_stock_envdiffuse)" in lerp and
+        "preserve_stock_envdiffuse ? 64u : 96u" in lerp and
+        "outcome.envdiffuse_preserved = preserve_stock_envdiffuse;" in lerp,
+        "Lerp EnvDiffuse consumer/RDEF does not follow selected payload")
+require("apply_exact_ptde_lerp_materialworkflow_r15_r16_r17(" in lerp and
+        "apply_exact_terminal_rgb_sat(" in lerp and
         "outcome.terminal_sat_rgb_composed = true;" in lerp,
-        "Lerp terminal-SAT path is missing")
-require("outcome.envdiffuse_preserved = true;" in lerp,
-        "Lerp does not report preserved stock EnvDiffuse")
+        "Lerp MaterialWorkflow/SpecRGB/terminal-SAT path is missing")
 
-# Runtime: no EnvDiffuse source requirement, sidecar prepare, t11/t13 SRV
-# rebind, sampler write, or EnvDiffuse transaction ownership in stock mode.
-require("constexpr bool k_preserve_stock_envdiffuse =" in runtime and
-        "if (!k_preserve_stock_envdiffuse &&" in runtime,
-        "runtime still requires PTDE EnvDiffuse source endpoints")
-require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    // Probe identity" in runtime,
-        "PTDE EnvDiffuse resource preparation is not excluded")
-require("#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG)" in runtime,
-        "native EnvDiffuse capture/rebind is not excluded")
-require("#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    prepared.request.additional_owners =" in runtime,
-        "stock-mode transaction owner mask is missing")
-require("prepared.request.additional_resource_owners = 0u;" in runtime,
-        "stock mode may claim EnvDiffuse resource ownership")
-require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    prepared.request.srvs[" in runtime,
-        "PTDE EnvDiffuse SRV sidecar may still be bound")
-require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    prepared.request.samplers[" in runtime,
-        "PTDE EnvDiffuse samplers may still be bound")
-require("envspec=t12_t14=ptde" in runtime and
+# Runtime chooses the stock variant only after the exact P_Metal material and
+# route decision pass. Other verified aliases retain the existing sidecar path.
+require("const bool stock_envdiffuse_for_draw =" in runtime and
+        "k_stock_dsr_envdiffuse &&" in runtime and
+        "exact_pmetal_material(material) &&" in runtime and
+        "exact_pmetal_decision(decision);" in runtime,
+        "stock variant is not gated by exact P_Metal identity")
+require("stock_envdiffuse_replacements_" in runtime and
+        "stock_envdiffuse_lerp_replacements_" in runtime and
+        "selected_lerp_replacements" in runtime and
+        "selected_replacements" in runtime,
+        "per-material replacement selection maps are missing")
+require("if (!preserve_stock_envdiffuse)" in runtime and
+        "#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)\n    if (!preserve_stock_envdiffuse) {" in runtime,
+        "EnvDiffuse sidecar resources are not skipped per stock draw")
+require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)\n    if (!preserve_stock_envdiffuse) {" in runtime and
+        "prepared.request.srvs[" in runtime and
+        "prepared.request.samplers[" in runtime,
+        "SRV/sampler routing is not draw-local")
+require("if (preserve_stock_envdiffuse) {" in runtime and
+        "prepared.request.additional_resource_owners = 0u;" in runtime and
+        "preserve_stock_envdiffuse ? 0u : envdiff_owner" in runtime,
+        "stock draw still claims EnvDiffuse transaction ownership")
+require("if (stock_envdiffuse_for_draw &&" in runtime and
         "[DSRRL PMETAL STOCK DSR ENVDIFFUSE]" in runtime,
-        "stock-mode runtime identity marker is missing")
-require("#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in pmetal_source,
-        "stock mode still compiles the EnvDiffuse donor loader as its active source path")
-require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    if (!load_exact_envdiffuse_donor())" in pmetal_source,
-        "stock mode still attempts to load the PTDE EnvDiffuse donor at install")
-require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    // Stock EnvDiffuse is supplied by the untouched DSR t11/t13 path." in pmetal_source,
-        "stock mode still requires EnvDiffuse donor during source-hook publication")
-require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n            // EnvSpec still needs the exact PTDE endpoints and beta" in v351_materializer,
-        "V351 typed-source gate still requires EnvDiffuse endpoints")
-require("next.envdiffuse_linear_valid = false;" in pmetal_source,
-        "stock source carrier does not mark EnvDiffuse endpoints unused")
-require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    std::array<std::uint32_t,24> payload_bits{};" in runtime,
-        "runtime b12 payload width is not stock-mode aware")
-require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n        std::array<std::uint32_t,24> payload_bits{};" in header,
-        "header b12 cache width is not stock-mode aware")
+        "runtime marker is not tied to the selected stock draw")
+require("const std::array<f4,6> payload" in runtime and
+        "const std::uint32_t payload_bytes =" in runtime and
+        "desc.ByteWidth = payload_bytes;" in runtime and
+        "std::memcpy( mapped.pData, payload.data(), payload_bytes)" not in runtime,
+        "b12 ABI must switch exactly between 64 and 96 bytes")
+require("struct b12_context_key" in runtime_header and
+        "std::uint32_t payload_bytes = 0u;" in runtime_header and
+        "stock_envdiffuse_replacements_" in runtime_header and
+        "stock_envdiffuse_lerp_replacements_" in runtime_header,
+        "variant maps or size-keyed b12 cache are missing")
 
-# The candidate is reproducible and remains a single integrated addon.
+# EnvSpec source publication remains usable if an EnvDiffuse row is unavailable
+# only for the stock P_Metal draw. Verified nonmetal aliases still require valid
+# EnvDiffuse donor data and fail open otherwise.
+require("next.envdiffuse_linear_valid =\n        envdiffuse_linear_valid;" in pmetal_source and
+        "if (donor_ok)" in pmetal_source and
+        "envdiffuse_ok," in pmetal_source,
+        "source carrier validity is not per-source")
+require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)\n    const bool envdiffuse_donor_ready =" in pmetal_source and
+        "EnvDiffuse-dependent aliases fail open" in pmetal_source,
+        "stock mode does not attempt optional donor loading for default aliases")
+require("envspec_source_finite &&" in v351_materializer and
+        "(preserve_stock_envdiffuse ||" in v351_materializer and
+        "envdiffuse_source_finite" in v351_materializer,
+        "V351 typed-source validation is not per draw")
+
+# Create-time registration builds both payloads; the nonmetal R8 branch is
+# still derived from the default PTDE-EnvDiffuse Lerp payload.
+require("envspec_stock_payload" in integrated and
+        "envspec_stock_payload.size()," in integrated and
+        "envspec_stock_payload.size(),\n                            true" in integrated,
+        "stable stock variant is not separately materialized/registered")
+require("envspec_lerp_stock_payload" in integrated and
+        "envspec_lerp_stock_payload.size(),\n                            true" in integrated,
+        "Lerp stock variant is not separately materialized/registered")
+require("register_lerp_nonmetal_r8_candidate(" in integrated and
+        "envspec_lerp_payload.data()" in integrated,
+        "nonmetal R8 no longer uses the default EnvDiffuse payload")
+
+# Reproducible single-addon candidate; no release identity or source tree is
+# overwritten. Construction is not runtime or pixel proof.
 require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE=ON" in builder and
         "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON" in builder,
-        "builder does not preserve R19 feature lineage while enabling stock EnvDiffuse")
+        "builder does not preserve R19 lineage while enabling stock mode")
 require("DSRRL_V359_STOCK_DSR_ENVDIFFUSE.addon64" in builder and
         "DSRRL PMETAL STOCK DSR ENVDIFFUSE" in builder,
         "builder output identity/marker is missing")
 require("$files.Count -ne 1" in base_builder and
         "Expected one addon, got" in base_builder,
-        "inherited base builder does not enforce a single addon")
-require("out-v359-stock-dsr-envdiffuse" in builder,
-        "stock builder does not select its isolated output directory")
-require("build_v359_stock_dsr_envdiffuse.ps1" in workflow and
+        "inherited base builder does not enforce one integrated addon")
+require("out-v359-stock-dsr-envdiffuse" in builder and
+        "build_v359_stock_dsr_envdiffuse.ps1" in workflow and
         "actions/upload-artifact@v4" in workflow,
-        "workflow does not build and publish the integrated addon")
-require("shared R5 normal basis" in contract and
+        "isolated single-addon build/artifact path is missing")
+require("default PTDE EnvDiffuse" in contract and
+        "exact P_Metal" in contract and
         "Pixel equivalence remains OPEN" in contract,
-        "contract must state the shared-input and pixel-validation limits")
+        "contract must distinguish the two variants and validation limits")
 
 print("PMETAL_STOCK_DSR_ENVDIFFUSE_CONTRACT_PASS")
