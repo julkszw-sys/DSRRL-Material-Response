@@ -129,7 +129,8 @@ public:
         const operators::env_spec::
             pmetal_rgba_lerp_materialize_outcome &outcome,
         const void *dxbc,
-        std::size_t dxbc_size) noexcept;
+        std::size_t dxbc_size,
+        bool stock_envdiffuse_variant = false) noexcept;
 
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     // Alternative shader only. P_Metal's registered PS is immutable.
