@@ -4662,6 +4662,7 @@ bool on_create_pipeline(
                     envspec_result::pass_not_candidate &&
                 envspec.result !=
                     envspec_result::pass_unknown_exact_sha) {
+                dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::create_stable_materialize_reject,envspec.receiver_id,0u,0u,0u,0u,static_cast<std::uint32_t>(envspec.result));
                 ++g_envspec_payload_materialize_fail;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
                 if (!g_pmetal_full_ptde_create_fail_logged.exchange(
