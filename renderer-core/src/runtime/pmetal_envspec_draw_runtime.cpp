@@ -1019,7 +1019,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                 source_state.hook_single_armed ? 1u : 0u,
                 source_state.hook_blend_armed ? 1u : 0u);
             reshade::log::message(
-                reshade::log::level::info,
+                reshade::log::level::warning,
                 source_line);
         }
 
