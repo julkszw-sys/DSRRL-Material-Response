@@ -30,10 +30,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify inherited V359 source contracts
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --output stock_envdiffuse_fallback_census.json
       - name: Verify stock EnvDiffuse source contract
         run: python3 renderer-core/tools/test_pmetal_stock_dsr_envdiffuse.py
-      - name: Syntax-check source contract
-        run: python3 -m py_compile renderer-core/tools/test_pmetal_stock_dsr_envdiffuse.py
+      - name: Syntax-check source contracts
+        run: |
+          python3 -m py_compile renderer-core/tools/test_pmetal_stock_dsr_envdiffuse.py
+          python3 -m py_compile renderer-core/tools/materialize_v353_sampled_module_profiler.py renderer-core/tools/test_v353_sampled_module_profiler.py renderer-core/tools/materialize_v357_exact_resource_source_census.py renderer-core/tools/test_v357_exact_resource_source_census.py renderer-core/tools/materialize_v358_exact_lifetime_probe_origin.py renderer-core/tools/test_v358_exact_lifetime_probe_origin.py renderer-core/tools/materialize_v359_attested_gi_name_alias.py renderer-core/tools/test_v359_attested_gi_name_alias.py
 
   native-single-addon:
     needs: source-contract
