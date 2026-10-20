@@ -53,7 +53,7 @@ struct f4 {
     float w = 0.0f;
 };
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
 bool inverse_envdiffuse_endpoint(
     const float *src,
     f4 &out) noexcept
@@ -1908,7 +1908,11 @@ void publish_hook_source(
         envdiffuse_b.y,
         envdiffuse_b.z
     };
+#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    next.envdiffuse_linear_valid = false;
+#else
     next.envdiffuse_linear_valid = true;
+#endif
     next.beta =
         std::clamp(
             beta,
@@ -2171,7 +2175,7 @@ void __fastcall envspec_single_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2179,6 +2183,10 @@ void __fastcall envspec_single_hook_entry(
             row,
             envdiffuse_a);
     envdiffuse_b = envdiffuse_a;
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // Stock-EnvDiffuse mode is independent of the host EnvDiffuse payload.
+    // Never let EnvDiffuse capture/validation suppress the EnvSpec source.
+    const bool envdiffuse_ok = true;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2270,7 +2278,7 @@ void __fastcall envspec_blend_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2281,6 +2289,10 @@ void __fastcall envspec_blend_hook_entry(
             bank_b,
             row_b,
             envdiffuse_b);
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // Stock-EnvDiffuse mode is independent of the host EnvDiffuse payload.
+    // Never let EnvDiffuse capture/validation suppress the EnvSpec source.
+    const bool envdiffuse_ok = true;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2421,7 +2433,7 @@ void pmetal_env_source_cache_invalidate() noexcept
 
 bool pmetal_env_source_runtime::install() noexcept
 {
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     if (!load_exact_envdiffuse_donor()) {
         reshade::log::message(
             reshade::log::level::warning,
@@ -2836,7 +2848,7 @@ void pmetal_env_source_selector_event(
     next.beta =
         endpoints.beta;
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
     if (!exact_envdiffuse_endpoint(
