@@ -12,6 +12,10 @@ struct ID3D11ShaderResourceView;
 struct ID3D11SamplerState;
 
 namespace dsrrl::runtime {
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+struct v230_bc1_origin_snapshot { std::uint32_t width=0,height=0,mips=0,format=0; std::uint64_t serial=0; std::array<std::uint8_t,32> mip0_sha{}; bool mip0_exact=false; };
+bool v230_bc1_origin_for_native_view(ID3D11ShaderResourceView*,v230_bc1_origin_snapshot&) noexcept;
+#endif
 
 struct envspec_resource_telemetry {
     std::uint64_t native_candidates = 0;
