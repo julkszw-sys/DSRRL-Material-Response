@@ -645,6 +645,61 @@ void on_destroy_device(
         device_ptr);
 }
 
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+void v230_capture_bc1_origin(
+    device *device_ptr, const resource_desc &desc,
+    const subresource_data *initial_data, resource handle) noexcept
+{
+    if (device_ptr==nullptr ||
+        device_ptr->get_api()!=device_api::d3d11 ||
+        desc.type!=resource_type::texture_2d ||
+        handle.handle==0u) return;
+    auto *native=reinterpret_cast<ID3D11Resource *>(
+        static_cast<std::uintptr_t>(handle.handle));
+    ID3D11Texture2D *tex=nullptr;
+    if (native==nullptr || FAILED(native->QueryInterface(
+        __uuidof(ID3D11Texture2D),reinterpret_cast<void **>(&tex))) ||
+        tex==nullptr) return;
+    D3D11_TEXTURE2D_DESC native_desc{};
+    tex->GetDesc(&native_desc);
+    tex->Release();
+    if ((native_desc.Format!=DXGI_FORMAT_BC1_UNORM &&
+         native_desc.Format!=DXGI_FORMAT_BC1_UNORM_SRGB) ||
+        native_desc.ArraySize!=1u ||
+        native_desc.Width==0u || native_desc.Height==0u ||
+        native_desc.Width>2048u || native_desc.Height>2048u) return;
+
+    v230_bc1_origin_snapshot snapshot{};
+    snapshot.width=native_desc.Width;
+    snapshot.height=native_desc.Height;
+    snapshot.mips=native_desc.MipLevels;
+    snapshot.format=static_cast<std::uint32_t>(native_desc.Format);
+    snapshot.serial=g_v230_bc1_serial.fetch_add(1u,std::memory_order_relaxed);
+    if(initial_data!=nullptr && initial_data[0].data!=nullptr) {
+        const auto row=((native_desc.Width+3u)/4u)*8u;
+        const auto rows=(native_desc.Height+3u)/4u;
+        const auto pitch=initial_data[0].row_pitch!=0u
+            ?initial_data[0].row_pitch:row;
+        if(pitch>=row && pitch<=65536u) {
+            try {
+                std::vector<std::uint8_t> bytes;
+                bytes.reserve(static_cast<std::size_t>(row)*rows);
+                const auto *ptr=static_cast<const std::uint8_t *>(initial_data[0].data);
+                for(std::uint32_t y=0u;y<rows;++y)
+                    bytes.insert(bytes.end(),ptr+static_cast<std::size_t>(y)*pitch,
+                        ptr+static_cast<std::size_t>(y)*pitch+row);
+                snapshot.mip0_sha=hashing::sha256(bytes.data(),bytes.size());
+                snapshot.mip0_exact=true;
+            } catch (...) {
+                snapshot.mip0_exact=false;
+            }
+        }
+    }
+    std::lock_guard<std::mutex> lock(g_v230_bc1_mutex);
+    g_v230_bc1[handle.handle]=snapshot;
+}
+#endif
+
 void on_init_resource(
     device *device_ptr,
     const resource_desc &desc,
