@@ -16,6 +16,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 
@@ -175,6 +176,27 @@ private:
         bool payload_valid = false;
     };
 
+    struct b12_context_key {
+        std::uintptr_t context = 0u;
+        std::uint32_t payload_bytes = 0u;
+
+        bool operator==(const b12_context_key &other) const noexcept
+        {
+            return context == other.context &&
+                payload_bytes == other.payload_bytes;
+        }
+    };
+
+    struct b12_context_key_hash {
+        std::size_t operator()(const b12_context_key &key) const noexcept
+        {
+            const auto a = std::hash<std::uintptr_t>{}(key.context);
+            const auto b = std::hash<std::uint32_t>{}(key.payload_bytes);
+            return a ^ (b + static_cast<std::size_t>(0x9e3779b9u) +
+                        (a << 6u) + (a >> 2u));
+        }
+    };
+
     void release_resources() noexcept;
 
     core::renderer_core &core_;
@@ -207,7 +229,7 @@ private:
         stock_envdiffuse_lerp_replacement_sha256_;
     std::unordered_map<std::uint32_t,std::size_t>
         stock_envdiffuse_lerp_replacement_size_;
-    std::unordered_map<std::uintptr_t,b12_context_cache>
+    std::unordered_map<b12_context_key,b12_context_cache,b12_context_key_hash>
         b12_by_context_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
