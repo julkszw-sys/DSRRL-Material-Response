@@ -2756,6 +2756,8 @@ bool observe_draw_identity(
     }
 
     if (!owner_ok) {
+        if (rx != nullptr)
+            dsrrl::runtime::v230_failopen_diag::hit(dsrrl::runtime::v230_failopen_diag::stage::draw_owner_reject,receiver_id,hemenvlerp_bound?1u:0u,0u,out_material.flver_identity_hash,out_material.material_slot);
         hot_count(g_draw_receiver_only);
         hot_count(g_mr_fail_open);
         if (rx != nullptr)
