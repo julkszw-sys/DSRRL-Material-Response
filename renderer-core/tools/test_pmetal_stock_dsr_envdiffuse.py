@@ -39,6 +39,10 @@ require("NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG" in cmake and
         "missing cumulative-lineage or P_Metal-only override guard")
 require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE" in cmake,
         "missing compile definition")
+require("if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)\\n    find_package(Python3 COMPONENTS Interpreter REQUIRED)\\n    set(V286_HEADER" not in cmake and
+        "set(V286_HEADER" in cmake and
+        "target_include_directories(dsrrl_renderer_core_integrated PRIVATE\\n    \"\\${CMAKE_CURRENT_BINARY_DIR}/generated\")" in cmake,
+        "V315 shared whitelist generation/include path is still nested under V285")
 
 # The default PTDE payload remains part of the cumulative source lineage, but
 # this candidate disables nonmetal alias routing. Only exact P_Metal may select
