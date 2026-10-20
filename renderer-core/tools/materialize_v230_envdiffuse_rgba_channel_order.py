@@ -68,7 +68,7 @@ def main():
     stable=replace_exact(STABLE.read_text(encoding="utf8"),STABLE_OLD,STABLE_NEW,"RX33-35 Stable",1)
     lerp=replace_exact(LERP.read_text(encoding="utf8"),LERP_OLD,LERP_NEW,"RX33-35 Lerp",1)
     draw=DRAW.read_text(encoding="utf8")
-    draw=replace_exact(draw,LOG_OLD,LOG_NEW,"one-time Stable build marker")
+    draw=replace_exact(draw,LOG_OLD,LOG_NEW,"Stable build identity markers",2)
     draw=replace_exact(draw,LOG_LERP_OLD,LOG_LERP_NEW,"one-time Lerp build marker")
     # Source atomic prevalidation above; no shader/CB/resource unrelated path touched.
     STABLE.write_text(stable,encoding="utf8")
