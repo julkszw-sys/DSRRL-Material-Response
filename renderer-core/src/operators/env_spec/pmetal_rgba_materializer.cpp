@@ -1501,7 +1501,7 @@ bool add_b12_rdef(
 }
 
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool apply_exact_ptde_envdiffuse_consumer(
     std::vector<std::uint8_t> &bytes) noexcept
 {
@@ -4596,7 +4596,8 @@ materialize_pmetal_rgba_receiver(
     const std::uint8_t *stock_source,
     std::size_t stock_size,
     bool compose_upper_lower,
-    std::vector<std::uint8_t> &output) noexcept
+    std::vector<std::uint8_t> &output,
+    bool preserve_stock_envdiffuse) noexcept
 {
     pmetal_rgba_materialize_outcome
         outcome{};
@@ -4788,36 +4789,30 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    // Complete stable-HemEnv PTDE EnvDiffuse island: exact raw PTDE t11
-    // resource, filter RGBA, post-filter RGB/A decode and exact PTDE c86
-    // endpoint carried in b12[3].xyz.
-    if (!apply_exact_ptde_envdiffuse_consumer(
-            base)) {
-        outcome.result =
-            pmetal_rgba_materialize_result::
-                fail_postcondition;
-        return outcome;
-    }
-#elif !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    // Legacy diagnostic-only translation: native DSR t11 field with a
-    // recovered linear endpoint.
-    if (!apply_linear_envdiffuse_consumer_diag(
-            base)) {
-        outcome.result =
-            pmetal_rgba_materialize_result::
-                fail_postcondition;
-        return outcome;
-    }
-#endif
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    // Preserve the original DSR EnvDiffuse instructions/resources at this
-    // semantic cut. The independent EnvSpec, SpecRGB and downstream islands
-    // continue through the existing cumulative materializer.
-    outcome.envdiffuse_linear_consumer_diag = false;
+if (!preserve_stock_envdiffuse) {
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+        // Complete stable-HemEnv PTDE EnvDiffuse island: exact raw PTDE t11
+        // resource, filter RGBA, post-filter RGB/A decode and exact PTDE c86
+        // endpoint carried in b12[3].xyz.
+        if (!apply_exact_ptde_envdiffuse_consumer(base)) {
+            outcome.result =
+                pmetal_rgba_materialize_result::fail_postcondition;
+            return outcome;
+        }
 #else
-    outcome.envdiffuse_linear_consumer_diag = true;
+        // Legacy diagnostic-only translation: native DSR t11 field with a
+        // recovered linear endpoint.
+        if (!apply_linear_envdiffuse_consumer_diag(base)) {
+            outcome.result =
+                pmetal_rgba_materialize_result::fail_postcondition;
+            return outcome;
+        }
 #endif
+    }
+    // Stock variant leaves the EnvDiffuse consumer byte-identical; all other
+    // cumulative EnvSpec/SpecRGB/material operators remain unchanged.
+    outcome.envdiffuse_linear_consumer_diag =
+        !preserve_stock_envdiffuse;
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
     if (!remove_dsr_postmerge_visibility_scalar_r3(
