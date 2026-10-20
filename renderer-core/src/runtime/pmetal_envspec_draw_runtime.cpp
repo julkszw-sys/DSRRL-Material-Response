@@ -1901,25 +1901,21 @@ bool pmetal_envspec_draw_runtime::prepare(
         domain_owner |
         spec_owner |
         composed_owners;
-#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-    prepared.request.additional_owners =
-        mr_owner |
-        domain_owner |
-        spec_owner |
-        composed_owners;
-
-    if (family ==
-        pmetal_envspec_receiver_family::
-            hemenvlerp)
-        prepared.request.additional_owners |=
-            sat_owner;
 #else
-    prepared.request.additional_owners =
-        mr_owner |
-        domain_owner |
-        spec_owner |
-        envdiff_owner |
-        composed_owners;
+    if (preserve_stock_envdiffuse) {
+        prepared.request.additional_owners =
+            mr_owner |
+            domain_owner |
+            spec_owner |
+            composed_owners;
+    } else {
+        prepared.request.additional_owners =
+            mr_owner |
+            domain_owner |
+            spec_owner |
+            envdiff_owner |
+            composed_owners;
+    }
 
     if (family ==
         pmetal_envspec_receiver_family::
@@ -1935,16 +1931,22 @@ bool pmetal_envspec_draw_runtime::prepare(
     // shader + b12 + the explicit native t11/t13 resource rebind.
     prepared.request.additional_shader_owners =
         prepared.request.additional_owners;
-#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     prepared.request.additional_constant_buffer_owners =
         mr_owner;
     prepared.request.additional_resource_owners = 0u;
 #else
-    prepared.request.additional_constant_buffer_owners =
-        mr_owner |
-        envdiff_owner;
-    prepared.request.additional_resource_owners =
-        envdiff_owner;
+    if (preserve_stock_envdiffuse) {
+        prepared.request.additional_constant_buffer_owners =
+            mr_owner;
+        prepared.request.additional_resource_owners = 0u;
+    } else {
+        prepared.request.additional_constant_buffer_owners =
+            mr_owner |
+            envdiff_owner;
+        prepared.request.additional_resource_owners =
+            envdiff_owner;
+    }
 #endif
 
     prepared.request.receiver_verified = true;
@@ -1957,10 +1959,11 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffers[0] = {
         12u,
         b12,
-#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         env_owner | mr_owner
 #else
-        env_owner | mr_owner | envdiff_owner
+        env_owner | mr_owner |
+            (preserve_stock_envdiffuse ? 0u : envdiff_owner)
 #endif
     };
     prepared.request.constant_buffer_count =
