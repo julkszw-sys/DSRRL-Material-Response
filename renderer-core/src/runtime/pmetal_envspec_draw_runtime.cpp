@@ -290,6 +290,11 @@ release_resources() noexcept
             record.shader->Release();
     }
     replacements_.clear();
+    for (auto &[_,record] : stock_envdiffuse_replacements_) {
+        if (record.shader != nullptr)
+            record.shader->Release();
+    }
+    stock_envdiffuse_replacements_.clear();
 
     for (auto &[_,shader] :
          lerp_replacements_) {
@@ -297,6 +302,11 @@ release_resources() noexcept
             shader->Release();
     }
     lerp_replacements_.clear();
+    for (auto &[_,shader] : stock_envdiffuse_lerp_replacements_) {
+        if (shader != nullptr)
+            shader->Release();
+    }
+    stock_envdiffuse_lerp_replacements_.clear();
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
         if (shader != nullptr) shader->Release();
@@ -305,6 +315,8 @@ release_resources() noexcept
 #endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
+    stock_envdiffuse_lerp_replacement_sha256_.clear();
+    stock_envdiffuse_lerp_replacement_size_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
@@ -414,6 +426,11 @@ on_destroy_device(
             record.shader->Release();
     }
     replacements_.clear();
+    for (auto &[_,record] : stock_envdiffuse_replacements_) {
+        if (record.shader != nullptr)
+            record.shader->Release();
+    }
+    stock_envdiffuse_replacements_.clear();
 
     for (auto &[_,shader] :
          lerp_replacements_) {
@@ -421,6 +438,11 @@ on_destroy_device(
             shader->Release();
     }
     lerp_replacements_.clear();
+    for (auto &[_,shader] : stock_envdiffuse_lerp_replacements_) {
+        if (shader != nullptr)
+            shader->Release();
+    }
+    stock_envdiffuse_lerp_replacements_.clear();
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
         if (shader != nullptr) shader->Release();
@@ -429,6 +451,8 @@ on_destroy_device(
 #endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
+    stock_envdiffuse_lerp_replacement_sha256_.clear();
+    stock_envdiffuse_lerp_replacement_size_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
