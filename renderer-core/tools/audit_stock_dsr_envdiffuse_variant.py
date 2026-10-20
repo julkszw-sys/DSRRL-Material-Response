@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Source-contract audit for the stock-DSR-EnvDiffuse P_Metal variant."""
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = (ROOT / "include/dsrrl/runtime/pmetal_stock_dsr_envdiffuse_variant.hpp").read_text("utf-8")
@@ -34,19 +33,16 @@ require(RUNTIME.count("#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    //
 require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    next.envdiffuse_linear_valid = false;" in RUNTIME,
         "stock mode must not advertise a valid PTDE EnvDiffuse carrier")
 
-stock_branch = re.search(
-    r"#elif defined\\(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE\\)\\n"
-    r"(?P<body>.*?)"
-    r"#else\\n    // Legacy diagnostic-only translation",
-    MATERIALIZER,
-    re.S,
-)
-require(stock_branch is not None, "materializer stock mode branch must exist")
-require("apply_exact_ptde_envdiffuse_consumer" not in stock_branch.group("body"),
+marker = "#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    // Explicit stock-host mode:"
+require(marker in MATERIALIZER, "materializer stock mode branch must exist")
+start = MATERIALIZER.index(marker)
+end = MATERIALIZER.index("#else\\n    // Legacy diagnostic-only translation", start)
+stock_body = MATERIALIZER[start:end]
+require("apply_exact_ptde_envdiffuse_consumer" not in stock_body,
         "stock mode must not apply exact PTDE EnvDiffuse")
-require("apply_linear_envdiffuse_consumer_diag" not in stock_branch.group("body"),
+require("apply_linear_envdiffuse_consumer_diag" not in stock_body,
         "stock mode must not apply linear EnvDiffuse translation")
-require("outcome.envdiffuse_linear_consumer_diag = false;" in stock_branch.group("body"),
+require("outcome.envdiffuse_linear_consumer_diag = false;" in stock_body,
         "stock mode must report EnvDiffuse consumer inactive")
 
 require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in INTEGRATED,
