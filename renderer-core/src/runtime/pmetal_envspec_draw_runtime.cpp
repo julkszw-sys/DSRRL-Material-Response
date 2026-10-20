@@ -64,9 +64,7 @@ std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_native_envdiffuse_logged{false};
 std::atomic_bool g_stock_envdiffuse_fallback_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
 std::atomic_bool g_stock_dsr_envdiffuse_logged{false};
-#endif
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
@@ -2232,7 +2230,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 #endif
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
     if (stock_envdiffuse_for_draw) {
         // Read-only witness of the native resources consumed by the stock
         // EnvDiffuse instructions. These references are never rebound.
@@ -2245,7 +2243,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     prepared.ready = true;
-#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
     if (stock_envdiffuse_for_draw &&
         !g_stock_dsr_envdiffuse_logged.exchange(
             true,
