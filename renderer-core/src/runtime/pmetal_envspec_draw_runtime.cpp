@@ -1060,9 +1060,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_source_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-#if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    // Stable-only lineage: HemEnvLerp must fail open until the complete
-    // two-endpoint PTDE EnvDiffuse island is compiled in.
+#if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // Stable-only lineage: HemEnvLerp must fail open until either the complete
+    // two-endpoint PTDE EnvDiffuse island or the explicit stock-DSR variant is compiled in.
     if (family !=
             pmetal_envspec_receiver_family::
                 stable_hemenv) {
