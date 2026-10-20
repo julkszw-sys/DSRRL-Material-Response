@@ -1,7 +1,7 @@
-name: V230 exact V359 production candidate single addon
+name: V230 V359 stock DSR EnvDiffuse isolated diagnostic addon
 on:
   push:
-    branches: [release/v2.3.0-v359-prep]
+    branches: [release/v2.3.0-v359-prep, agent/v230-stock-dsr-envdiffuse-isolated-20261020]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +13,8 @@ jobs:
       - name: Static source and optimizer contract
         shell: bash
         run: |
-          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py renderer-core/tools/test_v230_stock_envdiffuse_contract.py
+          python3 renderer-core/tools/test_v230_stock_envdiffuse_contract.py
           python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
           python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
           python3 renderer-core/tools/test_v351_fallback_census.py --output v230_fallback_census.json
@@ -31,7 +32,7 @@ jobs:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
-      - name: Build exact V359 descendant with v2.3.0 identity
+      - name: Build exact V359 descendant with stock DSR EnvDiffuse isolation
         shell: pwsh
         run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - name: Verify single PE addon, identity and legacy instrumentation absence
@@ -42,7 +43,7 @@ jobs:
           $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
           if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE output' }
           $raw=[Text.Encoding]::ASCII.GetString($bytes)
-          foreach($marker in @('2.3.0','v230_production')) {
+          foreach($marker in @('2.3.0','v230_production','[DSRRL V230 STOCK DSR ENVDIFFUSE]')) {
             if (!$raw.Contains($marker)) { throw "Missing identity $marker" }
           }
           foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]')) {
@@ -51,6 +52,6 @@ jobs:
           Get-FileHash $path -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v2.3.0-V359-single-addon-CANDIDATE
+          name: DSRRL-v2.3.0-V359-STOCK-ENVDIFFUSE-ISOLATED-DIAGNOSTIC
           path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
           if-no-files-found: error
