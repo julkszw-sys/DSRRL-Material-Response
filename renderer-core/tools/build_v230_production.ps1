@@ -10,7 +10,7 @@ Once 'v350_rc2_gpu_resident_pointlight_off' 'v230_production'
 Once 'build-v350-gpu-resident-pointlight-off-rc2' 'build-v230-release'
 Once 'out-v350-gpu-resident-pointlight-off-rc2' 'out-v230-release'
 Once 'DSRRL_V350_GPU_RESIDENT_POINTLIGHT_OFF_RC2.addon64' 'DSRRL_Restored_Lighting_v2.3.0.addon64'
-Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V230_PRODUCTION /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS'
+Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V230_PRODUCTION /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS /DDSRRL_V230_STOCK_DSR_ENVDIFFUSE'
 Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF'
 Once 'cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated' @'
 python renderer-core/tools/audit_active_islands_hotpath.py --source-dir renderer-core
@@ -19,6 +19,8 @@ python renderer-core/tools/materialize_v230_release_cleanup.py
 if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 cleanup failed' }
 python renderer-core/tools/test_v230_release_contract.py
 if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 release contract failed' }
+python renderer-core/tools/test_v230_stock_envdiffuse_contract.py
+if ($LASTEXITCODE -ne 0) { throw 'Stock DSR EnvDiffuse isolation contract failed' }
 $env:DSRRL_V230_LOG_FREE_AUDIT='1'
 cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated
 '@
@@ -71,9 +73,9 @@ try {
  if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 native build failed' }
  $file='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
  $raw=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $file)))
- foreach($m in @('[DSRRL V350 PTDE LERP RGB]','[DSRRL GPU RESIDENT RC1]','v230_production','2.3.0')) {
+ foreach($m in @('[DSRRL V350 PTDE LERP RGB]','[DSRRL GPU RESIDENT RC1]','v230_production','2.3.0','[DSRRL V230 STOCK DSR ENVDIFFUSE]')) {
    if (-not $raw.Contains($m)) { throw "Missing binary marker: $m" }
  }
- Write-Host 'v2.3.0 PRE-RELEASE native build PASS; GPU/PIXEL performance A-B OPEN'
+ Write-Host 'v2.3.0 STOCK DSR ENVDIFFUSE diagnostic native build PASS; runtime and pixel OPEN'
  Get-FileHash $file -Algorithm SHA256 | Format-List
 } finally { Remove-Item $temp -Force -ErrorAction SilentlyContinue }
