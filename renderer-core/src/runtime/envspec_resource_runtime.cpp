@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
+#include "dsrrl/runtime/v230_failopen_diagnostic.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
