@@ -127,6 +127,7 @@ dsrrl_gi_reflection_branch_entry PROC
     ; Diagnostics only; never establishes a GPU resource identity.
     mov ecx, r9d
     mov edx, r15d
+    mov r8, r12
     call dsrrl_gi_reflection_branch_observer
 
     movdqu xmm0, xmmword ptr [rsp+30h]
