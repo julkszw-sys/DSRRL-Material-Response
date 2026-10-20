@@ -81,7 +81,7 @@ require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETA
 require("envspec=t12_t14=ptde" in runtime and
         "[DSRRL PMETAL STOCK DSR ENVDIFFUSE]" in runtime,
         "stock-mode runtime identity marker is missing")
-require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n        std::array<std::uint32_t,24> payload_bits{};" in runtime,
+require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    std::array<std::uint32_t,24> payload_bits{};" in runtime,
         "runtime b12 payload width is not stock-mode aware")
 require("#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n        std::array<std::uint32_t,24> payload_bits{};" in header,
         "header b12 cache width is not stock-mode aware")
