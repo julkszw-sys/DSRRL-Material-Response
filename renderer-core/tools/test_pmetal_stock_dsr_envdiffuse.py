@@ -85,11 +85,11 @@ require("envspec=t12_t14=ptde" in runtime and
         "stock-mode runtime identity marker is missing")
 require("#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)" in pmetal_source,
         "stock mode still compiles the EnvDiffuse donor loader as its active source path")
-require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    if (!load_exact_envdiffuse_donor())" in pmetal_source,
+require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    if (!load_exact_envdiffuse_donor())" in pmetal_source,
         "stock mode still attempts to load the PTDE EnvDiffuse donor at install")
-require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n    // Stock EnvDiffuse is supplied by the untouched DSR t11/t13 path." in pmetal_source,
+require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n    // Stock EnvDiffuse is supplied by the untouched DSR t11/t13 path." in pmetal_source,
         "stock mode still requires EnvDiffuse donor during source-hook publication")
-require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\\n            // EnvSpec still needs the exact PTDE endpoints and beta" in v351_materializer,
+require("#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)\n            // EnvSpec still needs the exact PTDE endpoints and beta" in v351_materializer,
         "V351 typed-source gate still requires EnvDiffuse endpoints")
 require("next.envdiffuse_linear_valid = false;" in pmetal_source,
         "stock source carrier does not mark EnvDiffuse endpoints unused")
