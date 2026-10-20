@@ -455,7 +455,8 @@ register_replacement(
     const operators::env_spec::
         pmetal_rgba_materialize_outcome &outcome,
     const void *dxbc,
-    std::size_t dxbc_size) noexcept
+    std::size_t dxbc_size,
+    bool stock_envdiffuse_variant) noexcept
 {
     using result =
         operators::env_spec::
@@ -486,7 +487,8 @@ register_replacement(
         !outcome.phn_scene_encoding_composed ||
 #endif
         !outcome.spec_rgb_consumer ||
-        outcome.envdiffuse_linear_consumer_diag ||
+        (outcome.envdiffuse_linear_consumer_diag ==
+            stock_envdiffuse_variant) ||
 #else
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
         !outcome.phn_scene_encoding_composed ||
@@ -516,7 +518,9 @@ register_replacement(
     }
 
     auto &record =
-        replacements_[outcome.receiver_id];
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_replacements_[outcome.receiver_id]
+            : replacements_[outcome.receiver_id];
 
     if (record.shader != nullptr) {
         const bool same_payload =
@@ -568,7 +572,8 @@ register_lerp_replacement(
     const operators::env_spec::
         pmetal_rgba_lerp_materialize_outcome &outcome,
     const void *dxbc,
-    std::size_t dxbc_size) noexcept
+    std::size_t dxbc_size,
+    bool stock_envdiffuse_variant) noexcept
 {
     using result =
         operators::env_spec::
@@ -579,8 +584,9 @@ register_lerp_replacement(
         outcome.semantic_receiver_id > 35u ||
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
-        outcome.envdiffuse_preserved ||
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        (outcome.envdiffuse_preserved !=
+            stock_envdiffuse_variant) ||
 #else
         !outcome.envdiffuse_preserved ||
 #endif
@@ -607,15 +613,16 @@ register_lerp_replacement(
     }
 
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
-    // Exactly ONE D3D11 HemEnvLerp pixel shader per RX33-35, identical
-    // for P_Metal and nonmetal. Rebuild after R19 A/B source preparation
-    // with a single PTDE post-EnvSpec material consumer.
+    // The default variant is shared with the verified nonmetal aliases.
+    // The stock-EnvDiffuse variant is P_Metal-only and must retain its own
+    // exact shader payload rather than be rebuilt through the unified path.
     std::vector<std::uint8_t> unified;
-    if (!operators::env_spec::
+    if (!stock_envdiffuse_variant &&
+        (!operators::env_spec::
             materialize_nonmetal_lerp_r8_spec_linear_candidate(
                 static_cast<const std::uint8_t *>(dxbc),
                 dxbc_size, unified) ||
-        unified.empty()) {
+         unified.empty())) {
         ++lerp_replacement_register_fail_;
         char log[256]{};
 #if defined(DSRRL_V346_LERP_REJECT_STAGE)
@@ -636,8 +643,10 @@ register_lerp_replacement(
         reshade::log::message(reshade::log::level::warning,log);
         return false;
     }
-    dxbc=unified.data();
-    dxbc_size=unified.size();
+    if (!stock_envdiffuse_variant) {
+        dxbc=unified.data();
+        dxbc_size=unified.size();
+    }
 #endif
     const auto payload_sha256 =
         hashing::sha256(
