@@ -139,10 +139,6 @@ constexpr bool k_v13_native_dsr_material_mod_diag = true;
 constexpr bool k_v13_native_dsr_material_mod_diag = false;
 #endif
 
-constexpr bool k_v13_preserve_stock_envdiffuse =
-    k_v13_native_dsr_no_tail_diag ||
-    k_v13_native_dsr_material_mod_diag;
-
 void effect_latch(std::atomic_bool &flag) noexcept
 {
     if (!telemetry::effect_enabled() ||
