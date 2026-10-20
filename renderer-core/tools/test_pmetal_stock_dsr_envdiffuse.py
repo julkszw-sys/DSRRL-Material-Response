@@ -133,6 +133,26 @@ require("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETA
         "stock mode does not disable the EnvDiffuse donor prerequisite")
 require("envdiffuse_linear_source_reject" not in runtime,
         "EnvDiffuse validity still rejects an authenticated EnvSpec draw")
+require("if (!source.envdiffuse_linear_valid &&\\n        exact_pmetal_material(material) &&" in runtime and
+        "envdiffuse_resource_and_stock_fallback_reject" in runtime and
+        "PTDE EnvDiffuse resources unavailable; exact P_Metal EnvSpec continues with stock DSR EnvDiffuse." in runtime,
+        "missing EnvDiffuse source/resources do not select the stock DSR fallback")
+require(runtime.index("env_resources_.prepare_envdiffuse(") <
+            runtime.index("const std::array<f4,6> payload") and
+        "stock_envdiffuse_lerp_replacements_.find(" in runtime and
+        "stock_envdiffuse_replacements_.find(" in runtime,
+        "EnvDiffuse resource preflight does not precede b12 payload creation or select both stock receiver families")
+selector_start = pmetal_source.index("const bool envdiffuse_valid =")
+selector_end = pmetal_source.index("next.serial = epoch", selector_start)
+selector_block = pmetal_source[selector_start:selector_end]
+require("return;" not in selector_block and
+        "next.envdiffuse_linear_valid = false;" in selector_block,
+        "selector endpoint decode still prevents EnvSpec source publication")
+require("envspec_stock_payload" in integrated and
+        "envspec_lerp_stock_payload" in integrated and
+        integrated.rfind("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)", 0, integrated.index("envspec_stock_payload")) >= 0 and
+        integrated.rfind("#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)", 0, integrated.index("envspec_lerp_stock_payload")) >= 0,
+        "stock fallback variants are not built independently in every Full PTDE build")
 require("envspec_source_finite &&" in v351_materializer and
         "(preserve_stock_envdiffuse ||" in v351_materializer and
         "envdiffuse_source_finite" in v351_materializer,
