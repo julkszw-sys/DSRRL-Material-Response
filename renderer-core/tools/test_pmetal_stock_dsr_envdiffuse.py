@@ -27,8 +27,9 @@ base_builder = read("tools/build_v350_gpu_resident_pointlight_off_rc2.ps1")
 workflow = read("../.github/workflows/v359-stock-dsr-envdiffuse.yml")
 contract = read("docs/PMETAL_STOCK_DSR_ENVDIFFUSE_CONTRACT.md")
 
-# The stock mode is opt-in and retains the R19 feature lineage because V285/V289
-# still use it. Only the EnvDiffuse cut selected for the exact P_Metal draw changes.
+# The stock mode keeps the cumulative R19 feature lineage, but this isolated
+# candidate disables experimental nonmetal alias islands so only exact P_Metal
+# can reach this EnvSpec bridge. Non-P_Metal draws must fail open.
 require("option(\n    DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE" in cmake,
         "missing opt-in CMake option")
 require("NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG" in cmake and
@@ -39,9 +40,9 @@ require("NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG" in cmake and
 require("DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE" in cmake,
         "missing compile definition")
 
-# Both shader materializers must be able to build two payloads from one exact
-# stock shader: default PTDE EnvDiffuse for verified aliases, and stock DSR
-# EnvDiffuse for the exact P_Metal route.
+# The default PTDE payload remains part of the cumulative source lineage, but
+# this candidate disables nonmetal alias routing. Only exact P_Metal may select
+# the stock payload; non-P_Metal draws fail open before source setup.
 require("bool preserve_stock_envdiffuse = false" in stable_header and
         "bool preserve_stock_envdiffuse) noexcept" in stable,
         "stable materializer lacks per-payload mode")
@@ -66,7 +67,7 @@ require("apply_exact_ptde_lerp_materialworkflow_r15_r16_r17(" in lerp and
         "Lerp MaterialWorkflow/SpecRGB/terminal-SAT path is missing")
 
 # Runtime chooses the stock variant only after the exact P_Metal material and
-# route decision pass. Other verified aliases retain the existing sidecar path.
+# route decision pass. The candidate builder disables nonmetal alias routes.
 require("const bool stock_envdiffuse_for_draw =" in runtime and
         "k_stock_dsr_envdiffuse &&" in runtime and
         "exact_pmetal_material(material) &&" in runtime and
@@ -102,9 +103,9 @@ require("struct b12_context_key" in runtime_header and
         "stock_envdiffuse_lerp_replacements_" in runtime_header,
         "variant maps or size-keyed b12 cache are missing")
 
-# EnvSpec source publication remains usable if an EnvDiffuse row is unavailable
-# only for the stock P_Metal draw. Verified nonmetal aliases still require valid
-# EnvDiffuse donor data and fail open otherwise.
+# Stock P_Metal can use the EnvSpec source without an EnvDiffuse row. The
+# candidate builder disables V285/V289/V293 so non-P_Metal aliases fail open at
+# the exact material gate before this sidecar path can activate.
 require("next.envdiffuse_linear_valid =\n        envdiffuse_linear_valid;" in pmetal_source and
         "if (donor_ok)" in pmetal_source and
         "envdiffuse_ok," in pmetal_source,
@@ -117,8 +118,8 @@ require("envspec_source_finite &&" in v351_materializer and
         "envdiffuse_source_finite" in v351_materializer,
         "V351 typed-source validation is not per draw")
 
-# Create-time registration builds both payloads; the nonmetal R8 branch is
-# still derived from the default PTDE-EnvDiffuse Lerp payload.
+# Create-time registration keeps distinct stable/Lerp stock payloads. The
+# nonmetal R8 candidate is not enabled in this build because V289 is OFF.
 require("envspec_stock_payload" in integrated and
         "envspec_stock_payload.size()," in integrated and
         "envspec_stock_payload.size(),\n                        true" in integrated,
@@ -126,16 +127,23 @@ require("envspec_stock_payload" in integrated and
 require("envspec_lerp_stock_payload" in integrated and
         "envspec_lerp_stock_payload.size(),\n                        true" in integrated,
         "Lerp stock variant is not separately materialized/registered")
-require("register_lerp_nonmetal_r8_candidate(" in integrated and
-        "envspec_lerp_payload.data()" in integrated,
-        "nonmetal R8 no longer uses the default EnvDiffuse payload")
+# The base builder enables the nonmetal experimental islands for its own
+# candidate. This wrapper must override each gate to OFF for P_Metal-only scope.
+require("DSRRL_V285_ATOMIC_NONMETAL_DIAG=OFF" in builder and
+        "DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=OFF" in builder and
+        "DSRRL_V293_PARSER_EXACT_FLVER_ALIAS=OFF" in builder and
+        "V285_ATOMIC_NONMETAL_DIAG=ON" in base_builder and
+        "V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB=ON" in base_builder and
+        "V293_PARSER_EXACT_FLVER_ALIAS=ON" in base_builder,
+        "stock candidate must override inherited nonmetal alias islands to fail open")
 
-r8_candidate_start = lerp.index("bool materialize_nonmetal_lerp_r8_spec_linear_candidate(")
-r8_candidate_end = lerp.index("\n#undef DSRRL_V346_FAIL", r8_candidate_start)
-r8_candidate = lerp[r8_candidate_start:r8_candidate_end]
-require("preserve_stock_envdiffuse" not in r8_candidate and
-        "129u - k_ptde_envdiffuse_lerp_prefix_words" in r8_candidate,
-        "nonmetal R8 offset guard must match the default PTDE EnvDiffuse payload")
+candidate_gate_start = runtime.index("bool exact_pmetal_envspec_candidate(")
+candidate_gate_end = runtime.index("\npmetal_envspec_draw_runtime::", candidate_gate_start)
+candidate_gate = runtime[candidate_gate_start:candidate_gate_end]
+require("exact_pmetal_material(material)" in candidate_gate and
+        "#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)" in candidate_gate and
+        "return false;" in candidate_gate,
+        "non-P_Metal aliases are not rejected when V285 is disabled")
 
 # Reproducible single-addon candidate; no release identity or source tree is
 # overwritten. Construction is not runtime or pixel proof.
@@ -152,7 +160,7 @@ require("out-v359-stock-dsr-envdiffuse" in builder and
         "build_v359_stock_dsr_envdiffuse.ps1" in workflow and
         "actions/upload-artifact@v4" in workflow,
         "isolated single-addon build/artifact path is missing")
-require("default PTDE EnvDiffuse" in contract and
+require("All non-P_Metal aliases fail open" in contract and
         "exact P_Metal" in contract and
         "Pixel equivalence remains OPEN" in contract,
         "contract must distinguish the two variants and validation limits")
