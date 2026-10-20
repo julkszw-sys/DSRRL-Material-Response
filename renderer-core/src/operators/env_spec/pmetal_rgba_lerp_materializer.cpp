@@ -2429,10 +2429,10 @@ bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
     // These exact guards still require unique t12/t14/t11 samples,
     // sufficient NOP room and byte-for-byte PTDE EnvSpec A/B identity.
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    const std::size_t v344_expected_t11_delta =
-        preserve_stock_envdiffuse
-            ? 129u
-            : 129u - k_ptde_envdiffuse_lerp_prefix_words;
+    // This helper materializes the nonmetal R8 candidate from the default
+    // PTDE-EnvDiffuse Lerp payload, never from the exact P_Metal stock variant.
+    constexpr std::size_t v344_expected_t11_delta =
+        129u - k_ptde_envdiffuse_lerp_prefix_words;
 #else
     constexpr std::size_t v344_expected_t11_delta = 129u;
 #endif
