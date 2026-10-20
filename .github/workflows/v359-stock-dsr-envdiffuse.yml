@@ -1,0 +1,72 @@
+name: V359 stock DSR EnvDiffuse single addon
+
+on:
+  push:
+    branches:
+      - agent/stock-dsr-envdiffuse-20261020
+  pull_request:
+    paths:
+      - "renderer-core/integrated/**"
+      - "renderer-core/include/dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+      - "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp"
+      - "renderer-core/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
+      - "renderer-core/tools/build_v359_stock_dsr_envdiffuse.ps1"
+      - "renderer-core/tools/test_pmetal_stock_dsr_envdiffuse.py"
+      - "renderer-core/docs/PMETAL_STOCK_DSR_ENVDIFFUSE_CONTRACT.md"
+      - ".github/workflows/v359-stock-dsr-envdiffuse.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v359-stock-dsr-envdiffuse-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify stock EnvDiffuse source contract
+        run: python3 renderer-core/tools/test_pmetal_stock_dsr_envdiffuse.py
+      - name: Syntax-check source contract
+        run: python3 -m py_compile renderer-core/tools/test_pmetal_stock_dsr_envdiffuse.py
+
+  native-single-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Resolve exact source commit
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build V359 stock DSR EnvDiffuse integrated addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v359_stock_dsr_envdiffuse.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify artifact identity
+        shell: pwsh
+        run: |
+          $path = "out-v359-stock-dsr-envdiffuse/DSRRL_V359_STOCK_DSR_ENVDIFFUSE.addon64"
+          $raw = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          if (-not $raw.Contains($env:DSRRL_CHECKOUT_COMMIT)) { throw "Missing exact source commit identity" }
+          if (-not $raw.Contains("v359_stock_dsr_envdiffuse")) { throw "Missing build flavor identity" }
+          if (-not $raw.Contains("[DSRRL PMETAL STOCK DSR ENVDIFFUSE]")) { throw "Missing stock EnvDiffuse runtime marker" }
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          "ADDON_SHA256=$hash" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V359-Stock-DSR-EnvDiffuse-single-addon
+          path: out-v359-stock-dsr-envdiffuse/DSRRL_V359_STOCK_DSR_ENVDIFFUSE.addon64
+          if-no-files-found: error
