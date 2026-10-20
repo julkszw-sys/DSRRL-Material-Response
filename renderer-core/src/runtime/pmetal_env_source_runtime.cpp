@@ -2430,15 +2430,18 @@ void pmetal_env_source_cache_invalidate() noexcept
 bool pmetal_env_source_runtime::install() noexcept
 {
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    // EnvDiffuse donor data belongs to the independent EnvDiffuse operator.
+    // Missing/invalid EnvDiffuse data must not prevent installation of the
+    // EnvSpec source observer; exact EnvDiffuse consumers validate it locally.
     if (!load_exact_envdiffuse_donor()) {
         reshade::log::message(
             reshade::log::level::warning,
-            "DSRRL Full PTDE HemEnv: exact PTDE EnvDiffuse LightBank donor sidecar unavailable or invalid; source carrier fails open.");
-        return false;
+            "DSRRL EnvDiffuse donor unavailable; EnvSpec source hooks remain independently installable.");
+    } else {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse LightBank donor admitted.");
     }
-    reshade::log::message(
-        reshade::log::level::info,
-        "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse LightBank donor admitted.");
 #endif
     pmetal_env_source_cache_invalidate();
     clear_hook_source();
