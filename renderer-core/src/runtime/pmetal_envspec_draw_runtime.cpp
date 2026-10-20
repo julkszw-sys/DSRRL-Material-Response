@@ -62,7 +62,9 @@ constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_native_envdiffuse_logged{false};
+std::atomic_bool g_stock_envdiffuse_fallback_logged{false};
 std::atomic_bool g_envdiffuse_consumer_logged{false};
+std::atomic_bool g_stock_dsr_envdiffuse_logged{false};
 std::atomic_bool g_source_frontier_logged{false};
 std::atomic_bool g_shadow_r7_logged{false};
 std::atomic<std::uint32_t> g_prepare_stage_log_mask{0u};
@@ -142,6 +144,13 @@ constexpr bool k_v13_native_dsr_material_mod_diag = false;
 constexpr bool k_v13_preserve_stock_envdiffuse =
     k_v13_native_dsr_no_tail_diag ||
     k_v13_native_dsr_material_mod_diag;
+#if defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+constexpr bool k_stock_dsr_envdiffuse = true;
+#else
+constexpr bool k_stock_dsr_envdiffuse = false;
+#endif
+constexpr bool k_preserve_stock_envdiffuse =
+    k_v13_preserve_stock_envdiffuse;
 
 void effect_latch(std::atomic_bool &flag) noexcept
 {
@@ -279,6 +288,11 @@ release_resources() noexcept
             record.shader->Release();
     }
     replacements_.clear();
+    for (auto &[_,record] : stock_envdiffuse_replacements_) {
+        if (record.shader != nullptr)
+            record.shader->Release();
+    }
+    stock_envdiffuse_replacements_.clear();
 
     for (auto &[_,shader] :
          lerp_replacements_) {
@@ -286,6 +300,11 @@ release_resources() noexcept
             shader->Release();
     }
     lerp_replacements_.clear();
+    for (auto &[_,shader] : stock_envdiffuse_lerp_replacements_) {
+        if (shader != nullptr)
+            shader->Release();
+    }
+    stock_envdiffuse_lerp_replacements_.clear();
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
         if (shader != nullptr) shader->Release();
@@ -294,6 +313,8 @@ release_resources() noexcept
 #endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
+    stock_envdiffuse_lerp_replacement_sha256_.clear();
+    stock_envdiffuse_lerp_replacement_size_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
@@ -403,6 +424,11 @@ on_destroy_device(
             record.shader->Release();
     }
     replacements_.clear();
+    for (auto &[_,record] : stock_envdiffuse_replacements_) {
+        if (record.shader != nullptr)
+            record.shader->Release();
+    }
+    stock_envdiffuse_replacements_.clear();
 
     for (auto &[_,shader] :
          lerp_replacements_) {
@@ -410,6 +436,11 @@ on_destroy_device(
             shader->Release();
     }
     lerp_replacements_.clear();
+    for (auto &[_,shader] : stock_envdiffuse_lerp_replacements_) {
+        if (shader != nullptr)
+            shader->Release();
+    }
+    stock_envdiffuse_lerp_replacements_.clear();
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
         if (shader != nullptr) shader->Release();
@@ -418,6 +449,8 @@ on_destroy_device(
 #endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
+    stock_envdiffuse_lerp_replacement_sha256_.clear();
+    stock_envdiffuse_lerp_replacement_size_.clear();
 
     for (auto &[_,entry] :
          b12_by_context_) {
@@ -444,7 +477,8 @@ register_replacement(
     const operators::env_spec::
         pmetal_rgba_materialize_outcome &outcome,
     const void *dxbc,
-    std::size_t dxbc_size) noexcept
+    std::size_t dxbc_size,
+    bool stock_envdiffuse_variant) noexcept
 {
     using result =
         operators::env_spec::
@@ -470,6 +504,13 @@ register_replacement(
 #elif defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         !outcome.spec_rgb_consumer ||
         outcome.envdiffuse_linear_consumer_diag ||
+#elif defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
+        !outcome.phn_scene_encoding_composed ||
+#endif
+        !outcome.spec_rgb_consumer ||
+        (outcome.envdiffuse_linear_consumer_diag ==
+            stock_envdiffuse_variant) ||
 #else
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R6)
         !outcome.phn_scene_encoding_composed ||
@@ -499,7 +540,9 @@ register_replacement(
     }
 
     auto &record =
-        replacements_[outcome.receiver_id];
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_replacements_[outcome.receiver_id]
+            : replacements_[outcome.receiver_id];
 
     if (record.shader != nullptr) {
         const bool same_payload =
@@ -551,7 +594,8 @@ register_lerp_replacement(
     const operators::env_spec::
         pmetal_rgba_lerp_materialize_outcome &outcome,
     const void *dxbc,
-    std::size_t dxbc_size) noexcept
+    std::size_t dxbc_size,
+    bool stock_envdiffuse_variant) noexcept
 {
     using result =
         operators::env_spec::
@@ -563,7 +607,8 @@ register_lerp_replacement(
         outcome.pair_index + 24u !=
             outcome.semantic_receiver_id ||
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        outcome.envdiffuse_preserved ||
+        (outcome.envdiffuse_preserved !=
+            stock_envdiffuse_variant) ||
 #else
         !outcome.envdiffuse_preserved ||
 #endif
@@ -590,9 +635,8 @@ register_lerp_replacement(
     }
 
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
-    // Exactly ONE D3D11 HemEnvLerp pixel shader per RX33-35, identical
-    // for P_Metal and nonmetal. Rebuild after R19 A/B source preparation
-    // with a single PTDE post-EnvSpec material consumer.
+    // Apply the same downstream Material/SpecRGB fixes to both variants.
+    // The separate registry preserves the P_Metal-only EnvDiffuse semantic cut.
     std::vector<std::uint8_t> unified;
     if (!operators::env_spec::
             materialize_nonmetal_lerp_r8_spec_linear_candidate(
@@ -636,24 +680,37 @@ register_lerp_replacement(
         return false;
     }
 
+    auto &replacement_map =
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_lerp_replacements_
+            : lerp_replacements_;
+    auto &sha_map =
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_lerp_replacement_sha256_
+            : lerp_replacement_sha256_;
+    auto &size_map =
+        stock_envdiffuse_variant
+            ? stock_envdiffuse_lerp_replacement_size_
+            : lerp_replacement_size_;
+
     const auto existing =
-        lerp_replacements_.find(
+        replacement_map.find(
             outcome.semantic_receiver_id);
 
     if (existing !=
-            lerp_replacements_.end() &&
+            replacement_map.end() &&
         existing->second != nullptr) {
         const auto sha_it =
-            lerp_replacement_sha256_.find(
+            sha_map.find(
                 outcome.semantic_receiver_id);
         const auto size_it =
-            lerp_replacement_size_.find(
+            size_map.find(
                 outcome.semantic_receiver_id);
         const bool same_payload =
             sha_it !=
-                lerp_replacement_sha256_.end() &&
+                sha_map.end() &&
             size_it !=
-                lerp_replacement_size_.end() &&
+                size_map.end() &&
             sha_it->second ==
                 payload_sha256 &&
             size_it->second ==
@@ -683,13 +740,13 @@ register_lerp_replacement(
         return false;
     }
 
-    lerp_replacements_[
+    replacement_map[
         outcome.semantic_receiver_id] =
         shader;
-    lerp_replacement_sha256_[
+    sha_map[
         outcome.semantic_receiver_id] =
         payload_sha256;
-    lerp_replacement_size_[
+    size_map[
         outcome.semantic_receiver_id] =
         dxbc_size;
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
@@ -830,6 +887,17 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
     effect_latch(effect_material_ready_);
+
+    // The stock-EnvDiffuse variant is selected only for the authenticated
+    // P_Metal route/material tuple. Verified nonmetal aliases keep the default
+    // PTDE EnvDiffuse sidecar variant and its independent feature path.
+    bool stock_envdiffuse_for_draw =
+        k_stock_dsr_envdiffuse &&
+        exact_pmetal_material(material) &&
+        exact_pmetal_decision(decision);
+    bool preserve_stock_envdiffuse =
+        k_preserve_stock_envdiffuse ||
+        stock_envdiffuse_for_draw;
 
     if (!core_.features().enabled(
             core::operator_id::env_spec)) {
@@ -1040,31 +1108,20 @@ bool pmetal_envspec_draw_runtime::prepare(
 
         return false;
     }
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (!source.envdiffuse_linear_valid &&
+        exact_pmetal_material(material) &&
+        exact_pmetal_decision(decision)) {
+        stock_envdiffuse_for_draw = true;
+        preserve_stock_envdiffuse = true;
+    }
+#endif
     effect_latch(effect_source_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-#if !defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    // Stable-only lineage: HemEnvLerp must fail open until the complete
-    // two-endpoint PTDE EnvDiffuse island is compiled in.
-    if (family !=
-            pmetal_envspec_receiver_family::
-                stable_hemenv) {
-        telemetry::hot_count(
-            blended_receiver_hold_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_blend);
-        log_prepare_stage_once(
-            1u << 5u,
-            "full_ptde_stable_only_hold",
-            material,
-            decision,
-            family);
-        return false;
-    }
-#else
-    // R19 admits only the two exact P_Metal receiver families. Unknown
-    // families still fail open rather than inheriting the Lerp bridge.
+    // Both exact receiver families have independent PTDE-EnvDiffuse and
+    // stock-DSR-EnvDiffuse payloads. EnvDiffuse feature availability does not
+    // gate EnvSpec receiver admission; unknown families still fail open.
     if (family !=
             pmetal_envspec_receiver_family::
                 stable_hemenv &&
@@ -1078,7 +1135,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             k_effect_fail_blend);
         return false;
     }
-#endif
 #endif
 
     if (family ==
@@ -1097,32 +1153,9 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
-    const bool exact_envdiffuse_source_required =
-        family ==
-            pmetal_envspec_receiver_family::
-                stable_hemenv
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        || family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp
-#endif
-        ;
-
-    if (!k_v13_preserve_stock_envdiffuse &&
-        exact_envdiffuse_source_required &&
-        !source.envdiffuse_linear_valid) {
-        telemetry::hot_count(source_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_source);
-        log_prepare_stage_once(
-            1u << 12u,
-            "envdiffuse_linear_source_reject",
-            material,
-            decision,
-            family);
-        return false;
-    }
+    // EnvDiffuse validity is not an EnvSpec activation prerequisite. The exact
+    // P_Metal stock variant preserves native DSR t11/t13 consumer state; its
+    // source carrier is intentionally independent of the EnvDiffuse endpoint.
     effect_latch(effect_receiver_source_ready_);
 
     auto *context =
@@ -1156,13 +1189,39 @@ bool pmetal_envspec_draw_runtime::prepare(
         if (family ==
             pmetal_envspec_receiver_family::
                 hemenvlerp) {
-            const auto found =
-                lerp_replacements_.find(
+            const auto &selected_lerp_replacements =
+                stock_envdiffuse_for_draw
+                    ? stock_envdiffuse_lerp_replacements_
+                    : lerp_replacements_;
+            auto found =
+                selected_lerp_replacements.find(
                     decision.receiver_id);
 
-            if (found ==
-                    lerp_replacements_.end() ||
-                found->second == nullptr) {
+            if ((found ==
+                    selected_lerp_replacements.end() ||
+                 found->second == nullptr) &&
+                !stock_envdiffuse_for_draw &&
+                !preserve_stock_envdiffuse &&
+                exact_pmetal_material(material) &&
+                exact_pmetal_decision(decision)) {
+                const auto stock_found =
+                    stock_envdiffuse_lerp_replacements_.find(
+                        decision.receiver_id);
+                if (stock_found !=
+                        stock_envdiffuse_lerp_replacements_.end() &&
+                    stock_found->second != nullptr) {
+                    stock_envdiffuse_for_draw = true;
+                    preserve_stock_envdiffuse = true;
+                    shader = stock_found->second;
+                }
+            }
+
+            if (shader == nullptr &&
+                found != selected_lerp_replacements.end() &&
+                found->second != nullptr)
+                shader = found->second;
+
+            if (shader == nullptr) {
                 ++lerp_replacement_register_fail_;
                 effect_fail(
                     effect_fail_mask_,
@@ -1175,11 +1234,10 @@ bool pmetal_envspec_draw_runtime::prepare(
                     family);
                 return false;
             }
-
-            shader = found->second;
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
             // Dedicated Lerp variant only; stock R19 remains P_Metal's.
-            if (material.route_index != 345u &&
+            if (!stock_envdiffuse_for_draw &&
+                material.route_index != 345u &&
                 (
                     v203_equipment::exact_envspec36_material(material)
 #if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
@@ -1197,13 +1255,44 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
             shader->AddRef();
         } else {
-            const auto found =
-                replacements_.find(
+            const auto &selected_replacements =
+                stock_envdiffuse_for_draw
+                    ? stock_envdiffuse_replacements_
+                    : replacements_;
+            auto found =
+                selected_replacements.find(
                     decision.receiver_id);
 
-            if (found ==
-                    replacements_.end() ||
-                found->second.shader == nullptr) {
+            if ((found ==
+                    selected_replacements.end() ||
+                 found->second.shader == nullptr) &&
+                !stock_envdiffuse_for_draw &&
+                !preserve_stock_envdiffuse &&
+                exact_pmetal_material(material) &&
+                exact_pmetal_decision(decision)) {
+                const auto stock_found =
+                    stock_envdiffuse_replacements_.find(
+                        decision.receiver_id);
+                if (stock_found !=
+                        stock_envdiffuse_replacements_.end() &&
+                    stock_found->second.shader != nullptr) {
+                    stock_envdiffuse_for_draw = true;
+                    preserve_stock_envdiffuse = true;
+                    shader = stock_found->second.shader;
+                    composed_owners =
+                        stock_found->second.composed_owners;
+                }
+            }
+
+            if (shader == nullptr &&
+                found != selected_replacements.end() &&
+                found->second.shader != nullptr) {
+                shader = found->second.shader;
+                composed_owners =
+                    found->second.composed_owners;
+            }
+
+            if (shader == nullptr) {
                 ++replacement_register_fail_;
                 effect_fail(
                     effect_fail_mask_,
@@ -1216,10 +1305,6 @@ bool pmetal_envspec_draw_runtime::prepare(
                     family);
                 return false;
             }
-
-            shader = found->second.shader;
-            composed_owners =
-                found->second.composed_owners;
             shader->AddRef();
         }
     }
@@ -1394,13 +1479,141 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_spec_rgb_ready_);
 #endif
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (!preserve_stock_envdiffuse) {
+    // Probe identity is inherited from the already-authenticated EnvSpec
+    // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
+    // probe ordinal and never derives assignment from DSR t11 content.
+    const bool ptde_envdiffuse_b_required =
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        family ==
+            pmetal_envspec_receiver_family::
+                hemenvlerp;
+#else
+        false;
+#endif
+
+    if (!env_resources_.prepare_envdiffuse(
+            prepared.env_resources.probe_a,
+            prepared.env_resources.probe_b,
+            ptde_envdiffuse_b_required,
+            prepared.envdiffuse_resources)) {
+        bool stock_shader_ready = false;
+        if (exact_pmetal_material(material) &&
+            exact_pmetal_decision(decision)) {
+            if (shader != nullptr) {
+                shader->Release();
+                shader = nullptr;
+            }
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (family ==
+                pmetal_envspec_receiver_family::hemenvlerp) {
+                const auto found =
+                    stock_envdiffuse_lerp_replacements_.find(
+                        decision.receiver_id);
+                if (found !=
+                        stock_envdiffuse_lerp_replacements_.end() &&
+                    found->second != nullptr) {
+                    shader = found->second;
+                    shader->AddRef();
+                    stock_shader_ready = true;
+                }
+            } else {
+                const auto found =
+                    stock_envdiffuse_replacements_.find(
+                        decision.receiver_id);
+                if (found !=
+                        stock_envdiffuse_replacements_.end() &&
+                    found->second.shader != nullptr) {
+                    shader = found->second.shader;
+                    composed_owners =
+                        found->second.composed_owners;
+                    shader->AddRef();
+                    stock_shader_ready = true;
+                }
+            }
+        }
+
+        if (!stock_shader_ready) {
+            if (shader != nullptr)
+                shader->Release();
+            env_resources_.release(
+                prepared.env_resources);
+            material_resources_.
+                release_prepared_draw(
+                    prepared.material_resources);
+            effect_fail(
+                effect_fail_mask_,
+                k_effect_fail_native_envdiffuse);
+            log_prepare_stage_once(
+                1u << 12u,
+                "envdiffuse_resource_and_stock_fallback_reject",
+                material,
+                decision,
+                family);
+            return false;
+        }
+
+        // EnvDiffuse is a separate operator: retain EnvSpec and use the
+        // authenticated stock shader variant when PTDE EnvDiffuse resources fail.
+        stock_envdiffuse_for_draw = true;
+        preserve_stock_envdiffuse = true;
+        prepared.envdiffuse_resources = {};
+        if (!g_stock_envdiffuse_fallback_logged.exchange(
+                true,
+                std::memory_order_relaxed)) {
+            reshade::log::message(
+                reshade::log::level::warning,
+                "[DSRRL PMETAL ENVSPEC] PTDE EnvDiffuse resources unavailable; exact P_Metal EnvSpec continues with stock DSR EnvDiffuse.");
+        }
+    }
+
+    if (!stock_envdiffuse_for_draw &&
+        !g_native_envdiffuse_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        const char *envdiffuse_mode =
+            family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp
+                ? "[DSRRL PMETAL R19 LERP] mode=exact_ptde_envdiffuse_ab_beta probe_a=%u t11=%016llx endpoint_a=%.9g,%.9g,%.9g"
+                : "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g";
+#else
+        constexpr const char *envdiffuse_mode =
+            "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g";
+#endif
+        std::snprintf(
+            line,
+            sizeof(line),
+            envdiffuse_mode,
+            static_cast<unsigned>(
+                prepared.envdiffuse_resources.probe_a),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    prepared.envdiffuse_resources.ptde_a)),
+            static_cast<double>(
+                source.envdiffuse_a[0]),
+            static_cast<double>(
+                source.envdiffuse_a[1]),
+            static_cast<double>(
+                source.envdiffuse_a[2]));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+    }
+#endif
+
     const bool stable_envdiffuse_consumer_diag =
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         false;
 #else
         family ==
             pmetal_envspec_receiver_family::
-                stable_hemenv;
+                stable_hemenv &&
+        !preserve_stock_envdiffuse;
 #endif
 
     std::array<float,3> carrier3{{
@@ -1416,11 +1629,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         carrier3 = {{0.0f,0.0f,0.0f}};
 #endif
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
     const std::array<f4,6> payload{{
-#else
-    const std::array<f4,4> payload{{
-#endif
         {
             decision.c101,
             decision.c101,
@@ -1452,27 +1661,26 @@ bool pmetal_envspec_draw_runtime::prepare(
             carrier3[1],
             carrier3[2],
             source.beta
-        }
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        ,
+        },
         {
-            source.envdiffuse_a[0],
-            source.envdiffuse_a[1],
-            source.envdiffuse_a[2],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_a[0],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_a[1],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_a[2],
             0.0f
         },
         {
-            source.envdiffuse_b[0],
-            source.envdiffuse_b[1],
-            source.envdiffuse_b[2],
-            source.beta
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_b[0],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_b[1],
+            preserve_stock_envdiffuse ? 0.0f : source.envdiffuse_b[2],
+            preserve_stock_envdiffuse ? 0.0f : source.beta
         }
-#endif
     }};
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
     static_assert(sizeof(payload) == 96u);
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    const std::uint32_t payload_bytes =
+        preserve_stock_envdiffuse ? 64u : 96u;
 #else
-    static_assert(sizeof(payload) == 64u);
+    const std::uint32_t payload_bytes = 64u;
 #endif
 
     ID3D11Device *device = nullptr;
@@ -1493,23 +1701,18 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
     std::array<std::uint32_t,24> payload_bits{};
-#else
-    std::array<std::uint32_t,16> payload_bits{};
-#endif
-    static_assert(
-        sizeof(payload_bits) == sizeof(payload));
     std::memcpy(
         payload_bits.data(),
         payload.data(),
-        sizeof(payload));
+        payload_bytes);
 
     ID3D11Buffer *b12 = nullptr;
     bool upload_required = true;
-    const auto b12_key =
-        reinterpret_cast<std::uintptr_t>(
-            context);
+    const b12_context_key b12_key{
+        reinterpret_cast<std::uintptr_t>(context),
+        payload_bytes
+    };
 
     {
         std::lock_guard<std::mutex> lock(
@@ -1537,29 +1740,25 @@ bool pmetal_envspec_draw_runtime::prepare(
             b12_by_context_.find(
                 b12_key);
 
-        if (found !=
-                b12_by_context_.end() &&
-            found->second.buffer != nullptr) {
-            b12 =
-                found->second.buffer;
+        if (found != b12_by_context_.end() &&
+            found->second.buffer != nullptr &&
+            found->second.payload_bytes == payload_bytes) {
+            b12 = found->second.buffer;
             b12->AddRef();
             upload_required =
                 !found->second.payload_valid ||
-                found->second.payload_bits !=
-                    payload_bits;
+                !std::equal(
+                    payload_bits.begin(),
+                    payload_bits.begin() +
+                        static_cast<std::ptrdiff_t>(
+                            payload_bytes / sizeof(std::uint32_t)),
+                    found->second.payload_bits.begin());
         } else {
             D3D11_BUFFER_DESC desc{};
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-            desc.ByteWidth = 96u;
-#else
-            desc.ByteWidth = 64u;
-#endif
-            desc.Usage =
-                D3D11_USAGE_DYNAMIC;
-            desc.BindFlags =
-                D3D11_BIND_CONSTANT_BUFFER;
-            desc.CPUAccessFlags =
-                D3D11_CPU_ACCESS_WRITE;
+            desc.ByteWidth = payload_bytes;
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
             if (FAILED(
                     device_->CreateBuffer(
@@ -1585,7 +1784,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 
             b12_context_cache entry{};
             entry.buffer = b12;
-            b12_by_context_.emplace(
+            entry.payload_bytes = payload_bytes;
+            b12_by_context_.insert_or_assign(
                 b12_key,
                 entry);
             b12->AddRef();
@@ -1623,7 +1823,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         std::memcpy(
             mapped.pData,
             payload.data(),
-            sizeof(payload));
+            payload_bytes);
 
         context->Unmap(
             b12,
@@ -1640,6 +1840,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                 found->second.buffer == b12) {
                 found->second.payload_bits =
                     payload_bits;
+                found->second.payload_bytes =
+                    payload_bytes;
                 found->second.payload_valid = true;
             }
         }
@@ -1653,79 +1855,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     effect_latch(effect_b12_ready_);
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    // Probe identity is inherited from the already-authenticated EnvSpec
-    // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
-    // probe ordinal and never derives assignment from DSR t11 content.
-    const bool ptde_envdiffuse_b_required =
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp;
-#else
-        false;
-#endif
-
-    if (!env_resources_.prepare_envdiffuse(
-            prepared.env_resources.probe_a,
-            prepared.env_resources.probe_b,
-            ptde_envdiffuse_b_required,
-            prepared.envdiffuse_resources)) {
-        b12->Release();
-        if (shader != nullptr)
-            shader->Release();
-        env_resources_.release(
-            prepared.env_resources);
-        material_resources_.
-            release_prepared_draw(
-                prepared.material_resources);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_native_envdiffuse);
-        log_prepare_stage_once(
-            1u << 12u,
-            "ptde_envdiffuse_resource_reject",
-            material,
-            decision,
-            family);
-        return false;
-    }
-
-    if (!g_native_envdiffuse_logged.exchange(
-            true,
-            std::memory_order_relaxed)) {
-        char line[512]{};
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        const char *envdiffuse_mode =
-            family ==
-                pmetal_envspec_receiver_family::
-                    hemenvlerp
-                ? "[DSRRL PMETAL R19 LERP] mode=exact_ptde_envdiffuse_ab_beta probe_a=%u t11=%016llx endpoint_a=%.9g,%.9g,%.9g"
-                : "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g";
-#else
-        constexpr const char *envdiffuse_mode =
-            "[DSRRL PMETAL FULL PTDE HEMENV] mode=stable_exact_envdiffuse_rgba_div probe=%u t11=%016llx endpoint=%.9g,%.9g,%.9g";
-#endif
-        std::snprintf(
-            line,
-            sizeof(line),
-            envdiffuse_mode,
-            static_cast<unsigned>(
-                prepared.envdiffuse_resources.probe_a),
-            static_cast<unsigned long long>(
-                reinterpret_cast<std::uintptr_t>(
-                    prepared.envdiffuse_resources.ptde_a)),
-            static_cast<double>(
-                source.envdiffuse_a[0]),
-            static_cast<double>(
-                source.envdiffuse_a[1]),
-            static_cast<double>(
-                source.envdiffuse_a[2]));
-        reshade::log::message(
-            reshade::log::level::info,
-            line);
-    }
-#elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
     // Legacy diagnostic ownership: explicitly rebind native DSR EnvDiffuse.
     ID3D11ShaderResourceView *native_envdiffuse_a = nullptr;
     ID3D11ShaderResourceView *native_envdiffuse_b = nullptr;
@@ -1828,12 +1958,20 @@ bool pmetal_envspec_draw_runtime::prepare(
         spec_owner |
         composed_owners;
 #else
-    prepared.request.additional_owners =
-        mr_owner |
-        domain_owner |
-        spec_owner |
-        envdiff_owner |
-        composed_owners;
+    if (preserve_stock_envdiffuse) {
+        prepared.request.additional_owners =
+            mr_owner |
+            domain_owner |
+            spec_owner |
+            composed_owners;
+    } else {
+        prepared.request.additional_owners =
+            mr_owner |
+            domain_owner |
+            spec_owner |
+            envdiff_owner |
+            composed_owners;
+    }
 
     if (family ==
         pmetal_envspec_receiver_family::
@@ -1854,11 +1992,17 @@ bool pmetal_envspec_draw_runtime::prepare(
         mr_owner;
     prepared.request.additional_resource_owners = 0u;
 #else
-    prepared.request.additional_constant_buffer_owners =
-        mr_owner |
-        envdiff_owner;
-    prepared.request.additional_resource_owners =
-        envdiff_owner;
+    if (preserve_stock_envdiffuse) {
+        prepared.request.additional_constant_buffer_owners =
+            mr_owner;
+        prepared.request.additional_resource_owners = 0u;
+    } else {
+        prepared.request.additional_constant_buffer_owners =
+            mr_owner |
+            envdiff_owner;
+        prepared.request.additional_resource_owners =
+            envdiff_owner;
+    }
 #endif
 
     prepared.request.receiver_verified = true;
@@ -1874,7 +2018,8 @@ bool pmetal_envspec_draw_runtime::prepare(
 #if defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) || defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         env_owner | mr_owner
 #else
-        env_owner | mr_owner | envdiff_owner
+        env_owner | mr_owner |
+            (preserve_stock_envdiffuse ? 0u : envdiff_owner)
 #endif
     };
     prepared.request.constant_buffer_count =
@@ -1882,22 +2027,24 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     std::uint32_t request_srv_count = 0u;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.srvs[
-        request_srv_count++] = {
-            11u,
-            prepared.envdiffuse_resources.ptde_a
-        };
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
+    if (!preserve_stock_envdiffuse) {
         prepared.request.srvs[
             request_srv_count++] = {
-                13u,
-                prepared.envdiffuse_resources.ptde_b
+                11u,
+                prepared.envdiffuse_resources.ptde_a
             };
-    }
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        if (family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp) {
+            prepared.request.srvs[
+                request_srv_count++] = {
+                    13u,
+                    prepared.envdiffuse_resources.ptde_b
+                };
+        }
 #endif
+    }
     prepared.request.srvs[
         request_srv_count++] = {
             12u,
@@ -2011,22 +2158,24 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            11u,
-            prepared.envdiffuse_resources.sampler
-        };
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
+    if (!preserve_stock_envdiffuse) {
         prepared.request.samplers[
             request_sampler_count++] = {
-                13u,
+                11u,
                 prepared.envdiffuse_resources.sampler
             };
-    }
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        if (family ==
+                pmetal_envspec_receiver_family::
+                    hemenvlerp) {
+            prepared.request.samplers[
+                request_sampler_count++] = {
+                    13u,
+                    prepared.envdiffuse_resources.sampler
+                };
+        }
 #endif
+    }
     prepared.request.samplers[
         request_sampler_count++] = {
             12u,
@@ -2107,7 +2256,43 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 #endif
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (stock_envdiffuse_for_draw) {
+        // Read-only witness of the native resources consumed by the stock
+        // EnvDiffuse instructions. These references are never rebound.
+        context->PSGetShaderResources(
+            11u, 1u, &prepared.native_dsr_envdiffuse_a);
+        if (family ==
+            pmetal_envspec_receiver_family::hemenvlerp)
+            context->PSGetShaderResources(
+                13u, 1u, &prepared.native_dsr_envdiffuse_b);
+    }
+#endif
     prepared.ready = true;
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    if (stock_envdiffuse_for_draw &&
+        !g_stock_dsr_envdiffuse_logged.exchange(
+            true,
+            std::memory_order_relaxed)) {
+        char line[512]{};
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] mode=stock_consumer_and_resources family=%u rx=%u route=%u t11=%016llx t13=%016llx envspec=t12_t14=ptde fail_open=stock",
+            static_cast<unsigned>(family),
+            static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(decision.route_index),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    prepared.native_dsr_envdiffuse_a)),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(
+                    prepared.native_dsr_envdiffuse_b)));
+        reshade::log::message(
+            reshade::log::level::info,
+            line);
+    }
+#endif
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
 

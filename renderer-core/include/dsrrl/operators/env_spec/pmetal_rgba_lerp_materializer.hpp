@@ -43,7 +43,8 @@ materialize_pmetal_rgba_lerp_receiver(
     const core::feature_registry &features,
     const std::uint8_t *stock_source,
     std::size_t stock_size,
-    std::vector<std::uint8_t> &output) noexcept;
+    std::vector<std::uint8_t> &output,
+    bool preserve_stock_envdiffuse = false) noexcept;
 
 // V289 opt-in: nonmetal-only exact material ELSE first-consumer
 // diagnostic. Builds an alternative PS from an already-validated

@@ -72,17 +72,22 @@ modified='''#if defined(DSRRL_V351_TYPED_DSR_ONLY_OPERATOR)
         // actual DSR values, not PTDE row63 aliases. Feed those values into
         // the existing MODIFIED PTDE shader/CB/sidecar composition.
         // The provenance type is not an operator-disable decision.
-        const bool typed_source_valid =
-            source.envdiffuse_linear_valid &&
+        const bool envspec_source_finite =
             std::isfinite(source.a[0]) && std::isfinite(source.a[1]) &&
             std::isfinite(source.a[2]) && std::isfinite(source.b[0]) &&
-            std::isfinite(source.b[1]) && std::isfinite(source.b[2]) &&
+            std::isfinite(source.b[1]) && std::isfinite(source.b[2]);
+        const bool envdiffuse_source_finite =
+            source.envdiffuse_linear_valid &&
             std::isfinite(source.envdiffuse_a[0]) &&
             std::isfinite(source.envdiffuse_a[1]) &&
             std::isfinite(source.envdiffuse_a[2]) &&
             std::isfinite(source.envdiffuse_b[0]) &&
             std::isfinite(source.envdiffuse_b[1]) &&
             std::isfinite(source.envdiffuse_b[2]);
+        const bool typed_source_valid =
+            envspec_source_finite &&
+            (preserve_stock_envdiffuse ||
+             envdiffuse_source_finite);
         if (!typed_source_valid) {
             telemetry::hot_count(source_rejects_);
             effect_fail(effect_fail_mask_,k_effect_fail_source);

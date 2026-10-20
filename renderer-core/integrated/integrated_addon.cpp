@@ -4680,6 +4680,40 @@ bool on_create_pipeline(
 #endif
             }
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+            // Try the stock variant independently: it can remain valid even
+            // when the default PTDE EnvDiffuse rewrite fails its own precondition.
+            std::vector<std::uint8_t> envspec_stock_payload;
+            const auto envspec_stock =
+                dsrrl::operators::env_spec::
+                    materialize_pmetal_rgba_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        false,
+                        envspec_stock_payload,
+                        true);
+            if (envspec_stock.result ==
+                envspec_result::applied) {
+                const bool stock_registered =
+                    g_pmetal_envspec.register_replacement(
+                        envspec_stock,
+                        envspec_stock_payload.data(),
+                        envspec_stock_payload.size(),
+                        true);
+                if (stock_registered)
+                    ++g_envspec_payload_materialize_ok;
+                else
+                    ++g_envspec_payload_materialize_fail;
+            } else if (
+                envspec_stock.result !=
+                    envspec_result::pass_not_candidate &&
+                envspec_stock.result !=
+                    envspec_result::pass_unknown_exact_sha) {
+                ++g_envspec_payload_materialize_fail;
+            }
+#endif
+
             std::vector<std::uint8_t>
                 envspec_lerp_payload;
             const auto envspec_lerp =
@@ -4731,6 +4765,39 @@ bool on_create_pipeline(
                     envspec_lerp_result::pass_unknown_exact_sha) {
                 ++g_envspec_payload_materialize_fail;
             }
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+            // Build the stock variant independently of the default R19
+            // EnvDiffuse patch result; both share the downstream SpecRGB fix.
+            std::vector<std::uint8_t> envspec_lerp_stock_payload;
+            const auto envspec_lerp_stock =
+                dsrrl::operators::env_spec::
+                    materialize_pmetal_rgba_lerp_receiver(
+                        g_core.features(),
+                        source,
+                        pixel_shader->code_size,
+                        envspec_lerp_stock_payload,
+                        true);
+            if (envspec_lerp_stock.result ==
+                envspec_lerp_result::applied) {
+                const bool stock_registered =
+                    g_pmetal_envspec.register_lerp_replacement(
+                        envspec_lerp_stock,
+                        envspec_lerp_stock_payload.data(),
+                        envspec_lerp_stock_payload.size(),
+                        true);
+                if (stock_registered)
+                    ++g_envspec_payload_materialize_ok;
+                else
+                    ++g_envspec_payload_materialize_fail;
+            } else if (
+                envspec_lerp_stock.result !=
+                    envspec_lerp_result::pass_not_candidate &&
+                envspec_lerp_stock.result !=
+                    envspec_lerp_result::pass_unknown_exact_sha) {
+                ++g_envspec_payload_materialize_fail;
+            }
+#endif
         }
 
         if (g_core.features().enabled(

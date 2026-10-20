@@ -4596,7 +4596,8 @@ materialize_pmetal_rgba_receiver(
     const std::uint8_t *stock_source,
     std::size_t stock_size,
     bool compose_upper_lower,
-    std::vector<std::uint8_t> &output) noexcept
+    std::vector<std::uint8_t> &output,
+    bool preserve_stock_envdiffuse) noexcept
 {
     pmetal_rgba_materialize_outcome
         outcome{};
@@ -4788,29 +4789,30 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
+if (!preserve_stock_envdiffuse) {
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    // Complete stable-HemEnv PTDE EnvDiffuse island: exact raw PTDE t11
-    // resource, filter RGBA, post-filter RGB/A decode and exact PTDE c86
-    // endpoint carried in b12[3].xyz.
-    if (!apply_exact_ptde_envdiffuse_consumer(
-            base)) {
-        outcome.result =
-            pmetal_rgba_materialize_result::
-                fail_postcondition;
-        return outcome;
-    }
+        // Complete stable-HemEnv PTDE EnvDiffuse island: exact raw PTDE t11
+        // resource, filter RGBA, post-filter RGB/A decode and exact PTDE c86
+        // endpoint carried in b12[3].xyz.
+        if (!apply_exact_ptde_envdiffuse_consumer(base)) {
+            outcome.result =
+                pmetal_rgba_materialize_result::fail_postcondition;
+            return outcome;
+        }
 #else
-    // Legacy diagnostic-only translation: native DSR t11 field with a
-    // recovered linear endpoint.
-    if (!apply_linear_envdiffuse_consumer_diag(
-            base)) {
-        outcome.result =
-            pmetal_rgba_materialize_result::
-                fail_postcondition;
-        return outcome;
-    }
+        // Legacy diagnostic-only translation: native DSR t11 field with a
+        // recovered linear endpoint.
+        if (!apply_linear_envdiffuse_consumer_diag(base)) {
+            outcome.result =
+                pmetal_rgba_materialize_result::fail_postcondition;
+            return outcome;
+        }
 #endif
-    outcome.envdiffuse_linear_consumer_diag = true;
+    }
+    // Stock variant leaves the EnvDiffuse consumer byte-identical; all other
+    // cumulative EnvSpec/SpecRGB/material operators remain unchanged.
+    outcome.envdiffuse_linear_consumer_diag =
+        !preserve_stock_envdiffuse;
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
     if (!remove_dsr_postmerge_visibility_scalar_r3(

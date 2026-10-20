@@ -1866,10 +1866,14 @@ bool same_hook_source_payload(
     return
         a.a == b.a &&
         a.b == b.b &&
+#if !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+        // The PTDE EnvDiffuse variant has its own payload freshness. The
+        // stock variant deliberately excludes this independent operator.
         a.envdiffuse_a == b.envdiffuse_a &&
         a.envdiffuse_b == b.envdiffuse_b &&
         a.envdiffuse_linear_valid ==
             b.envdiffuse_linear_valid &&
+#endif
         a.beta == b.beta &&
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
@@ -1882,6 +1886,7 @@ void publish_hook_source(
     const f4 &b,
     const f4 &envdiffuse_a,
     const f4 &envdiffuse_b,
+    bool envdiffuse_linear_valid,
     float beta,
     std::uint64_t bank_a,
     std::uint64_t bank_b,
@@ -1908,7 +1913,8 @@ void publish_hook_source(
         envdiffuse_b.y,
         envdiffuse_b.z
     };
-    next.envdiffuse_linear_valid = true;
+    next.envdiffuse_linear_valid =
+        envdiffuse_linear_valid;
     next.beta =
         std::clamp(
             beta,
@@ -2171,7 +2177,7 @@ void __fastcall envspec_single_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2179,6 +2185,9 @@ void __fastcall envspec_single_hook_entry(
             row,
             envdiffuse_a);
     envdiffuse_b = envdiffuse_a;
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // The stock consumer does not consume this optional carrier.
+    const bool envdiffuse_ok = false;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2187,12 +2196,13 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    if (donor_ok)
         publish_hook_source(
             donor,
             donor,
             envdiffuse_a,
             envdiffuse_b,
+            envdiffuse_ok,
             0.0f,
             bank,
             bank,
@@ -2270,7 +2280,7 @@ void __fastcall envspec_blend_hook_entry(
 
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     const bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(
@@ -2281,6 +2291,9 @@ void __fastcall envspec_blend_hook_entry(
             bank_b,
             row_b,
             envdiffuse_b);
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // The stock consumer does not consume this optional carrier.
+    const bool envdiffuse_ok = false;
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2289,12 +2302,13 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    if (donor_ok)
         publish_hook_source(
             a,
             b,
             envdiffuse_a,
             envdiffuse_b,
+            envdiffuse_ok,
             endpoints.beta,
             bank_a,
             bank_b,
@@ -2421,16 +2435,22 @@ void pmetal_env_source_cache_invalidate() noexcept
 
 bool pmetal_env_source_runtime::install() noexcept
 {
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    // EnvDiffuse donor data is consumed only by the independent PTDE
+    // EnvDiffuse operator. Its absence must not prevent EnvSpec hook install.
     if (!load_exact_envdiffuse_donor()) {
         reshade::log::message(
             reshade::log::level::warning,
-            "DSRRL Full PTDE HemEnv: exact PTDE EnvDiffuse LightBank donor sidecar unavailable or invalid; source carrier fails open.");
-        return false;
+            "DSRRL PTDE EnvDiffuse donor unavailable; EnvSpec source observer remains independently installable.");
+    } else {
+        reshade::log::message(
+            reshade::log::level::info,
+            "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse LightBank donor admitted for the PTDE EnvDiffuse variant.");
     }
+#elif defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     reshade::log::message(
         reshade::log::level::info,
-        "[DSRRL PMETAL FULL PTDE HEMENV] exact PTDE EnvDiffuse LightBank donor admitted.");
+        "[DSRRL PMETAL STOCK DSR ENVDIFFUSE] EnvDiffuse donor/load path disabled; EnvSpec source is independent.");
 #endif
     pmetal_env_source_cache_invalidate();
     clear_hook_source();
@@ -2836,32 +2856,37 @@ void pmetal_env_source_selector_event(
     next.beta =
         endpoints.beta;
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
-    if (!exact_envdiffuse_endpoint(
+    const bool envdiffuse_valid =
+        exact_envdiffuse_endpoint(
             next.bank_signature_a,
             next.row_id_a,
-            envdiffuse_a) ||
-        !exact_envdiffuse_endpoint(
+            envdiffuse_a) &&
+        exact_envdiffuse_endpoint(
             next.bank_signature_b,
             next.row_id_b,
-            envdiffuse_b)) {
-        telemetry::hot_count(
-            g_decode_fail);
-        return;
+            envdiffuse_b);
+    if (envdiffuse_valid) {
+        next.envdiffuse_a = {
+            envdiffuse_a.x,
+            envdiffuse_a.y,
+            envdiffuse_a.z
+        };
+        next.envdiffuse_b = {
+            envdiffuse_b.x,
+            envdiffuse_b.y,
+            envdiffuse_b.z
+        };
+        next.envdiffuse_linear_valid = true;
+    } else {
+        // EnvDiffuse endpoint decode is independent. Keep publishing the
+        // authenticated EnvSpec source; the draw runtime selects the exact
+        // stock-DSR-EnvDiffuse shader variant when this carrier is invalid.
+        telemetry::hot_count(g_decode_fail);
+        next.envdiffuse_linear_valid = false;
     }
-    next.envdiffuse_a = {
-        envdiffuse_a.x,
-        envdiffuse_a.y,
-        envdiffuse_a.z
-    };
-    next.envdiffuse_b = {
-        envdiffuse_b.x,
-        envdiffuse_b.y,
-        envdiffuse_b.z
-    };
-    next.envdiffuse_linear_valid = true;
 #endif
 
     next.serial = epoch;

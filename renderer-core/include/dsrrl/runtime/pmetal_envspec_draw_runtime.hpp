@@ -16,6 +16,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 
@@ -122,13 +123,15 @@ public:
         const operators::env_spec::
             pmetal_rgba_materialize_outcome &outcome,
         const void *dxbc,
-        std::size_t dxbc_size) noexcept;
+        std::size_t dxbc_size,
+        bool stock_envdiffuse_variant = false) noexcept;
 
     bool register_lerp_replacement(
         const operators::env_spec::
             pmetal_rgba_lerp_materialize_outcome &outcome,
         const void *dxbc,
-        std::size_t dxbc_size) noexcept;
+        std::size_t dxbc_size,
+        bool stock_envdiffuse_variant = false) noexcept;
 
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     // Alternative shader only. P_Metal's registered PS is immutable.
@@ -168,12 +171,30 @@ private:
 
     struct b12_context_cache {
         ID3D11Buffer *buffer = nullptr;
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         std::array<std::uint32_t,24> payload_bits{};
-#else
-        std::array<std::uint32_t,16> payload_bits{};
-#endif
+        std::uint32_t payload_bytes = 0u;
         bool payload_valid = false;
+    };
+
+    struct b12_context_key {
+        std::uintptr_t context = 0u;
+        std::uint32_t payload_bytes = 0u;
+
+        bool operator==(const b12_context_key &other) const noexcept
+        {
+            return context == other.context &&
+                payload_bytes == other.payload_bytes;
+        }
+    };
+
+    struct b12_context_key_hash {
+        std::size_t operator()(const b12_context_key &key) const noexcept
+        {
+            const auto a = std::hash<std::uintptr_t>{}(key.context);
+            const auto b = std::hash<std::uint32_t>{}(key.payload_bytes);
+            return a ^ (b + static_cast<std::size_t>(0x9e3779b9u) +
+                        (a << 6u) + (a >> 2u));
+        }
     };
 
     void release_resources() noexcept;
@@ -190,8 +211,12 @@ private:
     ID3D11SamplerState *shadow_sampler_ = nullptr;
     std::unordered_map<std::uint32_t,replacement_record>
         replacements_;
+    std::unordered_map<std::uint32_t,replacement_record>
+        stock_envdiffuse_replacements_;
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_replacements_;
+    std::unordered_map<std::uint32_t,ID3D11PixelShader *>
+        stock_envdiffuse_lerp_replacements_;
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
     std::unordered_map<std::uint32_t,ID3D11PixelShader *>
         lerp_nonmetal_r8_replacements_;
@@ -200,7 +225,11 @@ private:
         lerp_replacement_sha256_;
     std::unordered_map<std::uint32_t,std::size_t>
         lerp_replacement_size_;
-    std::unordered_map<std::uintptr_t,b12_context_cache>
+    std::unordered_map<std::uint32_t,core::sha256_digest>
+        stock_envdiffuse_lerp_replacement_sha256_;
+    std::unordered_map<std::uint32_t,std::size_t>
+        stock_envdiffuse_lerp_replacement_size_;
+    std::unordered_map<b12_context_key,b12_context_cache,b12_context_key_hash>
         b12_by_context_;
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};

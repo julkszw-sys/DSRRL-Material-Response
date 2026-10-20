@@ -177,6 +177,11 @@ option(
     OFF)
 
 option(
+    DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE
+    "P_Metal stock-EnvDiffuse variant: preserve native DSR EnvDiffuse resources and consumer while retaining the PTDE EnvSpec/SpecRGB/MaterialWorkflow island"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -878,19 +883,24 @@ if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB>)
 endif()
 
+# V315's exact 749-name ledger includes the generated V286 whitelist
+# unconditionally in the integrated physical-cut translation unit. Generate
+# and expose that shared header independently of the optional V285 nonmetal
+# alias/diagnostic gate; disabling V285 must not break unrelated P_Metal builds.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(V286_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/dsrrl/runtime/generated_spec_whitelist_20261010.hpp")
+execute_process(COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate_sidecar_spec_whitelist_20261010.py"
+    --input "${CMAKE_CURRENT_SOURCE_DIR}/../data/provenance/sidecar_specular_20261010_names.b85"
+    --output "${V286_HEADER}"
+    RESULT_VARIABLE V286_RESULT)
+if(NOT V286_RESULT EQUAL 0)
+    message(FATAL_ERROR "V286 manifest generator failed")
+endif()
+target_include_directories(dsrrl_renderer_core_integrated PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
 if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-    find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    set(V286_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/dsrrl/runtime/generated_spec_whitelist_20261010.hpp")
-    execute_process(COMMAND "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate_sidecar_spec_whitelist_20261010.py"
-        --input "${CMAKE_CURRENT_SOURCE_DIR}/../data/provenance/sidecar_specular_20261010_names.b85"
-        --output "${V286_HEADER}"
-        RESULT_VARIABLE V286_RESULT)
-    if(NOT V286_RESULT EQUAL 0)
-        message(FATAL_ERROR "V286 manifest generator failed")
-    endif()
-    target_include_directories(dsrrl_renderer_core_integrated PRIVATE
-        "${CMAKE_CURRENT_BINARY_DIR}/generated")
     if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
        NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
        NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE OR
@@ -926,6 +936,29 @@ if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
+endif()
+
+if(DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE)
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)
+        message(FATAL_ERROR
+            "Stock DSR EnvDiffuse variant requires the cumulative P_Metal EnvSpec + R19 MaterialWorkflow lineage")
+    endif()
+    if(NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR
+            "Stock DSR EnvDiffuse variant requires the cumulative R19 Lerp feature lineage; the stock-mode guard disables only its P_Metal EnvDiffuse rewrite")
+    endif()
+    if(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG OR
+       DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG OR
+       DSRRL_PMETAL_V13_PTDE_PACKEDGI_MATERIAL_MOD_DIAG)
+        message(FATAL_ERROR
+            "Stock DSR EnvDiffuse production candidate cannot be combined with V13 diagnostic lineages")
+    endif()
+
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_STOCK_DSR_ENVDIFFUSE>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
