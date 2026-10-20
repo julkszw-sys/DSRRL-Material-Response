@@ -444,6 +444,12 @@ void release_carrier(
 {
     if (device_ptr == nullptr)
         return;
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    {
+        std::lock_guard<std::mutex> lock(g_v230_bc1_mutex);
+        g_v230_bc1.clear();
+    }
+#endif
 
     std::unordered_map<
         std::uint32_t,
@@ -766,6 +772,12 @@ void on_destroy_resource(
     if (device_ptr == nullptr ||
         resource_handle.handle == 0u)
         return;
+#if defined(DSRRL_V230_FAILOPEN_DIAGNOSTICS)
+    {
+        std::lock_guard<std::mutex> lock(g_v230_bc1_mutex);
+        g_v230_bc1.erase(resource_handle.handle);
+    }
+#endif
 
     std::lock_guard<std::mutex> lock(
         g_mutex);
