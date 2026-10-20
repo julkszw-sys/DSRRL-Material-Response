@@ -870,6 +870,7 @@ bool pmetal_envspec_draw_runtime::prepare(
         effect_fail(
             effect_fail_mask_,
             k_effect_fail_feature);
+        v230_failopen_diag::hit(v230_failopen_diag::stage::pmetal_feature_disabled,decision.receiver_id,static_cast<std::uint32_t>(family),decision.route_index,material.flver_identity_hash,material.material_slot);
         return false;
     }
     effect_latch(effect_feature_ready_);
