@@ -7002,9 +7002,10 @@ bool on_draw(
             static_cast<unsigned>(decision.route_index) == 345u) {
             const bool issued =
                 dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            using edc_tx_result = dsrrl::runtime::draw_tx_result;
             const bool restore_failed =
                 dispatch.transaction ==
-                dsrrl::runtime::draw_tx_result::issued_restore_failed;
+                edc_tx_result::issued_restore_failed;
             const bool envdiff_owner =
                 (prepared.batch.mutation.owners &
                  dsrrl::core::operator_bit(
@@ -7544,9 +7545,10 @@ bool on_draw_indexed(
             static_cast<unsigned>(decision.route_index) == 345u) {
             const bool issued =
                 dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            using edc_tx_result = dsrrl::runtime::draw_tx_result;
             const bool restore_failed =
                 dispatch.transaction ==
-                dsrrl::runtime::draw_tx_result::issued_restore_failed;
+                edc_tx_result::issued_restore_failed;
             const bool envdiff_owner =
                 (prepared.batch.mutation.owners &
                  dsrrl::core::operator_bit(
