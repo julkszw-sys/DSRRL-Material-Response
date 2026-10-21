@@ -1,0 +1,41 @@
+name: V363 legacy GI t12 source witness x64 single addon
+on:
+  push:
+    branches: [agent/v363-legacy-envspec-name]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify prior native t11 and V362 source contracts
+        run: |
+          python3 renderer-core/tools/test_v360_native_t11_view_recovery_source.py
+          python3 renderer-core/tools/test_v361_t11_creation_sha_join_source.py
+          python3 -m py_compile renderer-core/tools/materialize_v362_gi_envdif_name_witness.py
+          python3 -m py_compile renderer-core/tools/materialize_v363_legacy_envspec_name.py
+          python3 renderer-core/tools/test_v359_independent_envdiffuse_source.py
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
+          /tmp/test_native_envdiffuse_identity
+  native-single-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Materialize V362 and compile Win64 one addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v362_gi_envdif_name_witness.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if ($LASTEXITCODE -ne 0) { throw 'V362 native build failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V363-LegacyEnvSpec-T12-Witness-ONE-ADDON
+          path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
+          if-no-files-found: error
