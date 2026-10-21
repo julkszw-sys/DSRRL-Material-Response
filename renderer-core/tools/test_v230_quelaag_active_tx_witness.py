@@ -11,7 +11,8 @@ assert 'kind=draw' in src and 'kind=indexed' in src
 assert src.count('w.route == 345u')==2
 assert src.count('w.source && w.ready && w.selected')==2
 assert src.count('dsrrl::runtime::draw_tx_issued(dispatch.transaction)')>=2
-assert src.count('dsrrl::runtime::draw_tx_result::issued_restore_failed')>=2
+assert src.count('edc_tx_result::issued_restore_failed')==2
+assert src.count('dsrrl::runtime::draw_tx_result::issued_restore_failed')==2  # inherited V315 code unchanged
 assert src.count('dsrrl::core::operator_id::env_diffuse')>=2
 assert src.count('prepared.batch.mutation.srv_count')>=2
 assert src.count('prepared.batch.mutation.sampler_count')>=2
