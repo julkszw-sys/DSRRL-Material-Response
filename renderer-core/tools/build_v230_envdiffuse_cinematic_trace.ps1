@@ -23,6 +23,7 @@ python renderer-core/tools/test_v230_a14_request_ready_proof.py
 if ($LASTEXITCODE -ne 0) { throw 'A14 request-ready source contract failed' }
 python renderer-core/tools/materialize_v230_envdiffuse_cinematic_trace.py
 if ($LASTEXITCODE -ne 0) { throw 'EDC Quelaag source to D3D commit telemetry materialization failed' }
+python renderer-core/tools/materialize_v230_envdiffuse_cinematic_native_join.py
 python renderer-core/tools/test_v230_envdiffuse_cinematic_trace.py
 if ($LASTEXITCODE -ne 0) { throw 'EDC Quelaag source-to-native transaction regression failed' }
 python renderer-core/tools/materialize_v230_gi_origin_probe_rc2.py
