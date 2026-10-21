@@ -7010,7 +7010,7 @@ bool on_draw(
                 (prepared.batch.mutation.owners &
                  dsrrl::core::operator_bit(
                      dsrrl::core::operator_id::env_diffuse)) != 0u;
-            char line[640]{};
+            char line[1024]{};
             std::snprintf(
                 line, sizeof(line),
                 "[DSRRL EDC ACTIVE TX] kind=draw"
@@ -7020,6 +7020,9 @@ bool on_draw(
                 " dispatch_direct=%u envspec_batch=%u"
                 " envdiff_owner=%u shader_replace=%u"
                 " cb=%u srv=%u sampler=%u"
+                " mat_spec=%u mat_diff=%u mat_norm=%u mat_reqs=%u"
+                " spec_probe=%u:%u diff_probe=%u:%u"
+                " probe_pair_same=%u"
                 " tx_code=%u draw_issued=%u restore_failed=%u"
                 " pixel=NOT_MEASURED",
                 static_cast<unsigned long long>(w.id),
@@ -7034,6 +7037,18 @@ bool on_draw(
                 prepared.batch.mutation.constant_buffer_count,
                 prepared.batch.mutation.srv_count,
                 prepared.batch.mutation.sampler_count,
+                prepared.envspec.material_resources.spec_rgb ? 1u : 0u,
+                prepared.envspec.material_resources.diffuse ? 1u : 0u,
+                prepared.envspec.material_resources.normal ? 1u : 0u,
+                prepared.envspec.material_resources.request_count,
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_b),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_b),
+                (prepared.envspec.env_resources.probe_a ==
+                    prepared.envspec.envdiffuse_resources.probe_a &&
+                 prepared.envspec.env_resources.probe_b ==
+                    prepared.envspec.envdiffuse_resources.probe_b) ? 1u : 0u,
                 static_cast<unsigned>(dispatch.transaction),
                 issued ? 1u : 0u,
                 restore_failed ? 1u : 0u);
@@ -7553,7 +7568,7 @@ bool on_draw_indexed(
                 (prepared.batch.mutation.owners &
                  dsrrl::core::operator_bit(
                      dsrrl::core::operator_id::env_diffuse)) != 0u;
-            char line[640]{};
+            char line[1024]{};
             std::snprintf(
                 line, sizeof(line),
                 "[DSRRL EDC ACTIVE TX] kind=indexed"
@@ -7563,6 +7578,9 @@ bool on_draw_indexed(
                 " dispatch_direct=%u envspec_batch=%u"
                 " envdiff_owner=%u shader_replace=%u"
                 " cb=%u srv=%u sampler=%u"
+                " mat_spec=%u mat_diff=%u mat_norm=%u mat_reqs=%u"
+                " spec_probe=%u:%u diff_probe=%u:%u"
+                " probe_pair_same=%u"
                 " tx_code=%u draw_issued=%u restore_failed=%u"
                 " pixel=NOT_MEASURED",
                 static_cast<unsigned long long>(w.id),
@@ -7577,6 +7595,18 @@ bool on_draw_indexed(
                 prepared.batch.mutation.constant_buffer_count,
                 prepared.batch.mutation.srv_count,
                 prepared.batch.mutation.sampler_count,
+                prepared.envspec.material_resources.spec_rgb ? 1u : 0u,
+                prepared.envspec.material_resources.diffuse ? 1u : 0u,
+                prepared.envspec.material_resources.normal ? 1u : 0u,
+                prepared.envspec.material_resources.request_count,
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_b),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_b),
+                (prepared.envspec.env_resources.probe_a ==
+                    prepared.envspec.envdiffuse_resources.probe_a &&
+                 prepared.envspec.env_resources.probe_b ==
+                    prepared.envspec.envdiffuse_resources.probe_b) ? 1u : 0u,
                 static_cast<unsigned>(dispatch.transaction),
                 issued ? 1u : 0u,
                 restore_failed ? 1u : 0u);
