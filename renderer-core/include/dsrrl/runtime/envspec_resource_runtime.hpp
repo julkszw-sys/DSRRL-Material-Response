@@ -90,6 +90,13 @@ public:
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
 
+    // Read-only exact native t11/t13 identity probe. Works even if
+    // the independent EnvSpec t12/t14 prepare step has failed; never
+    // materializes PTDE resources or changes D3D11 state.
+    bool native_envdiffuse_probe_for_view(
+        ID3D11ShaderResourceView *stock_view,
+        std::uint16_t &probe) const noexcept;
+
     // Exact independent native DSR EnvDiffuse resource identity: both A/B
     // endpoints MUST be witnessed from stock t11/t13 hashes, not borrowed
     // from EnvSpec t12/t14. A missing or ambiguous digest fails open.
