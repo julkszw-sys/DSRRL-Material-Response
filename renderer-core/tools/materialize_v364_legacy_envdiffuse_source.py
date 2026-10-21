@@ -68,7 +68,7 @@ bool v364_exact_legacy_selector_for_view(
         const auto key=static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(resource));
         std::lock_guard<std::mutex> lock(g_mutex);
         if(g_device &&
-           reinterpret_cast<std::uintptr_t>(g_device->get_native())==
+           static_cast<std::uintptr_t>(g_device->get_native())==
                reinterpret_cast<std::uintptr_t>(device)) {
             const auto named=g_gi_name_by_resource.find(key);
             const auto sha=g_diffuse_creation_sha.find(key);
