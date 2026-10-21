@@ -1,4 +1,4 @@
-name: Quelaag active P_Metal transaction witness
+name: Quelaag REMO cross-material active transaction witness
 on:
   push:
     branches: [agent/quellaag-active-draw-tx-witness-20261021]
@@ -22,7 +22,7 @@ jobs:
           repository: crosire/reshade
           ref: 3645e3025d1d98a90e318278858931f034d5d1f6
           path: _reshade
-      - name: Build exact PR489 PTDE EnvDiffuse diagnostic with real draw witness
+      - name: Build exact PTDE EnvDiffuse diagnostic with cross-material active draw witness
         shell: pwsh
         run: |
           python renderer-core/tools/test_v230_quelaag_active_tx_witness.py
@@ -30,6 +30,6 @@ jobs:
           ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-Quelaag-ActiveDraw-PTDEEnvDiffuse-one-addon
+          name: DSRRL-Quelaag-CrossMaterial-ActiveDraw-PTDEEnvDiffuse-one-addon
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error
