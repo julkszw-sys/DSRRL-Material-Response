@@ -1744,6 +1744,27 @@ bool envspec_resource_runtime::prepare_native_dsr(
 }
 
 
+bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
+    ID3D11ShaderResourceView *stock_view,
+    std::uint16_t &probe) const noexcept
+{
+    probe = 0u;
+    if (stock_view == nullptr)
+        return false;
+
+    const auto key = static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(stock_view));
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_device == nullptr || !g_native_diffuse_atlas_ready)
+        return false;
+    const auto found = g_diffuse_by_view.find(key);
+    if (found == g_diffuse_by_view.end() ||
+        found->second.probe_ordinal >= env::k_native_envdiffuse_count)
+        return false;
+    probe = found->second.probe_ordinal;
+    return true;
+}
+
 bool envspec_resource_runtime::prepare_envdiffuse_bound(
     ID3D11ShaderResourceView *stock_t11,
     ID3D11ShaderResourceView *stock_t13,
