@@ -35,6 +35,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Stock DSR EnvDiffuse source isolation failed' 
 python renderer-core/tools/test_v230_release_contract.py
 '@
 RequireReplace "python renderer-core/tools/test_v230_release_contract.py" $stockCheck 'after RGBA correction'
+# The PTDE EnvDiffuse marker is intentionally optimized away in stock mode.
+# Require the exclusive stock operator witness in the original v230 release gate.
+RequireReplace "'[DSRRL V230 ENVDIFFUSE_RGBA_FIXED]'" "'[DSRRL V230 STOCK DSR ENVDIFFUSE]'" 'exclusive stock EnvDiffuse binary release witness'
 RequireReplace 'DSRRL_Restored_Lighting_v2.3.0_PTDE_EnvDiffuse_RGBA_FIXED.addon64' 'DSRRL_v230_Stock_DSR_EnvDiffuse_PTDE_EnvSpec_RC4.addon64' 'release artifact name' 2
 # Parent script is still a nested, auditable build and does all its original
 # release-contract and PE tests. Do not stage incomplete sidecars.
