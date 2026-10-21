@@ -1673,6 +1673,14 @@ bool pmetal_envspec_draw_runtime::prepare(
         pixel_srv_shadow_snapshot(
             cmd_list, 11u, envdiffuse_view_count, stock_envdiffuse_views);
     if (!envdiffuse_shadow_ready) {
+        // A rejected shadow snapshot may retain a partial SRV array.
+        // Drop each partial reference before asking D3D11 for native state.
+        for (auto *&view : stock_envdiffuse_views) {
+            if (view != nullptr) {
+                view->Release();
+                view = nullptr;
+            }
+        }
         context->PSGetShaderResources(
             11u, envdiffuse_view_count, stock_envdiffuse_views);
     }
