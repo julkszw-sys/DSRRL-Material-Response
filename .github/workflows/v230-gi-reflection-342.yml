@@ -1,9 +1,9 @@
-name: GI Reflection 342 origin RC2 build
+name: A14 EnvDiffuse request-ready RC3
 on:
   push:
-    branches: [agent/v230-pr485-gi-origin-and-family-guard-20261021]
+    branches: [agent/v230-a14-request-ready-proof-20261021]
   pull_request:
-    branches: [agent/gi-reflection-342-verified-alias]
+    branches: [agent/v230-pr485-gi-origin-and-family-guard-20261021]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,6 +22,6 @@ jobs:
         run: ./renderer-core/tools/build_v230_reflection_342_alias.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v230-GI-Origin-RC2
-          path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_RGBA_FIXED_GI_ORIGIN_RC2.addon64
+          name: DSRRL-v230-A14-RequestReady-RC3
+          path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_RGBA_FIXED_A14_READY_RC3.addon64
           if-no-files-found: error
