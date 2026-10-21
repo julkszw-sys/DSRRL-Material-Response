@@ -63,6 +63,61 @@ def runtime(s):
 #endif
 """
  s=one(s,anchor,pre+anchor,"source witness")
+ # This read-only witness executes BEFORE the EnvSpec t12 rejection exits
+ # and therefore shows independently certified native EnvDiffuse t11/t13.
+ # It does NOT activate the PTDE receiver, change GPU state, or bypass t12.
+ rejected_t12_probe=r"""
+#if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
+        static std::array<std::atomic<std::uint32_t>, 1024> g_v359_t11_reject_by_route{};
+        const auto route_index=static_cast<std::size_t>(
+            decision.route_index<1023u?decision.route_index:1023u);
+        const auto nth=g_v359_t11_reject_by_route[route_index].fetch_add(
+            1u,std::memory_order_relaxed)+1u;
+        if(nth<=4u || ((nth & (nth-1u))==0u)) {
+            const bool need_b=family==pmetal_envspec_receiver_family::hemenvlerp;
+            ID3D11ShaderResourceView *diffuse[3]{};
+            const unsigned n=need_b?3u:1u;
+            const bool shadow=pixel_srv_shadow_snapshot(
+                cmd_list,11u,n,diffuse);
+            if(!shadow) {
+                for(auto *&v:diffuse) {
+                    if(v!=nullptr) v->Release();
+                    v=nullptr;
+                }
+                context->PSGetShaderResources(11u,n,diffuse);
+            }
+            std::uint16_t a=0,b=0;
+            const bool a_ok=env_resources_.native_envdiffuse_probe_for_view(
+                diffuse[0],a);
+            const bool b_ok=need_b &&
+                env_resources_.native_envdiffuse_probe_for_view(diffuse[2],b);
+            char log[460]{};
+            std::snprintf(log,sizeof(log),
+                "[DSRRL V359 T11 REJECT JOIN]"
+                " rx=%u route=%u slot=%u n=%u"
+                " t12=REJECTED t11=%016llx id_a=%u probe_a=%u"
+                " t13=%016llx needs_b=%u id_b=%u probe_b=%u"
+                " state=%s action=STOCK_DSR pixels=OPEN",
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(decision.route_index),
+                static_cast<unsigned>(material.material_slot),nth,
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(diffuse[0])),
+                a_ok?1u:0u,static_cast<unsigned>(a),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(diffuse[2])),
+                need_b?1u:0u,b_ok?1u:0u,
+                static_cast<unsigned>(b),shadow?"SHADOW":"D3D11");
+            reshade::log::message(reshade::log::level::warning,log);
+            for(auto *v:diffuse)
+                if(v!=nullptr) v->Release();
+        }
+#endif
+"""
+ s=one(s,"    if (!env_resource_ready) {",
+       "    if (!env_resource_ready) {\n"+rejected_t12_probe,
+       "v359 t11 independent witness on t12 rejection")
+
  anchor="    effect_latch(effect_request_ready_);"
  post=r"""
 #if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
