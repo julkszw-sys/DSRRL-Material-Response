@@ -101,6 +101,7 @@ replace(res,'''    if (!probe.has_value()) {
         if (spec) {''',"certified and unknown native creation SHA")
 replace(res,'''    g_native_resources.erase(
         resource_handle.handle);
+    g_native_diffuse_resources.erase(resource_handle.handle);
 
     g_snapshot_epoch.fetch_add(''',
 '''    g_native_resources.erase(
@@ -108,6 +109,7 @@ replace(res,'''    g_native_resources.erase(
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
     g_v358_lifetime_probes.erase(resource_handle.handle);
 #endif
+    g_native_diffuse_resources.erase(resource_handle.handle);
 
     g_snapshot_epoch.fetch_add(''',"resource lifetime retirement")
 helper=r'''#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
