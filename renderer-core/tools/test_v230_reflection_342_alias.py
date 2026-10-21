@@ -26,3 +26,11 @@ assert "DSRRL_V230_REFLECTION_TO_342" in build
 assert "materialize_v230_reflection_342_name_alias.py" in build
 print("PASS: 342 unique GI_Reflection name aliases; V358/V359 identity+two-anchor fail-open")
 print("OPEN: observed 15 unknown BC6H SHA to original producer name/GPU/pixel")
+
+hook=(root/"src/runtime/texture_identity_transport.cpp").read_text("utf8")
+assembly=(root/"integrated/texture_identity_detour.asm").read_text("utf8")
+assert "0x2017F4u" in hook
+assert "GI REFLECTION SOURCE HOOK" in hook
+assert "dsrrl_gi_reflection_branch_entry PROC" in assembly
+assert "/DDSRRL_V230_GI_REFLECTION_SOURCE_BRANCH" in build
+assert "GI REFLECTION NAME CANDIDATE" in (root/"tools/materialize_v230_release_cleanup.py").read_text("utf8")
