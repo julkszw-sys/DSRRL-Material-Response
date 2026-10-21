@@ -16,6 +16,14 @@ assert src.count('dsrrl::runtime::draw_tx_result::issued_restore_failed') in (0,
 assert src.count('dsrrl::core::operator_id::env_diffuse')>=2
 assert src.count('prepared.batch.mutation.srv_count')>=2
 assert src.count('prepared.batch.mutation.sampler_count')>=2
+# REMO cutscene candidate split: exact draw-level resource bridge census.
+for probe_field in ('spec_rgb', 'diffuse', 'normal'):
+    assert src.count(f'prepared.envspec.material_resources.{probe_field} ? 1u : 0u')==2
+assert src.count('prepared.envspec.material_resources.request_count')>=2
+assert src.count('prepared.envspec.env_resources.probe_a')>=2
+assert src.count('prepared.envspec.envdiffuse_resources.probe_a')>=2
+assert src.count('" mat_spec=%u mat_diff=%u mat_norm=%u mat_reqs=%u"')==2
+assert src.count('" probe_pair_same=%u"')==2
 assert "DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE" in builder
 assert "build_v230_envdiffuse_rgba_fix.ps1" in builder
 print("QUELAAG_ACTIVE_TX_SOURCE_CONTRACT_PASS: both actual dispatch sites, P_Metal-only, read-only, no renderer equation changes")
