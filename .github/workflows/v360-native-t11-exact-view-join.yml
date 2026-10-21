@@ -1,8 +1,8 @@
-name: V360 exact t11 view join single addon
+name: V361 exact t11 creation SHA provenance single addon
 on:
   push:
     branches:
-      - agent/v359-t11-exact-view-join-recovery-20261021
+      - agent/v361-exact-t11-sha-producer-join-20261021
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,6 +15,7 @@ jobs:
         shell: bash
         run: |
           python3 renderer-core/tools/test_v360_native_t11_view_recovery_source.py
+          python3 renderer-core/tools/test_v361_t11_creation_sha_join_source.py
           python3 renderer-core/tools/test_v230_quelaag_active_tx_witness.py
           python3 renderer-core/tools/test_v359_independent_envdiffuse_source.py
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
@@ -35,18 +36,19 @@ jobs:
         shell: pwsh
         run: |
           python renderer-core/tools/test_v360_native_t11_view_recovery_source.py
+          python renderer-core/tools/test_v361_t11_creation_sha_join_source.py
           if ($LASTEXITCODE -ne 0) { throw 'V360 source contract failed' }
           ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
           if ($LASTEXITCODE -ne 0) { throw 'V360 native single addon build failed' }
           $p='out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64'
           if (-not (Test-Path $p)) { throw 'Single addon not created' }
           $raw=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $p)))
-          foreach ($marker in @('[DSRRL V360 T11 NATIVE ID MISS]','[DSRRL V359 T11 REJECT JOIN]','[DSRRL ENVDIFFUSE ID]')) {
+          foreach ($marker in @('[DSRRL V361 T11 SHA PROVENANCE]','[DSRRL V360 T11 NATIVE ID MISS]','[DSRRL V359 T11 REJECT JOIN]','[DSRRL ENVDIFFUSE ID]')) {
             if (-not $raw.Contains($marker)) { throw "Missing exact V360 binary marker: $marker" }
           }
           Get-FileHash $p -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V360-NativeT11-ExactViewJoin-ONE-ADDON
+          name: DSRRL-V361-T11-ExactSHA-Provenance-ONE-ADDON
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error
