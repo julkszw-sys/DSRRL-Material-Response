@@ -168,7 +168,7 @@ new='''    const auto known=[](std::uint16_t id) noexcept {
 if diffuse_body.count(old)!=1:
     raise SystemExit("V364 EnvDiffuse scoped ordinal gate drift")
 diffuse_body=diffuse_body.replace(old,new,1)
-s=prefix+"bool envspec_resource_runtime::prepare_envdiffuse("+
-    diffuse_body+"void envspec_resource_runtime::release("+suffix
+s=(prefix+"bool envspec_resource_runtime::prepare_envdiffuse("+
+   diffuse_body+"void envspec_resource_runtime::release("+suffix)
 p.write_text(s,"utf8")
 print("V364 independent legacy/packed t11 t13 -> exact PTDE carrier patch PASS")
