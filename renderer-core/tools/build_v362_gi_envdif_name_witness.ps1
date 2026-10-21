@@ -8,6 +8,7 @@ if ($code.Split(@($anchor),[StringSplitOptions]::None).Count -ne 2) {
 }
 $injection=@'
 python renderer-core/tools/materialize_v362_gi_envdif_name_witness.py
+python renderer-core/tools/materialize_v363_legacy_envspec_name.py
 if ($LASTEXITCODE -ne 0) { throw 'V362 native GI name witness materializer failed' }
 '@
 $code=$code.Replace($anchor,$anchor+"`n"+$injection)
@@ -19,6 +20,10 @@ try {
     $bin='out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64'
     if (-not (Test-Path $bin)) { throw 'Missing one addon' }
     $ascii=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $bin)))
+    if (-not $ascii.Contains('[DSRRL V363 LEGACY SPEC CREATE]') -or
+        -not $ascii.Contains('[DSRRL V363 LEGACY SPEC VIEW]')) {
+        throw 'V363 legacy spec name diagnostic not compiled'
+    }
     if (-not $ascii.Contains('[DSRRL V362 T11 GI NAME JOIN]')) {
         throw 'V362 GI name source-to-native DX11 witness not compiled'
     }
