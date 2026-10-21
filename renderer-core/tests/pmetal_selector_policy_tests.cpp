@@ -37,4 +37,12 @@ int main()
     check(!select(-1,0x0423,0.25f).valid);
     check(!select(1,2,std::numeric_limits<float>::quiet_NaN()).valid);
     check(!select(1,2,std::numeric_limits<float>::infinity()).valid);
+    check(is_synthetic_zero_descriptor(0x20EB7Fu,0,0,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20E019u,0,0,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20FB9Eu,0,0,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,0,1,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,1,0,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,0,0,0.25f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,0,0,
+                                        std::numeric_limits<float>::quiet_NaN()));
 }

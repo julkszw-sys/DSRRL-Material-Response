@@ -31,7 +31,8 @@ assert "test_v230_envdiffuse_rgba_channel_order.py" in builder
 assert "materialize_v230_envdiffuse_rgba_channel_order.py" not in original_builder
 assert "DSRRL_Restored_Lighting_v2.3.0.addon64" in original_builder
 assert "DSRRL_Restored_Lighting_v2.3.0_PTDE_EnvDiffuse_RGBA_FIXED.addon64" in builder
-assert "if (!env_resources_.prepare_envdiffuse(" in draw
+assert "env_resources_.prepare_envdiffuse_bound(" in draw
+assert "if (!env_resources_.prepare_envdiffuse(" not in draw, "do not re-couple EnvDiffuse identity to EnvSpec"
 assert "if (!prepared.material_resources.spec_rgb)" not in draw or "spec_rgb" in draw
 print("V230_ENV_DIFFUSE_RGBA_SOURCE_CONTRACT_PASS: original xyzw->alpha-first wxyz, stable t11 and Lerp t11/t13, runtime full PTDE envdiffuse retained")
 print("PIXEL=OPEN; material- and cutscene-specific validation still required")

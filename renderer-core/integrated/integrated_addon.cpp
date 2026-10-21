@@ -6990,6 +6990,79 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
+    // Unlike the disabled persistent vtable bridge this is the ACTIVE
+    // current-native/replay transaction used by the actual host.
+    // Cross-material scope is mandatory: armor is black across materials,
+    // helmet spared; never select route 345 as a causality shortcut.
+    // Read only: never modifies the draw, CB/SRV state or fail-open policy.
+    {
+        const auto w =
+            dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        // Receiver-first: witness EVERY exact selected material route,
+        // not just P_Metal. The previous 345-only gate produced a
+        // diagnostic selection bias for the cutscene regression.
+        if (w.source && w.ready && w.selected &&
+            w.route == static_cast<unsigned>(decision.route_index) &&
+            prepared.envspec_in_batch) {
+            const bool issued =
+                dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            using edc_tx_result = dsrrl::runtime::draw_tx_result;
+            const bool restore_failed =
+                dispatch.transaction ==
+                edc_tx_result::issued_restore_failed;
+            const bool envdiff_owner =
+                (prepared.batch.mutation.owners &
+                 dsrrl::core::operator_bit(
+                     dsrrl::core::operator_id::env_diffuse)) != 0u;
+            char line[1024]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL EDC ACTIVE TX] kind=draw"
+                " id=%llu frame=%llu serial=%llu"
+                " bank=%016llx row=%u"
+                " route=%u rx=%u slot=%u"
+                " dispatch_direct=%u envspec_batch=%u"
+                " envdiff_owner=%u shader_replace=%u"
+                " cb=%u srv=%u sampler=%u"
+                " mat_spec=%u mat_diff=%u mat_norm=%u mat_reqs=%u"
+                " spec_probe=%u:%u diff_probe=%u:%u"
+                " probe_pair_same=%u"
+                " tx_code=%u draw_issued=%u restore_failed=%u"
+                " pixel=NOT_MEASURED",
+                static_cast<unsigned long long>(w.id),
+                static_cast<unsigned long long>(w.frame),
+                static_cast<unsigned long long>(w.serial),
+                static_cast<unsigned long long>(w.bank_a),
+                w.row_a, w.route, w.rx, w.slot,
+                direct_current_native ? 1u : 0u,
+                prepared.envspec_in_batch ? 1u : 0u,
+                envdiff_owner ? 1u : 0u,
+                prepared.batch.mutation.replace_pixel_shader ? 1u : 0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                prepared.envspec.material_resources.spec_rgb ? 1u : 0u,
+                prepared.envspec.material_resources.diffuse ? 1u : 0u,
+                prepared.envspec.material_resources.normal ? 1u : 0u,
+                prepared.envspec.material_resources.request_count,
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_b),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_b),
+                (prepared.envspec.env_resources.probe_a ==
+                    prepared.envspec.envdiffuse_resources.probe_a &&
+                 prepared.envspec.env_resources.probe_b ==
+                    prepared.envspec.envdiffuse_resources.probe_b) ? 1u : 0u,
+                static_cast<unsigned>(dispatch.transaction),
+                issued ? 1u : 0u,
+                restore_failed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::warning, line);
+        }
+    }
+#endif
+
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
@@ -7479,6 +7552,79 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
+    // Unlike the disabled persistent vtable bridge this is the ACTIVE
+    // current-native/replay transaction used by the actual host.
+    // Cross-material scope is mandatory: armor is black across materials,
+    // helmet spared; never select route 345 as a causality shortcut.
+    // Read only: never modifies the draw, CB/SRV state or fail-open policy.
+    {
+        const auto w =
+            dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        // Receiver-first: witness EVERY exact selected material route,
+        // not just P_Metal. The previous 345-only gate produced a
+        // diagnostic selection bias for the cutscene regression.
+        if (w.source && w.ready && w.selected &&
+            w.route == static_cast<unsigned>(decision.route_index) &&
+            prepared.envspec_in_batch) {
+            const bool issued =
+                dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            using edc_tx_result = dsrrl::runtime::draw_tx_result;
+            const bool restore_failed =
+                dispatch.transaction ==
+                edc_tx_result::issued_restore_failed;
+            const bool envdiff_owner =
+                (prepared.batch.mutation.owners &
+                 dsrrl::core::operator_bit(
+                     dsrrl::core::operator_id::env_diffuse)) != 0u;
+            char line[1024]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL EDC ACTIVE TX] kind=indexed"
+                " id=%llu frame=%llu serial=%llu"
+                " bank=%016llx row=%u"
+                " route=%u rx=%u slot=%u"
+                " dispatch_direct=%u envspec_batch=%u"
+                " envdiff_owner=%u shader_replace=%u"
+                " cb=%u srv=%u sampler=%u"
+                " mat_spec=%u mat_diff=%u mat_norm=%u mat_reqs=%u"
+                " spec_probe=%u:%u diff_probe=%u:%u"
+                " probe_pair_same=%u"
+                " tx_code=%u draw_issued=%u restore_failed=%u"
+                " pixel=NOT_MEASURED",
+                static_cast<unsigned long long>(w.id),
+                static_cast<unsigned long long>(w.frame),
+                static_cast<unsigned long long>(w.serial),
+                static_cast<unsigned long long>(w.bank_a),
+                w.row_a, w.route, w.rx, w.slot,
+                direct_current_native ? 1u : 0u,
+                prepared.envspec_in_batch ? 1u : 0u,
+                envdiff_owner ? 1u : 0u,
+                prepared.batch.mutation.replace_pixel_shader ? 1u : 0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                prepared.envspec.material_resources.spec_rgb ? 1u : 0u,
+                prepared.envspec.material_resources.diffuse ? 1u : 0u,
+                prepared.envspec.material_resources.normal ? 1u : 0u,
+                prepared.envspec.material_resources.request_count,
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_b),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_b),
+                (prepared.envspec.env_resources.probe_a ==
+                    prepared.envspec.envdiffuse_resources.probe_a &&
+                 prepared.envspec.env_resources.probe_b ==
+                    prepared.envspec.envdiffuse_resources.probe_b) ? 1u : 0u,
+                static_cast<unsigned>(dispatch.transaction),
+                issued ? 1u : 0u,
+                restore_failed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::warning, line);
+        }
+    }
+#endif
 
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
