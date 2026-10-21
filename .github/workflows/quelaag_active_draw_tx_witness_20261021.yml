@@ -1,0 +1,35 @@
+name: Quelaag active P_Metal transaction witness
+on:
+  push:
+    branches: [agent/quellaag-active-draw-tx-witness-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify diagnostic stays in active dispatch and is strictly read-only
+        run: python3 renderer-core/tools/test_v230_quelaag_active_tx_witness.py
+  native-single-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build exact PR489 PTDE EnvDiffuse diagnostic with real draw witness
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v230_quelaag_active_tx_witness.py
+          if ($LASTEXITCODE -ne 0) { throw 'Active transaction source test failed' }
+          ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-Quelaag-ActiveDraw-PTDEEnvDiffuse-one-addon
+          path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
+          if-no-files-found: error
