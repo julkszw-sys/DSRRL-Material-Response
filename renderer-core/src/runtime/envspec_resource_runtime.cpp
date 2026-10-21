@@ -8,6 +8,7 @@
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/v214_resource_name_provenance.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -74,6 +75,10 @@ std::unordered_map<std::uint64_t,native_view_record> g_diffuse_by_view;
 // Negative COM-view join cache: avoid repeated GetResource/QueryInterface on
 // unauthenticated draws. Only exact certified backing resource may clear it.
 std::unordered_set<std::uint64_t> g_diffuse_unverified_views;
+// Read-only exact creation-time BC6H digest, keyed by original resource.
+// Does not authorize a probe: SHA must still resolve through a certified atlas.
+std::unordered_map<std::uint64_t,std::array<std::uint8_t,32>>
+    g_diffuse_creation_sha;
 env::native_diffuse_hash_atlas g_native_diffuse_hashes{};
 bool g_native_diffuse_atlas_ready = false;
 std::unordered_map<std::uint32_t,rgba_cube>
@@ -533,6 +538,7 @@ void release_carrier(
         g_native_diffuse_resources.clear();
         g_diffuse_by_view.clear();
         g_diffuse_unverified_views.clear();
+        g_diffuse_creation_sha.clear();
         g_native_diffuse_hashes = {};
         g_native_diffuse_atlas_ready = false;
         g_device = nullptr;
@@ -745,6 +751,18 @@ void on_init_resource(
         return;
     }
     const auto digest = hashing::sha256(tight.data(),tight.size());
+    // Capture a certified-D3D11-creation witness for both atlas hits and
+    // nonmatches. A native format match is NOT a PTDE probe authorization.
+    if (diffuse) {
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            if (device_ptr == g_device &&
+                g_diffuse_creation_sha.size() < 4096u)
+                g_diffuse_creation_sha[resource_handle.handle] = digest;
+        } catch (...) {
+            // A missing diagnostic witness must never affect rendering.
+        }
+    }
     std::optional<std::uint16_t> probe;
     if (spec) {
         probe = env::legacy_native_probe_for_sha(digest);
@@ -792,6 +810,7 @@ void on_destroy_resource(
     g_native_resources.erase(
         resource_handle.handle);
     g_native_diffuse_resources.erase(resource_handle.handle);
+    g_diffuse_creation_sha.erase(resource_handle.handle);
     g_diffuse_unverified_views.clear();
 
     g_snapshot_epoch.fetch_add(
@@ -1818,9 +1837,18 @@ bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
 
     bool restored = false;
     bool first_unknown = false;
+    std::array<std::uint8_t,32> creation_sha{};
+    bool creation_sha_joined = false;
     try {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (g_device != nullptr && g_native_diffuse_atlas_ready) {
+            auto sha_it = g_diffuse_creation_sha.find(resource_key);
+            if (sha_it == g_diffuse_creation_sha.end())
+                sha_it = g_diffuse_creation_sha.find(texture_key);
+            if (sha_it != g_diffuse_creation_sha.end()) {
+                creation_sha = sha_it->second;
+                creation_sha_joined = true;
+            }
             const auto already = g_diffuse_by_view.find(key);
             if (already != g_diffuse_by_view.end() &&
                 already->second.probe_ordinal < env::k_native_envdiffuse_count) {
@@ -1880,6 +1908,54 @@ bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
             static_cast<unsigned long long>(g_diffuse_exact_hash_hit.load()),
             g_diffuse_view_joins_recovered.load());
         reshade::log::message(reshade::log::level::warning, detail);
+
+        // Probe origin discriminant: exact creation SHA + exact retail
+        // logical name for THIS backing resource, or explicit missing witness.
+        // No nearby t12 join, ordinal inference or resource replacement.
+        char hex[65]{};
+        if (creation_sha_joined) {
+            constexpr char digits[] = "0123456789abcdef";
+            for (std::size_t i=0;i<creation_sha.size();++i) {
+                hex[2u*i] = digits[creation_sha[i] >> 4u];
+                hex[2u*i+1u] = digits[creation_sha[i] & 15u];
+            }
+        }
+        ID3D11Device *native_device = nullptr;
+        stock_view->GetDevice(&native_device);
+        std::array<wchar_t,257> retail_name{};
+        std::size_t retail_len = 0u;
+        auto provenance = v214_resource_provenance::status::absent;
+        if (native_device != nullptr && backing != nullptr) {
+            provenance = v214_resource_provenance::instance().snapshot(
+                reinterpret_cast<std::uintptr_t>(native_device),
+                reinterpret_cast<std::uintptr_t>(backing),
+                retail_name, retail_len);
+        }
+        char printable[97]{};
+        if (provenance == v214_resource_provenance::status::exact) {
+            const auto n = std::min(retail_len,sizeof(printable)-1u);
+            for (std::size_t i=0;i<n;++i) {
+                const wchar_t c = retail_name[i];
+                printable[i] = c >= 33 && c <= 126 ? static_cast<char>(c) : '?';
+            }
+        }
+        const char *origin = provenance == v214_resource_provenance::status::exact
+            ? "EXACT_RETAIL_SOURCE"
+            : provenance == v214_resource_provenance::status::ambiguous
+                ? "AMBIGUOUS_SOURCE" : "NO_PRODUCER_WITNESS";
+        char witness[512]{};
+        std::snprintf(witness,sizeof(witness),
+            "[DSRRL V361 T11 SHA PROVENANCE]"
+            " srv=%016llx backing=%016llx create_sha_join=%u"
+            " sha256=%s producer=%s name=%.96s"
+            " atlas=UNMATCHED action=STOCK_DSR pixels=OPEN",
+            static_cast<unsigned long long>(key),
+            static_cast<unsigned long long>(resource_key),
+            creation_sha_joined ? 1u : 0u,
+            creation_sha_joined ? hex : "UNAVAILABLE",
+            origin,printable);
+        reshade::log::message(reshade::log::level::warning,witness);
+        if (native_device != nullptr) native_device->Release();
     }
     if (texture != nullptr) texture->Release();
     if (backing != nullptr) backing->Release();
