@@ -52,9 +52,19 @@ BLOCK=r"""
                         identical=false; break;
                     }
                 if(!identical) continue;
+                if(r.map_id>=20u) return false;
                 ordinal=r.ordinal;
                 map_id=r.map_id;
-                return map_id<20u;
+                // Bounded first-hit SOURCE witness only; no GPU alias claim.
+                // The static marker also verifies that this exact opt-in
+                // compiler branch survived native optimization.
+                static std::atomic<bool> once{false};
+                if(!once.exchange(true,std::memory_order_relaxed))
+                    reshade::log::message(reshade::log::level::info,
+                      "[DSRRL V230 GI REFLECTION NAME CANDIDATE]"
+                      " exact_retail_name=1 ordinal_from_342=1"
+                      " native_SRV_join=NOT_PROVEN pixel=OPEN");
+                return true;
             }
         }
     }
