@@ -19,11 +19,13 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace dsrrl::runtime {
@@ -69,6 +71,9 @@ std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
 std::unordered_map<std::uint64_t,native_probe_record> g_native_diffuse_resources;
 std::unordered_map<std::uint64_t,native_view_record> g_diffuse_by_view;
+// Negative COM-view join cache: avoid repeated GetResource/QueryInterface on
+// unauthenticated draws. Only exact certified backing resource may clear it.
+std::unordered_set<std::uint64_t> g_diffuse_unverified_views;
 env::native_diffuse_hash_atlas g_native_diffuse_hashes{};
 bool g_native_diffuse_atlas_ready = false;
 std::unordered_map<std::uint32_t,rgba_cube>
@@ -88,6 +93,13 @@ bool g_sampler_ready = false;
 std::atomic<std::uint64_t> g_native_candidates{0};
 std::atomic<std::uint64_t> g_native_matches{0};
 std::atomic<std::uint64_t> g_native_hash_miss{0};
+std::atomic<std::uint64_t> g_diffuse_create_candidates{0};
+std::atomic<std::uint64_t> g_diffuse_create_without_data{0};
+std::atomic<std::uint64_t> g_diffuse_extract_fail{0};
+std::atomic<std::uint64_t> g_diffuse_exact_hash_miss{0};
+std::atomic<std::uint64_t> g_diffuse_exact_hash_hit{0};
+std::atomic<std::uint32_t> g_diffuse_miss_details_printed{0};
+std::atomic<std::uint32_t> g_diffuse_view_joins_recovered{0};
 std::atomic<std::uint64_t> g_view_matches{0};
 std::atomic<std::uint64_t> g_pack_admit_ok{0};
 std::atomic<std::uint64_t> g_pack_admit_fail{0};
@@ -520,6 +532,7 @@ void release_carrier(
         g_resource_by_view.clear();
         g_native_diffuse_resources.clear();
         g_diffuse_by_view.clear();
+        g_diffuse_unverified_views.clear();
         g_native_diffuse_hashes = {};
         g_native_diffuse_atlas_ready = false;
         g_device = nullptr;
@@ -721,9 +734,14 @@ void on_init_resource(
             (diffuse && !g_native_diffuse_atlas_ready)) return;
     }
     if (spec) ++g_native_candidates;
+    if (diffuse) ++g_diffuse_create_candidates;
     std::vector<std::uint8_t> tight;
     if (!extract_tight_bc6h(desc, initial_data, tight)) {
         if (spec) ++g_native_hash_miss;
+        if (diffuse) {
+            if (initial_data == nullptr) ++g_diffuse_create_without_data;
+            else ++g_diffuse_extract_fail;
+        }
         return;
     }
     const auto digest = hashing::sha256(tight.data(),tight.size());
@@ -738,6 +756,7 @@ void on_init_resource(
     }
     if (!probe.has_value()) {
         if (spec) ++g_native_hash_miss;
+        if (diffuse) ++g_diffuse_exact_hash_miss;
         return;
     }
     {
@@ -746,10 +765,14 @@ void on_init_resource(
             (diffuse && !g_native_diffuse_atlas_ready)) return;
         if (spec)
             g_native_resources[resource_handle.handle] = {probe.value()};
-        else
+        else {
             g_native_diffuse_resources[resource_handle.handle] = {probe.value()};
+            // A view may have been observed before a certified resource join.
+            g_diffuse_unverified_views.clear();
+        }
     }
     if (spec) ++g_native_matches;
+    if (diffuse) ++g_diffuse_exact_hash_hit;
 }
 
 void on_destroy_resource(
@@ -769,6 +792,7 @@ void on_destroy_resource(
     g_native_resources.erase(
         resource_handle.handle);
     g_native_diffuse_resources.erase(resource_handle.handle);
+    g_diffuse_unverified_views.clear();
 
     g_snapshot_epoch.fetch_add(
         1u,
@@ -819,6 +843,7 @@ void on_init_resource_view(
     if (native == g_native_resources.end()) {
         const auto diffuse = g_native_diffuse_resources.find(resource_handle.handle);
         if (diffuse == g_native_diffuse_resources.end()) return;
+        g_diffuse_unverified_views.erase(view.handle);
         g_diffuse_by_view[view.handle] = {
             resource_handle.handle, diffuse->second.probe_ordinal};
         return;
@@ -853,6 +878,7 @@ void on_destroy_resource_view(
 
     const bool spec_removed = g_resource_by_view.erase(view.handle) != 0u;
     const bool diff_removed = g_diffuse_by_view.erase(view.handle) != 0u;
+    g_diffuse_unverified_views.erase(view.handle);
     if (spec_removed || diff_removed)
         g_snapshot_epoch.fetch_add(
             1u,
@@ -1754,15 +1780,110 @@ bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
 
     const auto key = static_cast<std::uint64_t>(
         reinterpret_cast<std::uintptr_t>(stock_view));
-    std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_device == nullptr || !g_native_diffuse_atlas_ready)
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_device == nullptr || !g_native_diffuse_atlas_ready)
+            return false;
+        const auto found = g_diffuse_by_view.find(key);
+        if (found != g_diffuse_by_view.end() &&
+            found->second.probe_ordinal < env::k_native_envdiffuse_count) {
+            probe = found->second.probe_ordinal;
+            return true;
+        }
+        if (g_diffuse_unverified_views.count(key) != 0u)
+            return false;
+    }
+
+    // Safe exact identity recovery: ReShade may have certified the backing
+    // resource at creation time without observing a matching SRV init event.
+    // This only queries COM identity: no staging readback, no GPU copy,
+    // no pixel/CB/shader changes, and no inference from nearby EnvSpec t12.
+    ID3D11Resource *backing = nullptr;
+    stock_view->GetResource(&backing);
+    ID3D11Texture2D *texture = nullptr;
+    D3D11_TEXTURE2D_DESC texture_desc{};
+    D3D11_SHADER_RESOURCE_VIEW_DESC view_desc{};
+    stock_view->GetDesc(&view_desc);
+    if (backing != nullptr &&
+        SUCCEEDED(backing->QueryInterface(
+            __uuidof(ID3D11Texture2D),
+            reinterpret_cast<void **>(&texture))) &&
+        texture != nullptr)
+        texture->GetDesc(&texture_desc);
+
+    const auto resource_key = static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(backing));
+    const auto texture_key = static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(texture));
+
+    bool restored = false;
+    bool first_unknown = false;
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_device != nullptr && g_native_diffuse_atlas_ready) {
+            const auto already = g_diffuse_by_view.find(key);
+            if (already != g_diffuse_by_view.end() &&
+                already->second.probe_ordinal < env::k_native_envdiffuse_count) {
+                probe = already->second.probe_ordinal;
+                restored = true;
+            } else {
+                auto native = g_native_diffuse_resources.find(resource_key);
+                if (native == g_native_diffuse_resources.end())
+                    native = g_native_diffuse_resources.find(texture_key);
+                if (native != g_native_diffuse_resources.end() &&
+                    native->second.probe_ordinal < env::k_native_envdiffuse_count) {
+                    probe = native->second.probe_ordinal;
+                    g_diffuse_by_view[key] = {native->first,probe};
+                    g_diffuse_unverified_views.erase(key);
+                    restored = true;
+                    ++g_diffuse_view_joins_recovered;
+                } else {
+                    first_unknown = g_diffuse_unverified_views.insert(key).second;
+                }
+            }
+        }
+    } catch (...) {
+        // noexcept API: allocation failure must not take down the game.
+        // Do not authorize any unverified resource after an exception.
+        if (texture != nullptr) texture->Release();
+        if (backing != nullptr) backing->Release();
         return false;
-    const auto found = g_diffuse_by_view.find(key);
-    if (found == g_diffuse_by_view.end() ||
-        found->second.probe_ordinal >= env::k_native_envdiffuse_count)
-        return false;
-    probe = found->second.probe_ordinal;
-    return true;
+    }
+
+    if (first_unknown &&
+        g_diffuse_miss_details_printed.fetch_add(
+            1u, std::memory_order_relaxed) < 24u) {
+        char detail[700]{};
+        std::snprintf(detail, sizeof(detail),
+            "[DSRRL V360 T11 NATIVE ID MISS]"
+            " srv=%016llx backing=%016llx tex=%016llx"
+            " srv_dim=%u srv_fmt=%u"
+            " w=%u h=%u mips=%u array=%u tex_fmt=%u"
+            " bind=0x%x usage=%u misc=0x%x"
+            " create_candidates=%llu no_initial=%llu extract_fail=%llu"
+            " sha_miss=%llu sha_hit=%llu joined_recovered=%u"
+            " reason=NO_CERTIFIED_BACKING action=STOCK_DSR pixels=OPEN",
+            static_cast<unsigned long long>(key),
+            static_cast<unsigned long long>(resource_key),
+            static_cast<unsigned long long>(texture_key),
+            static_cast<unsigned>(view_desc.ViewDimension),
+            static_cast<unsigned>(view_desc.Format),
+            texture_desc.Width,texture_desc.Height,
+            texture_desc.MipLevels,texture_desc.ArraySize,
+            static_cast<unsigned>(texture_desc.Format),
+            texture_desc.BindFlags,
+            static_cast<unsigned>(texture_desc.Usage),texture_desc.MiscFlags,
+            static_cast<unsigned long long>(g_diffuse_create_candidates.load()),
+            static_cast<unsigned long long>(g_diffuse_create_without_data.load()),
+            static_cast<unsigned long long>(g_diffuse_extract_fail.load()),
+            static_cast<unsigned long long>(g_diffuse_exact_hash_miss.load()),
+            static_cast<unsigned long long>(g_diffuse_exact_hash_hit.load()),
+            g_diffuse_view_joins_recovered.load());
+        reshade::log::message(reshade::log::level::warning, detail);
+    }
+    if (texture != nullptr) texture->Release();
+    if (backing != nullptr) backing->Release();
+    return restored;
 }
 
 bool envspec_resource_runtime::prepare_envdiffuse_bound(
@@ -1779,24 +1900,11 @@ bool envspec_resource_runtime::prepare_envdiffuse_bound(
     if (stock_t11 == nullptr ||
         (probe_b_required && stock_t13 == nullptr)) return false;
     std::uint16_t a=0u,b=0u;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (!g_native_diffuse_atlas_ready || g_device == nullptr)
-            return false;
-        const auto resolve = [](ID3D11ShaderResourceView *view,
-                                std::uint16_t &id) noexcept -> bool {
-            if (view == nullptr) return false;
-            const auto key = static_cast<std::uint64_t>(
-                reinterpret_cast<std::uintptr_t>(view));
-            const auto found = g_diffuse_by_view.find(key);
-            if (found == g_diffuse_by_view.end()) return false;
-            id = found->second.probe_ordinal;
-            return id < env::k_native_envdiffuse_count;
-        };
-        if (!resolve(stock_t11,a) ||
-            (probe_b_required && !resolve(stock_t13,b))) return false;
-        if (!probe_b_required) b=a;
-    }
+    if (!native_envdiffuse_probe_for_view(stock_t11,a) ||
+        (probe_b_required &&
+         !native_envdiffuse_probe_for_view(stock_t13,b)))
+        return false;
+    if (!probe_b_required) b=a;
     return prepare_envdiffuse(a,b,probe_b_required,prepared);
 #endif
 }

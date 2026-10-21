@@ -206,6 +206,21 @@ if "const bool spec = is_native_envspec_desc(desc);" in (root/p).read_text("utf8
         }
         return;
     }'''
+    # V360 extends the same exact failure branch with independent native
+    # EnvDiffuse counters. Preserve them on both sides of the V357 spec-only
+    # rewrite rather than weakening EnvSpec producer telemetry.
+    if "g_diffuse_create_without_data" in (root/p).read_text("utf8"):
+        v360_tail='''        if (diffuse) {
+            if (initial_data == nullptr) ++g_diffuse_create_without_data;
+            else ++g_diffuse_extract_fail;
+        }
+'''
+        old_tail='''        return;
+    }'''
+        if marker.count(old_tail)!=1 or repl.count(old_tail)!=1:
+            raise SystemExit("V360/V357 exact extraction anchor drift")
+        marker=marker.replace(old_tail,v360_tail+old_tail,1)
+        repl=repl.replace(old_tail,v360_tail+old_tail,1)
     apply(p,marker,repl,"producer extraction unknown V359")
     marker='''    if (!probe.has_value()) {
         if (spec) ++g_native_hash_miss;
@@ -238,6 +253,16 @@ if "const bool spec = is_native_envspec_desc(desc);" in (root/p).read_text("utf8
         }
         return;
     }'''
+    # V360 keeps exact t11 SHA misses separate from EnvSpec V357 negatives.
+    if "g_diffuse_exact_hash_miss" in (root/p).read_text("utf8"):
+        v360_tail='''        if (diffuse) ++g_diffuse_exact_hash_miss;
+'''
+        old_tail='''        return;
+    }'''
+        if marker.count(old_tail)!=1 or repl.count(old_tail)!=1:
+            raise SystemExit("V360/V357 exact SHA failure anchor drift")
+        marker=marker.replace(old_tail,v360_tail+old_tail,1)
+        repl=repl.replace(old_tail,v360_tail+old_tail,1)
     apply(p,marker,repl,"producer SHA not in atlas V359")
 else:
     marker='''        ++g_native_hash_miss;
