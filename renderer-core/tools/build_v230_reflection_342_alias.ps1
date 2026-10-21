@@ -8,13 +8,15 @@ function RequireReplace([string]$old,[string]$new,[string]$label,[int]$expected=
     $script:base=$script:base.Replace($old,$new)
 }
 # Keep original owner235 PR484 shader swizzle fix and all native CMake features.
-RequireReplace '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS' '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS /DDSRRL_V230_REFLECTION_TO_342 /DDSRRL_V230_GI_REFLECTION_SOURCE_BRANCH' 'feature define'
+RequireReplace '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS' '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS /DDSRRL_V230_REFLECTION_TO_342 /DDSRRL_V230_GI_REFLECTION_SOURCE_BRANCH /DDSRRL_V230_A14_ENVDIFFUSE_WITNESS' 'feature define'
 $v359Verify=@'
 python renderer-core/tools/materialize_v230_reflection_342_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V230 exact GI Reflection source alias materialization failed' }
 python renderer-core/tools/test_v230_reflection_342_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V230 exact Reflection semantic bridge contract failed' }
 python renderer-core/tools/test_v359_attested_gi_name_alias.py
+python renderer-core/tools/materialize_v230_a14_envdiffuse_cutscene_witness.py
+if ($LASTEXITCODE -ne 0) { throw 'A14 source witness fail' }
 python renderer-core/tools/materialize_v230_gi_origin_probe_rc2.py
 if ($LASTEXITCODE -ne 0) { throw 'PR486 probe source rejected' }
 python renderer-core/tools/test_v230_gi_origin_probe_rc2.py
