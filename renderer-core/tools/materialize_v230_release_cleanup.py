@@ -104,7 +104,7 @@ def suppress_info_logs(s):
         args=s[a+len(token):pos-1].lstrip()
         # Boot identity / GPU residency are operational state, not frame
         # sampling; the inherited V350 native binary gate expects the latter.
-        essential=("V350 PTDE LERP RGB","GPU RESIDENT RC1","DSRRL BUILD_ID")
+        essential=("V350 PTDE LERP RGB","GPU RESIDENT RC1","DSRRL BUILD_ID","GI REFLECTION PRODUCER","GI REFLECTION NAME CANDIDATE")
         if args.startswith("reshade::log::level::info,") and not any(w in args for w in essential):
             s=s[:a]+"((void)0)"+s[pos:]
             offset=a+9;cut+=1
