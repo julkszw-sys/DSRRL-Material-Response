@@ -15,5 +15,5 @@ assert "prepared.env_resources.ptde_a" in r
 assert "prepared.env_resources.ptde_b" in r
 assert "prepared.request.additional_owners &= ~envdiff_owner;" in r
 assert "prepared.request.additional_resource_owners = 0u;" in r
-assert "materialize_spec_rgb_consumer" in s and "materialize_spec_rgb_consumer" in l
+assert "outcome.spec_rgb_consumer = true;" in s and "materialize_spec_rgb_consumer" in l
 print("PASS: stock DSR EnvDiffuse only, PTDE EnvSpec+MR+SpecRGB retained, exact producer fail-open")
