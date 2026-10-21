@@ -29,9 +29,10 @@ try {
  if (!(Test-Path $dest)) { throw 'Missing exact one-addon release binary' }
  $data=[IO.File]::ReadAllBytes((Resolve-Path $dest))
  $ascii=[Text.Encoding]::ASCII.GetString($data)
- $utf16=[Text.Encoding]::Unicode.GetString($data)
  if (!$ascii.Contains('v230_production') -or !$ascii.Contains('2.3.0')) { throw 'Missing owner235 identity' }
- if (!$utf16.Contains('GI_Reflection_')) { throw 'Missing compiled Reflection name family' }
+ # MSVC may lower short UTF-16 literals into integer immediates; do not
+ # falsely fail on absent contiguous source-name string.
+ if (!$ascii.Contains('[DSRRL V230 GI REFLECTION NAME CANDIDATE]')) { throw 'Reflection source-name branch not compiled' }
  Get-FileHash $dest -Algorithm SHA256 | Format-List
  Write-Host 'CONSTRUCTION=PASS; COMPATIBILITY=PASS; reflection 15 runtime mapping OPEN; PIXEL=OPEN'
 } finally { Remove-Item $temp -Force -ErrorAction SilentlyContinue }
