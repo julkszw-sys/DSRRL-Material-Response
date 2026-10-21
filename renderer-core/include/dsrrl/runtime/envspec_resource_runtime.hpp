@@ -90,9 +90,17 @@ public:
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
 
-    // Full-PTDE HemEnv resource cut. Probe identity is supplied by the already
-    // authenticated t12/t14 EnvSpec carrier; this method does not infer an
-    // independent probe assignment from t11/t13.
+    // Exact independent native DSR EnvDiffuse resource identity: both A/B
+    // endpoints MUST be witnessed from stock t11/t13 hashes, not borrowed
+    // from EnvSpec t12/t14. A missing or ambiguous digest fails open.
+    bool prepare_envdiffuse_bound(
+        ID3D11ShaderResourceView *stock_t11,
+        ID3D11ShaderResourceView *stock_t13,
+        bool probe_b_required,
+        prepared_envdiffuse_resources &prepared) noexcept;
+
+    // Materialize a pre-verified EnvDiffuse identity from its own ordinal.
+    // Do not call this method with an EnvSpec-derived probe ordinal.
     bool prepare_envdiffuse(
         std::uint16_t probe_a,
         std::uint16_t probe_b,
