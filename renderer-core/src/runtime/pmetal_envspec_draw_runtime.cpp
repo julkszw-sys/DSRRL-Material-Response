@@ -1654,9 +1654,10 @@ bool pmetal_envspec_draw_runtime::prepare(
     effect_latch(effect_b12_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    // Probe identity is inherited from the already-authenticated EnvSpec
-    // t12/t14 pair. The exact PTDE EnvDiffuse pack uses the same canonical
-    // probe ordinal and never derives assignment from DSR t11 content.
+    // Independent source cut: read the actual STOCK DSR EnvDiffuse SRVs
+    // at t11/t13. EnvSpec t12/t14 ordinals are NOT EnvDiffuse identity.
+    // Always use the draw shadow when available; the native context may
+    // already be temporarily changed by another renderer operator.
     const bool ptde_envdiffuse_b_required =
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         family ==
@@ -1665,12 +1666,28 @@ bool pmetal_envspec_draw_runtime::prepare(
 #else
         false;
 #endif
-
-    if (!env_resources_.prepare_envdiffuse(
-            prepared.env_resources.probe_a,
-            prepared.env_resources.probe_b,
+    ID3D11ShaderResourceView *stock_envdiffuse_views[3]{};
+    const std::uint32_t envdiffuse_view_count =
+        ptde_envdiffuse_b_required ? 3u : 1u;
+    const bool envdiffuse_shadow_ready =
+        pixel_srv_shadow_snapshot(
+            cmd_list, 11u, envdiffuse_view_count, stock_envdiffuse_views);
+    if (!envdiffuse_shadow_ready) {
+        context->PSGetShaderResources(
+            11u, envdiffuse_view_count, stock_envdiffuse_views);
+    }
+    const bool independent_envdiffuse_ready =
+        env_resources_.prepare_envdiffuse_bound(
+            stock_envdiffuse_views[0],
+            ptde_envdiffuse_b_required
+                ? stock_envdiffuse_views[2] : nullptr,
             ptde_envdiffuse_b_required,
-            prepared.envdiffuse_resources)) {
+            prepared.envdiffuse_resources);
+    for (auto *stock_view : stock_envdiffuse_views)
+        if (stock_view != nullptr)
+            stock_view->Release();
+
+    if (!independent_envdiffuse_ready) {
         b12->Release();
         if (shader != nullptr)
             shader->Release();
