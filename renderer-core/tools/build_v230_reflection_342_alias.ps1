@@ -15,9 +15,13 @@ if ($LASTEXITCODE -ne 0) { throw 'V230 exact GI Reflection source alias material
 python renderer-core/tools/test_v230_reflection_342_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V230 exact Reflection semantic bridge contract failed' }
 python renderer-core/tools/test_v359_attested_gi_name_alias.py
+python renderer-core/tools/materialize_v230_gi_origin_probe_rc2.py
+if ($LASTEXITCODE -ne 0) { throw 'PR486 probe source rejected' }
+python renderer-core/tools/test_v230_gi_origin_probe_rc2.py
+if ($LASTEXITCODE -ne 0) { throw 'PR486 source contract rejected' }
 '@
 RequireReplace "python renderer-core/tools/test_v359_attested_gi_name_alias.py" $v359Verify 'post-V359 exact source-name origin'
-RequireReplace 'DSRRL_Restored_Lighting_v2.3.0_PTDE_EnvDiffuse_RGBA_FIXED.addon64' 'DSRRL_v230_PTDE_EnvDiffuse_RGBA_FIXED_GI_Reflection_342.addon64' 'release artifact name' 2
+RequireReplace 'DSRRL_Restored_Lighting_v2.3.0_PTDE_EnvDiffuse_RGBA_FIXED.addon64' 'DSRRL_v230_PTDE_EnvDiffuse_RGBA_FIXED_GI_ORIGIN_RC2.addon64' 'release artifact name' 2
 # Parent script is still a nested, auditable build and does all its original
 # release-contract and PE tests. Do not stage incomplete sidecars.
 $temp=Join-Path $PSScriptRoot '_v230_reflection_342_generated_build.ps1'
@@ -25,7 +29,7 @@ try {
  [IO.File]::WriteAllText($temp,$script:base,[Text.UTF8Encoding]::new($false))
  & $temp -ReShadeInclude $ReShadeInclude
  if ($LASTEXITCODE -ne 0) { throw 'GI Reflection v230 native build failed' }
- $dest='out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_RGBA_FIXED_GI_Reflection_342.addon64'
+ $dest='out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_RGBA_FIXED_GI_ORIGIN_RC2.addon64'
  if (!(Test-Path $dest)) { throw 'Missing exact one-addon release binary' }
  $data=[IO.File]::ReadAllBytes((Resolve-Path $dest))
  $ascii=[Text.Encoding]::ASCII.GetString($data)
