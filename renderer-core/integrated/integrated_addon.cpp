@@ -6990,6 +6990,58 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
+    // Unlike the disabled persistent vtable bridge this is the ACTIVE
+    // current-native/replay transaction used by the actual host.
+    // Read only: never modifies the draw, CB/SRV state or fail-open policy.
+    {
+        const auto w =
+            dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        if (w.source && w.ready && w.selected &&
+            w.route == 345u &&
+            static_cast<unsigned>(decision.route_index) == 345u) {
+            const bool issued =
+                dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            const bool restore_failed =
+                dispatch.transaction ==
+                dsrrl::runtime::draw_tx_result::issued_restore_failed;
+            const bool envdiff_owner =
+                (prepared.batch.mutation.owners &
+                 dsrrl::core::operator_bit(
+                     dsrrl::core::operator_id::env_diffuse)) != 0u;
+            char line[640]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL EDC ACTIVE TX] kind=draw"
+                " id=%llu frame=%llu serial=%llu"
+                " bank=%016llx row=%u"
+                " route=%u rx=%u slot=%u"
+                " dispatch_direct=%u envspec_batch=%u"
+                " envdiff_owner=%u shader_replace=%u"
+                " cb=%u srv=%u sampler=%u"
+                " tx_code=%u draw_issued=%u restore_failed=%u"
+                " pixel=NOT_MEASURED",
+                static_cast<unsigned long long>(w.id),
+                static_cast<unsigned long long>(w.frame),
+                static_cast<unsigned long long>(w.serial),
+                static_cast<unsigned long long>(w.bank_a),
+                w.row_a, w.route, w.rx, w.slot,
+                direct_current_native ? 1u : 0u,
+                prepared.envspec_in_batch ? 1u : 0u,
+                envdiff_owner ? 1u : 0u,
+                prepared.batch.mutation.replace_pixel_shader ? 1u : 0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                static_cast<unsigned>(dispatch.transaction),
+                issued ? 1u : 0u,
+                restore_failed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::warning, line);
+        }
+    }
+#endif
+
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
@@ -7479,6 +7531,58 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
+    // Unlike the disabled persistent vtable bridge this is the ACTIVE
+    // current-native/replay transaction used by the actual host.
+    // Read only: never modifies the draw, CB/SRV state or fail-open policy.
+    {
+        const auto w =
+            dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        if (w.source && w.ready && w.selected &&
+            w.route == 345u &&
+            static_cast<unsigned>(decision.route_index) == 345u) {
+            const bool issued =
+                dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            const bool restore_failed =
+                dispatch.transaction ==
+                dsrrl::runtime::draw_tx_result::issued_restore_failed;
+            const bool envdiff_owner =
+                (prepared.batch.mutation.owners &
+                 dsrrl::core::operator_bit(
+                     dsrrl::core::operator_id::env_diffuse)) != 0u;
+            char line[640]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL EDC ACTIVE TX] kind=indexed"
+                " id=%llu frame=%llu serial=%llu"
+                " bank=%016llx row=%u"
+                " route=%u rx=%u slot=%u"
+                " dispatch_direct=%u envspec_batch=%u"
+                " envdiff_owner=%u shader_replace=%u"
+                " cb=%u srv=%u sampler=%u"
+                " tx_code=%u draw_issued=%u restore_failed=%u"
+                " pixel=NOT_MEASURED",
+                static_cast<unsigned long long>(w.id),
+                static_cast<unsigned long long>(w.frame),
+                static_cast<unsigned long long>(w.serial),
+                static_cast<unsigned long long>(w.bank_a),
+                w.row_a, w.route, w.rx, w.slot,
+                direct_current_native ? 1u : 0u,
+                prepared.envspec_in_batch ? 1u : 0u,
+                envdiff_owner ? 1u : 0u,
+                prepared.batch.mutation.replace_pixel_shader ? 1u : 0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                static_cast<unsigned>(dispatch.transaction),
+                issued ? 1u : 0u,
+                restore_failed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::warning, line);
+        }
+    }
+#endif
 
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
