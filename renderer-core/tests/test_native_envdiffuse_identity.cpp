@@ -25,7 +25,9 @@ int main() {
     assert(env::parse_native_diffuse_hash_atlas(b.data(),b.size(),atlas));
     assert(env::unique_native_diffuse_probe(atlas,atlas[188].sha)==188);
     assert(env::unique_native_diffuse_probe(atlas,atlas[200].sha)==200);
-    assert(!env::unique_native_diffuse_probe(atlas,{}).has_value());
+    std::array<std::uint8_t,32> missing_sha{};
+    missing_sha[3]=0x55u; // deliberately absent from every synthetic record
+    assert(!env::unique_native_diffuse_probe(atlas,missing_sha).has_value());
     atlas[322].sha=atlas[321].sha;
     assert(!env::unique_native_diffuse_probe(atlas,atlas[321].sha).has_value());
     assert(env::unique_native_diffuse_probe(atlas,atlas[188].sha)==188);
