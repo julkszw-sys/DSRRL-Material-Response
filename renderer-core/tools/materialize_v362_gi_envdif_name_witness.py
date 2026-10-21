@@ -56,38 +56,42 @@ once('    if (diffuse) ++g_diffuse_create_candidates;',
 once('    g_diffuse_creation_sha.erase(resource_handle.handle);',
      '    g_diffuse_creation_sha.erase(resource_handle.handle);\n    g_gi_name_by_resource.erase(resource_handle.handle);')
 
-once('''    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    if (device_ptr != g_device)
-        return;
-
-    const auto native =
-        g_native_resources.find(
-            resource_handle.handle);''',
-'''    gi_envdif_name_witness::identity gi_name{};
-    bool same_backing=false;
-    if (gi_envdif_name_witness::capture(gi_name)) {
-        auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(view.handle);
-        ID3D11Resource *native_resource=nullptr;
-        srv->GetResource(&native_resource);
-        same_backing = native_resource!=nullptr &&
-            reinterpret_cast<std::uintptr_t>(native_resource)==
-            static_cast<std::uintptr_t>(resource_handle.handle);
-        if(native_resource!=nullptr)native_resource->Release();
+# V359 has its own SHA-positive GI view alias cut. Leave it intact
+# and inject this INDEPENDENT name-only census around its existing mutex.
+head, view_tail = s.split("void on_init_resource_view(",1)
+view_body, after_view = view_tail.split("void on_destroy_resource_view(",1)
+lock='''    std::lock_guard<std::mutex> lock(
+        g_mutex);'''
+if view_body.count(lock)!=1:
+    raise RuntimeError("V362 view mutex drift: "+str(view_body.count(lock)))
+pre='''    gi_envdif_name_witness::identity gi_v362_name{};
+    bool gi_v362_exact=false;
+    if (device_ptr->get_api()==device_api::d3d11 &&
+        gi_envdif_name_witness::capture(gi_v362_name)) {
+        auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
+            static_cast<std::uintptr_t>(view.handle));
+        ID3D11Resource *backing=nullptr;
+        srv->GetResource(&backing);
+        gi_v362_exact=backing!=nullptr &&
+            reinterpret_cast<std::uintptr_t>(backing)==
+                static_cast<std::uintptr_t>(resource_handle.handle);
+        if(backing!=nullptr)backing->Release();
     }
-    std::lock_guard<std::mutex> lock(g_mutex);
-    if (device_ptr != g_device) return;
-    if(same_backing &&
-        g_diffuse_creation_sha.find(resource_handle.handle)!=
-        g_diffuse_creation_sha.end()) {
-        gi_name.stage=2u;
-        observe_gi_name_locked(resource_handle.handle,gi_name);
+'''
+view_body=view_body.replace(lock,pre+lock,1)
+gate='''    if (device_ptr != g_device)
+        return;'''
+if view_body.count(gate)!=1:
+    raise RuntimeError("V362 view device gate drift")
+post='''    if(gi_v362_exact &&
+       g_diffuse_creation_sha.find(resource_handle.handle)!=
+           g_diffuse_creation_sha.end()) {
+        gi_v362_name.stage=2u;
+        observe_gi_name_locked(resource_handle.handle,gi_v362_name);
     }
-
-    const auto native =
-        g_native_resources.find(
-            resource_handle.handle);''')
+'''
+view_body=view_body.replace(gate,gate+"\n"+post,1)
+s=head+"void on_init_resource_view("+view_body+"void on_destroy_resource_view("+after_view
 
 once('    bool creation_sha_joined = false;',
 '''    bool creation_sha_joined = false;
