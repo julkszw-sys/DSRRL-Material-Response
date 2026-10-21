@@ -1818,7 +1818,7 @@ bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
 
     bool restored = false;
     bool first_unknown = false;
-    {
+    try {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (g_device != nullptr && g_native_diffuse_atlas_ready) {
             const auto already = g_diffuse_by_view.find(key);
@@ -1842,6 +1842,12 @@ bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
                 }
             }
         }
+    } catch (...) {
+        // noexcept API: allocation failure must not take down the game.
+        // Do not authorize any unverified resource after an exception.
+        if (texture != nullptr) texture->Release();
+        if (backing != nullptr) backing->Release();
+        return false;
     }
 
     if (first_unknown &&
