@@ -4634,6 +4634,17 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
+    // This create-time materializer is invoked for both HemEnv and
+    // HemEnvLerp stock PS. A correctly materialized Lerp belongs to the
+    // separate Lerp materializer; it is NOT a Stable diffuse-base failure.
+    if (mr.result == mr_result::applied &&
+        mr.family == material_response::diffuse_v1_family::hemenvlerp) {
+        outcome.result = pmetal_rgba_materialize_result::pass_not_candidate;
+        return outcome;
+    }
+
+    // Keep a genuine failure for this receiver (and fail-open as before).
+    outcome.receiver_id = mr.receiver_id;
     if (mr.result !=
             mr_result::applied ||
         mr.family !=
