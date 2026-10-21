@@ -65,7 +65,7 @@ bool v364_exact_legacy_selector_for_view(
     view->GetDevice(&device);
     bool valid=false;
     if(resource && device) {
-        const auto key=reinterpret_cast<std::uint64_t>(resource);
+        const auto key=static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(resource));
         std::lock_guard<std::mutex> lock(g_mutex);
         if(g_device &&
            reinterpret_cast<std::uintptr_t>(g_device->get_native())==
@@ -74,9 +74,9 @@ bool v364_exact_legacy_selector_for_view(
             const auto sha=g_diffuse_creation_sha.find(key);
             if(named!=g_gi_name_by_resource.end() &&
                sha!=g_diffuse_creation_sha.end() &&
-               !named->second.ambiguous) {
+               !named->second.conflicting) {
                 const auto *donor=operators::env_spec::v364_exact_legacy_diffuse(
-                    named->second.logical_name.data(),sha->second);
+                    named->second.name.data(),sha->second);
                 if(donor) {
                     const unsigned index=donor->selector==500u?0u:1u;
                     if(!g_v364_legacy_rgbas[index].empty()) {
