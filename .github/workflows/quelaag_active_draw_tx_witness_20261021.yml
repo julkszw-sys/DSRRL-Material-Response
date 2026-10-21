@@ -16,6 +16,8 @@ jobs:
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
           /tmp/test_native_envdiffuse_identity
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/pmetal_selector_policy_tests.cpp -o /tmp/test_pmetal_selector_policy
+          /tmp/test_pmetal_selector_policy
           python3 renderer-core/tools/test_v359_independent_envdiffuse_source.py
   native-single-addon:
     needs: source-contract
