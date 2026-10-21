@@ -6993,13 +6993,18 @@ bool on_draw(
 #if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
     // Unlike the disabled persistent vtable bridge this is the ACTIVE
     // current-native/replay transaction used by the actual host.
+    // Cross-material scope is mandatory: armor is black across materials,
+    // helmet spared; never select route 345 as a causality shortcut.
     // Read only: never modifies the draw, CB/SRV state or fail-open policy.
     {
         const auto w =
             dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        // Receiver-first: witness EVERY exact selected material route,
+        // not just P_Metal. The previous 345-only gate produced a
+        // diagnostic selection bias for the cutscene regression.
         if (w.source && w.ready && w.selected &&
-            w.route == 345u &&
-            static_cast<unsigned>(decision.route_index) == 345u) {
+            w.route == static_cast<unsigned>(decision.route_index) &&
+            prepared.envspec_in_batch) {
             const bool issued =
                 dsrrl::runtime::draw_tx_issued(dispatch.transaction);
             using edc_tx_result = dsrrl::runtime::draw_tx_result;
@@ -7551,13 +7556,18 @@ bool on_draw_indexed(
 #if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
     // Unlike the disabled persistent vtable bridge this is the ACTIVE
     // current-native/replay transaction used by the actual host.
+    // Cross-material scope is mandatory: armor is black across materials,
+    // helmet spared; never select route 345 as a causality shortcut.
     // Read only: never modifies the draw, CB/SRV state or fail-open policy.
     {
         const auto w =
             dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        // Receiver-first: witness EVERY exact selected material route,
+        // not just P_Metal. The previous 345-only gate produced a
+        // diagnostic selection bias for the cutscene regression.
         if (w.source && w.ready && w.selected &&
-            w.route == 345u &&
-            static_cast<unsigned>(decision.route_index) == 345u) {
+            w.route == static_cast<unsigned>(decision.route_index) &&
+            prepared.envspec_in_batch) {
             const bool issued =
                 dsrrl::runtime::draw_tx_issued(dispatch.transaction);
             using edc_tx_result = dsrrl::runtime::draw_tx_result;
