@@ -13,8 +13,8 @@ def one(s,a,b,what):
  return s.replace(a,b,1)
 
 def runtime(s):
- s=one(s,'#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"',
-           '#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"\n'+trace,'runtime include')
+ s=one(s,'#include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"',
+           '#include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"\n'+trace,'runtime include')
  anchor="    effect_latch(effect_source_ready_);"
  pre=r"""
 #if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
