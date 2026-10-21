@@ -144,20 +144,31 @@ once('''    if (!native_envdiffuse_probe_for_view(stock_t11,a) ||
     return prepare_envdiffuse(a,b,probe_b_required,prepared);''',
     "independent A/B selectors no t12/t14 source")
 
-once('''    if (probe_a >=
+# Only patch the EnvDiffuse preparation method: EnvSpec itself has a
+# similar 342-record guard and MUST remain bit-for-bit unchanged.
+prefix, diffuse_tail = s.split(
+    "bool envspec_resource_runtime::prepare_envdiffuse(",1)
+diffuse_body, suffix = diffuse_tail.split(
+    "void envspec_resource_runtime::release(",1)
+old='''    if (probe_a >=
             env::k_legacy_envspec_probe_count ||
         probe_b >=
             env::k_legacy_envspec_probe_count)
         return false;
 
-    resource_view a_view{};''',
-'''    const auto known=[](std::uint16_t id) noexcept {
+    resource_view a_view{};'''
+new='''    const auto known=[](std::uint16_t id) noexcept {
         return id<env::k_legacy_envspec_probe_count ||
             operators::env_spec::v364_legacy_by_selector(id)!=nullptr;
     };
     if(!known(probe_a) || !known(probe_b))
         return false;
 
-    resource_view a_view{};''',"asset class bounded acceptance")
+    resource_view a_view{};'''
+if diffuse_body.count(old)!=1:
+    raise SystemExit("V364 EnvDiffuse scoped ordinal gate drift")
+diffuse_body=diffuse_body.replace(old,new,1)
+s=prefix+"bool envspec_resource_runtime::prepare_envdiffuse("+
+    diffuse_body+"void envspec_resource_runtime::release("+suffix
 p.write_text(s,"utf8")
 print("V364 independent legacy/packed t11 t13 -> exact PTDE carrier patch PASS")
