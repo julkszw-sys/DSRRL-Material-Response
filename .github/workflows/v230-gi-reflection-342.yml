@@ -2,6 +2,8 @@ name: GI Reflection 342 bridge build
 on:
   push:
     branches: [agent/gi-reflection-342-verified-alias]
+  pull_request:
+    branches: [agent/v230-owner235-envdiffuse-exact-rgba-fix-20261021]
   workflow_dispatch:
 permissions:
   contents: read
