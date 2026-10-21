@@ -56,6 +56,5 @@ code=r"""
     }
 #endif
 """
-p.write_text(s.replace(a,a+"
-"+code),"utf8")
+p.write_text(s.replace(a,a+"\n"+code),"utf8")
 print("A14_REQUEST_READY_SOURCE_CONTRACT_PASS")
