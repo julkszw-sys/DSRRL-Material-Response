@@ -102,6 +102,7 @@ replace(res,'''    if (!probe.has_value()) {
 replace(res,'''    g_native_resources.erase(
         resource_handle.handle);
     g_native_diffuse_resources.erase(resource_handle.handle);
+    g_diffuse_creation_sha.erase(resource_handle.handle);
     g_diffuse_unverified_views.clear();
 
     g_snapshot_epoch.fetch_add(''',
@@ -111,6 +112,7 @@ replace(res,'''    g_native_resources.erase(
     g_v358_lifetime_probes.erase(resource_handle.handle);
 #endif
     g_native_diffuse_resources.erase(resource_handle.handle);
+    g_diffuse_creation_sha.erase(resource_handle.handle);
     g_diffuse_unverified_views.clear();
 
     g_snapshot_epoch.fetch_add(''',"resource lifetime retirement")
