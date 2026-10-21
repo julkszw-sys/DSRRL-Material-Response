@@ -12,6 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify diagnostic stays in active dispatch and is strictly read-only
         run: python3 renderer-core/tools/test_v230_quelaag_active_tx_witness.py
+      - name: Compile and test independent stock EnvDiffuse identity resolver
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
+          /tmp/test_native_envdiffuse_identity
+          python3 renderer-core/tools/test_v359_independent_envdiffuse_source.py
   native-single-addon:
     needs: source-contract
     runs-on: windows-latest
