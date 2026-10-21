@@ -10,7 +10,7 @@ $injection=@'
 python renderer-core/tools/materialize_v362_gi_envdif_name_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V362 native GI name witness materializer failed' }
 '@
-$code=$code.Replace($anchor,$anchor+"\n"+$injection)
+$code=$code.Replace($anchor,$anchor+"`n"+$injection)
 $temp=Join-Path $PSScriptRoot '_v362_build_generated.ps1'
 try {
     [IO.File]::WriteAllText($temp,$code,[Text.UTF8Encoding]::new($false))
