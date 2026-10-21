@@ -110,19 +110,17 @@ replace(p,"        g_v358_lifetime_probes.clear();",
         g_v359_map_conflict = {};
 #endif''',"reset per device")
 
-replace(p,"""    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
+replace(p,"""        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
+    }
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)""",
-"""    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
+"""        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
+    }
 #if defined(DSRRL_V359_ATTESTED_GI_NAME_ALIAS)
     std::uint16_t v359_source_ordinal=0u;
     std::uint8_t v359_source_map=0u;
     const wchar_t *v359_name=nullptr;
     std::size_t v359_name_len=0u;
-    const bool v359_source_exact=
+    const bool v359_source_exact=spec &&
         texture_identity_transport::snapshot_raw(
             v359_name,v359_name_len) &&
         v359_match_original_gi_name(
