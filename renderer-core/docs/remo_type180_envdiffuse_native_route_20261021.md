@@ -27,3 +27,16 @@ Owner reports many materials becoming black and helmet differing; neither group 
 **Status:** native code paths and producer-level paired GI identity CONFIRMED; runtime join at Quelaag receiver OPEN; final PTDE pixels OPEN. No material/LightBank change authorized. Companion local SHA-pinned binary verifier artifact: `DSRRL_REMO_ENVDIFFUSE_CONTROLLER_TO_RESOURCE_RE_20261021.zip`, SHA256 `56a02b0d94c020994c8f1b592060e486f485c9e47f412874276f50593ad3ff5b`. Full disassembly and Python verifier included.
 
 Next narrow test: at same draw record REMO scene+cut+part/model, controller A/B, producer map/character, current LightBank bank/row, GI packed A/B keys, native t11/t13 and t12/t14 *logical* identities, PTDE bound t11/t13, shader identity, FLVER+MTD+material slot; fail-open on unverified receiver or resource association. Pixel comparison remains separate.
+
+## Additional verified legacy-GI split (important correction)
+
+A further complete disassembly of legacy GI producer `0x1401EADE0..0x1401EB320` **does** show writes to both EnvDiffuse `t11/t13` at `0x1401EB0A3/0C0` and EnvSpec `t12/t14` at `0x1401EB25A/277`. Any earlier claim that legacy leaves t11/t13 entirely unset was incorrect.
+
+Crucially, *legacy* logical identity does **not** come from one packed probe ID. Its two name builders read **different fields of the same legacy record**:
+
+- `0x140563EA2`: `movsx r9d,word ptr [rcx+0x50]` → EnvDiffuse name, verified literal `EnvDif_%s_%03d` at rdata `0x1412E9038`.
+- `0x140563F32`: `movsx r9d,word ptr [rcx+0x52]` → EnvSpec name, verified literal `EnvSpc_%s_%03d` at rdata `0x1412E9018`.
+
+By comparison, packed producer `0x1401EB320` uses the same **packed** probe ID to name both EnvDiffuse and EnvSpec. The legacy record's +0x50 and +0x52 can have **different values**; the fact they are independent does not prove a mismatch for any concrete row. Therefore native DSR legacy GI may produce t11/t12 that cannot be cross-identified using only EnvSpec packed ordinal. The correct bridge needs the actual logical EnvDiffuse identity from the exact draw or must fail open for that resource/receiver. Never infer from LightBank row equality or helmet appearance.
+
+Reference proof script and ASM: `DSRRL_REMO_GI_LEGACY_VS_PACKED_SPLIT_RE_20261021.zip`; original EXE SHA required; runtime assignment and pixel fidelity OPEN.
