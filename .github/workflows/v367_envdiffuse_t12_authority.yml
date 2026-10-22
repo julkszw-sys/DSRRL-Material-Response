@@ -1,0 +1,85 @@
+name: V367 isolated EnvDiffuse RX34 + t12 authority
+on:
+  push:
+    branches: [agent/v367-independent-classic-envdiffuse-rx34-t12-authority-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify diagnostic stays in active dispatch and is strictly read-only
+        run: |
+          python3 renderer-core/tools/test_v230_quelaag_active_tx_witness.py
+          python3 renderer-core/tools/test_v359_t11_bound_descriptor_source.py
+          python3 renderer-core/tools/test_v359_t11_creation_sha_source.py
+          python3 renderer-core/tools/test_v359_t11_exact_retail_origin.py
+          python3 renderer-core/tools/test_v359_t11_creation_tls_name.py
+          python3 renderer-core/tools/test_v360_native_legacy_envdif_registry.py
+          python3 renderer-core/tools/test_v361_classic_39_dds_reader.py
+          python3 renderer-core/tools/test_v362_legacy_exact_terminators.py
+          python3 renderer-core/tools/test_v364_classic_resource_contract.py
+          python3 renderer-core/tools/test_v365_standalone_rx34_decode.py
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_v365_rx34_classic_decode_contract.cpp -o /tmp/test_v365_rx34
+          /tmp/test_v365_rx34
+      - name: Compile and test independent stock EnvDiffuse identity resolver
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
+          /tmp/test_native_envdiffuse_identity
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_v362_classic_envdiffuse_exact_identity.cpp -o /tmp/test_v362_exact_legacy
+          /tmp/test_v362_exact_legacy
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_v363_legacy_envdif_all_native_creation_roster.cpp -o /tmp/test_v363_native
+          /tmp/test_v363_native
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/pmetal_selector_policy_tests.cpp -o /tmp/test_pmetal_selector_policy
+          /tmp/test_pmetal_selector_policy
+          python3 renderer-core/tools/test_v359_independent_envdiffuse_source.py
+  native-single-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build exact PTDE EnvDiffuse diagnostic with cross-material active draw witness
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v230_quelaag_active_tx_witness.py
+          python renderer-core/tools/test_v359_t11_bound_descriptor_source.py
+          python renderer-core/tools/test_v359_t11_creation_sha_source.py
+          python renderer-core/tools/test_v359_t11_exact_retail_origin.py
+          python renderer-core/tools/test_v359_t11_creation_tls_name.py
+          python renderer-core/tools/test_v360_native_legacy_envdif_registry.py
+          python renderer-core/tools/test_v361_classic_39_dds_reader.py
+          python renderer-core/tools/test_v362_legacy_exact_terminators.py
+          python renderer-core/tools/test_v364_classic_resource_contract.py
+          python renderer-core/tools/test_v365_standalone_rx34_decode.py
+          if ($LASTEXITCODE -ne 0) { throw 'Active transaction source test failed' }
+          ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify read-only t11 native descriptor marker in integrated PE
+        shell: pwsh
+        run: |
+          $out='out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64'
+          if (!(Test-Path $out)) { throw 'No native addon produced' }
+          $data=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $out)))
+          if (!$data.Contains('[DSRRL V359 T11 BOUND DESC]')) { throw 'Descriptor witness missing in PE' }
+          if (!$data.Contains('[DSRRL V359 T11 REJECT JOIN]')) { throw 'Baseline t11 reject witness missing' }
+          if (!$data.Contains('[DSRRL V359 T11 CREATE SHA]')) { throw 'Creation SHA witness missing' }
+          if (!$data.Contains('[DSRRL V359 T11 RETAIL ORIGIN]')) { throw 'Exact bound retail origin witness missing in PE' }
+          if (!$data.Contains('tls_scope=THREAD_HINT_NOT_NATIVE_RESOURCE_PROOF')) { throw 'TLS creation witness missing in PE' }
+          if (!$data.Contains('[DSRRL V360 LEGACY ENVDIF ROUTED]')) { throw 'Legacy native resource registry missing in PE' }
+          if (!$data.Contains('[DSRRL V362 LEGACY T11 REGISTER]')) { throw 'Exact name + SHA registration witness missing in PE' }
+          if (!$data.Contains('[DSRRL V365 CLASSIC RX34 SHADER ISLAND]')) { throw 'V365 isolated DXBC materialization marker absent' }
+          if (!$data.Contains('V366 CLASSIC PTDE T11')) { throw 'V366 base PE check' }
+          if (!$data.Contains('[DSRRL V367 RX34 ENVDIFFUSE]')) { throw 'Independent V367 RX34 binding not linked in PE' }
+          if (!$data.Contains('[DSRRL V367 ENVSPEC T12 AUTHORITY]')) { throw 'T12 exact authority telemetry not linked in PE' }
+          Get-FileHash $out -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V367-Independent-EnvDiffuse-T12-OneAddon
+          path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
+          if-no-files-found: error
