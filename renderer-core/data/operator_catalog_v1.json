@@ -632,6 +632,29 @@
       "default_port_state": "ACTIVE",
       "fail_open_behavior": "PRESERVE_PRIOR_CORE_ROUTE",
       "operator_id": "pmetal_black_safe_v10"
+    },
+    {
+      "status": "HIGH CONFIDENCE",
+      "metadata": {
+        "carrier": "COMPOSITE",
+        "production_seed_raster": "1024x720",
+        "downstream_rasters": [
+          "512x360",
+          "256x180"
+        ],
+        "exact_q8_history": false,
+        "runtime": "OPEN",
+        "pixel_behavior": "OPEN"
+      },
+      "description": "Dedicated PTDE-visible DoF postprocess island on the DSR host. Production approximation preserves the PTDE 1024x720 first-stage raster, then uses the PTDE half/quarter blur topology and retained DSR terminal depth adapter. Exact Q8 history remains a separate reference path.",
+      "display_name": "PTDE DoF private postprocess island",
+      "operator_key": "post.dof_ptde",
+      "canonical_key": "renderer.dof.production_seed_minimum_ptde_raster_v1",
+      "operator_class": "POSTPROCESS",
+      "canonical_revision": 11852,
+      "default_port_state": "PARTIAL",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "post_dof_ptde"
     }
   ]
 }

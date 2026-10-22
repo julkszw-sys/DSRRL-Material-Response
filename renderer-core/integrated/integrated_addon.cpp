@@ -23,6 +23,13 @@
 #include "dsrrl/runtime/upper_lower_hemenv_draw_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #include "dsrrl/runtime/hemdir3_pipeline_registry.hpp"
+#include "dsrrl/runtime/dof_preflight.hpp"
+#include "dsrrl/runtime/dof_authored_state_runtime.hpp"
+#include "dsrrl/runtime/dof_private_resource_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_scheduler_runtime.hpp"
+#include "dsrrl/runtime/dof_host_depth_route_runtime.hpp"
+#include "dsrrl/runtime/dof_tonemap_handoff_runtime.hpp"
+#include "dsrrl/runtime/dof_ptde_draw_bridge_runtime.hpp"
 #include "dsrrl/runtime/hemdir3_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_pipeline_runtime.hpp"
@@ -157,6 +164,10 @@ constexpr bool k_pointlight_drawtime_runtime_enabled = false;
 constexpr bool k_pointlight_drawtime_runtime_enabled = true;
 #endif
 
+// Clustered PntS is source-only on the R43-derived line. Stock DSR owns
+// receiver/material/shader routing; the addon only rewrites the source carrier.
+constexpr bool k_clustered_pointlight_receiver_runtime_enabled = false;
+
 // R26: persistent Draw-family vtable ownership is runtime-falsified on the
 // DSR/ReShade host. Use one current-native dispatch under the existing
 // transaction + TLS recursion guard instead.
@@ -221,6 +232,87 @@ dsrrl::runtime::pmetal_native_draw_bridge
     g_pmetal_native_draw;
 
 thread_local bool g_raw_draw_replay_recursing = false;
+
+bool dof_opt_in_requested() noexcept
+{
+#ifdef DSRRL_DOF_DEFAULT_ON
+    return true;
+#else
+    char value[8]{};
+    const DWORD size =
+        GetEnvironmentVariableA(
+            "DSRRL_EXPERIMENTAL_PTDE_DOF",
+            value,
+            static_cast<DWORD>(sizeof(value)));
+    return size == 1u && value[0] == '1';
+#endif
+}
+
+void unregister_dof_runtime() noexcept
+{
+    dsrrl::runtime::dof::unregister_ptde_draw_bridge_runtime();
+    dsrrl::runtime::dof::unregister_authored_state_runtime();
+    dsrrl::runtime::dof::unregister_tonemap_handoff_scope_runtime();
+    dsrrl::runtime::dof::unregister_host_depth_route_runtime();
+    dsrrl::runtime::dof::unregister_ptde_scheduler_runtime();
+    dsrrl::runtime::dof::unregister_private_resource_runtime();
+    dsrrl::runtime::dof::unregister_preflight_runtime();
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+}
+
+bool register_dof_runtime() noexcept
+{
+    (void)g_core.features().set(
+        dsrrl::core::operator_id::post_dof_ptde,
+        false);
+
+    if (!dof_opt_in_requested())
+        return true;
+
+    if (!k_drawtime_islands_runtime_enabled ||
+        !k_draw_callbacks_runtime_enabled ||
+        !k_draw_replay_runtime_enabled)
+        return false;
+
+    const bool preflight =
+        dsrrl::runtime::dof::register_preflight_runtime();
+    const bool resources =
+        preflight &&
+        dsrrl::runtime::dof::register_private_resource_runtime();
+    const bool scheduler =
+        resources &&
+        dsrrl::runtime::dof::register_ptde_scheduler_runtime();
+    const bool host =
+        scheduler &&
+        dsrrl::runtime::dof::register_host_depth_route_runtime();
+    const bool tone =
+        host &&
+        dsrrl::runtime::dof::register_tonemap_handoff_scope_runtime();
+    const bool authored =
+        tone &&
+        dsrrl::runtime::dof::register_authored_state_runtime(g_core);
+    const bool bridge =
+        authored &&
+        dsrrl::runtime::dof::register_ptde_draw_bridge_runtime(g_core);
+
+    if (!bridge) {
+        unregister_dof_runtime();
+        return false;
+    }
+
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF R43-DRAWPARAM] carrier=LIVE_SELECTED_DOF_ROWS selector=STOCK_DSR donor_table=ABSENT bank_gate=PTDE_HOMOLOGOUS_10 m15_dual=ON default_m99=STOCK_DSR producer_rva=0x5627E0");
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL DoF R43-HANDOFF] pass=0x13 executor_rva=0x4572A0 source=pass_desc+0x0C alias=image_state+0x104");
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL R43 PARAM SOURCE FIX V2] dof_pass01=RETAIL_SOURCE_0x78 support=CTX24B8_0x88_0xC0 dof_mul=U8 clustered_failstage=ONE_SHOT full_hot_telemetry=BUILD_PROFILE");
+    return true;
+}
 
 std::atomic<std::uint64_t> g_present_count{0};
 std::atomic<std::uint64_t> g_mr_draw_eval{0};
@@ -4204,7 +4296,8 @@ bool on_create_pipeline(
             }
         }
 
-        if (k_pointlight_drawtime_runtime_enabled) {
+        if (k_pointlight_drawtime_runtime_enabled &&
+            k_clustered_pointlight_receiver_runtime_enabled) {
             clustered_pnts =
                 dsrrl::operators::point_light::
                     materialize_clustered_pnts_direct_ptde(
@@ -4748,6 +4841,7 @@ bool on_create_pipeline(
             subobjects);
 
     if (k_pointlight_drawtime_runtime_enabled &&
+        k_clustered_pointlight_receiver_runtime_enabled &&
         clustered_pnts_candidate) {
         const auto *attested_host =
             find_pixel_shader(
@@ -4850,6 +4944,7 @@ void on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     const bool clustered_pointlight_init_exact =
         k_pointlight_drawtime_runtime_enabled &&
+        k_clustered_pointlight_receiver_runtime_enabled &&
         g_clustered_pnts_pipeline.on_init_pipeline(
             device, subobject_count, subobjects, pipeline);
     motion_blur_camera_fallback_disable::
@@ -6476,6 +6571,14 @@ bool on_draw(
         return issued;
     }
 
+    if (dsrrl::runtime::dof::handle_draw_event(
+            cmd_list,
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance))
+        return true;
+
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
             active_draw_scope())
@@ -6904,6 +7007,15 @@ bool on_draw_indexed(
         g_raw_draw_replay_recursing = false;
         return issued;
     }
+
+    if (dsrrl::runtime::dof::handle_draw_indexed_event(
+            cmd_list,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance))
+        return true;
 
     if (g_hot_telemetry_enabled &&
         dsrrl::runtime::bloom_fx_draw_transport::
@@ -7385,13 +7497,18 @@ bool AddonInit(
         return true;
     }
 
-    // Render-hot telemetry is opt-in. Production/default execution avoids
-    // synchronized counter RMWs on every draw; set DSRRL_RUNTIME_TELEMETRY=1
-    // for receiver/island census sessions.
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
     g_effect_telemetry_enabled =
         runtime_effect_telemetry_requested();
+
+#if defined(DSRRL_RUNTIME_TELEMETRY_DEFAULT_ON) && \
+    defined(DSRRL_EFFECT_TELEMETRY_DEFAULT_ON) && \
+    !defined(DSRRL_RUNTIME_VERIFY_STATE_DEFAULT_ON)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL TELEMETRY R43-PARAM] full=ON runtime=ON effect=ON native_state_verify=OFF");
+#endif
     reset_effect_probe();
     motion_blur_camera_fallback_disable::
         reset();
@@ -7637,7 +7754,7 @@ bool AddonInit(
 
     const bool flver_hooks =
         dsrrl::runtime::flver_identity_transport::install(
-            k_pointlight_drawtime_runtime_enabled,
+            false, // clustered PntS is source-only; no builder/receiver bridge
             upper_lower_enabled,
             hemdir3_enabled);
 
@@ -7671,11 +7788,10 @@ bool AddonInit(
 
     const bool clustered_pointlight_hooks =
         k_pointlight_drawtime_runtime_enabled &&
-        flver_hooks &&
         g_clustered_pnts.install();
 
     g_clustered_pointlight_selection_transport_active.store(
-        clustered_pointlight_hooks,
+        false,
         std::memory_order_release);
 
     if (k_pointlight_drawtime_runtime_enabled &&
@@ -7683,11 +7799,11 @@ bool AddonInit(
         reshade::log::message(
             reshade::log::level::warning,
             "[DSRRL CORE+ISLANDS " DSRRL_CORE_ISLANDS_VERSION
-            "] Clustered PntS transport FAIL-OPEN: first-four sidecar remains unavailable; stock DSR clustered PointLight preserved.");
+            "] Clustered source bridge FAIL-OPEN: stock DSR clustered PointLight preserved.");
     } else if (clustered_pointlight_hooks) {
         reshade::log::message(
             reshade::log::level::info,
-            "[DSRRL POINTLIGHT R20] selector_authority_cache=ACTIVE source_selection_cache=PER_PRODUCER_SERIAL gpu_payload_dedupe=PER_CONTEXT draw_cpu_traversal=OFF");
+            "[DSRRL R43 DRAWPARAM] clustered_source=ACTIVE receiver=STOCK_DSR donor_lookup=OFF material_lookup=OFF replacement_shader=OFF");
     }
 
     // Bloom FX transport is diagnostic-only: it does not authorize Q8,
@@ -7809,6 +7925,14 @@ bool AddonInit(
             "[DSRRL PMETAL ENVSPEC] exact selector carrier + narrow retail LightBank single/blend PTDE source fallback ACTIVE; visible U/L remains stock/off.");
     }
 
+    const bool dof_runtime_ready =
+        register_dof_runtime();
+    if (!dof_runtime_ready && dof_opt_in_requested()) {
+        reshade::log::message(
+            reshade::log::level::warning,
+            "[DSRRL DoF R43-DRAWPARAM] activation=FAIL_OPEN stock_dsr=ON");
+    }
+
     publish_active_dynamic_draw_routes();
 
     {
@@ -7872,6 +7996,7 @@ void AddonUninit(
         return;
     }
 
+    unregister_dof_runtime();
     unregister_events();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
