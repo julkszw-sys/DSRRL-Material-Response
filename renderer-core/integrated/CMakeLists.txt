@@ -657,6 +657,7 @@ target_compile_definitions(
     # addon rather than relying on overwritten nested PowerShell $env:CL.
     # Runtime still does NOT activate the standalone shader island.
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC>
+    $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V366_CLASSIC_PTDE_RESOURCE>
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_VERSION="${DSRRL_CORE_ISLANDS_VERSION}">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_PRODUCT_LINE="DSRRL_Core_Islands">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_SOURCE_COMMIT="${DSRRL_SOURCE_COMMIT}">
@@ -930,6 +931,17 @@ if(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE>)
+endif()
+
+# V366 must be exactly additive to the original v2.3.0 islands profile.
+# It is not a rollback of the other renderer operators or a bypass build.
+if(DSRRL_DRAWTIME_ISLANDS_BYPASS OR DSRRL_DRAW_CALLBACKS_BYPASS OR
+   DSRRL_DRAW_REPLAY_BYPASS OR NOT DSRRL_POINTLIGHT_DRAWTIME_BYPASS OR
+   NOT DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL OR
+   NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+   NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
+   NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    message(FATAL_ERROR "V366 must retain v2.3.0 active islands and PointLight bypass")
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
