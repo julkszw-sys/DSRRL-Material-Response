@@ -26,6 +26,8 @@ jobs:
           /tmp/test_native_envdiffuse_identity
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_v362_classic_envdiffuse_exact_identity.cpp -o /tmp/test_v362_exact_legacy
           /tmp/test_v362_exact_legacy
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_v363_legacy_envdif_all_native_creation_roster.cpp -o /tmp/test_v363_native
+          /tmp/test_v363_native
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/pmetal_selector_policy_tests.cpp -o /tmp/test_pmetal_selector_policy
           /tmp/test_pmetal_selector_policy
           python3 renderer-core/tools/test_v359_independent_envdiffuse_source.py
