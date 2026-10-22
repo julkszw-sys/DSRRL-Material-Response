@@ -1,7 +1,7 @@
-name: V365 independent RX34 Classic RGB/A shader island
+name: V366 v230 profile Classic PTDE EnvDiffuse
 on:
   push:
-    branches: [agent/v365-rx34-classic-envdiffuse-standalone-dxbc-20261022]
+    branches: [agent/v366-v230-islands-pointlight-off-classic-ptde-t11-20261022]
   workflow_dispatch:
 permissions:
   contents: read
@@ -74,9 +74,10 @@ jobs:
           if (!$data.Contains('[DSRRL V360 LEGACY ENVDIF ROUTED]')) { throw 'Legacy native resource registry missing in PE' }
           if (!$data.Contains('[DSRRL V362 LEGACY T11 REGISTER]')) { throw 'Exact name + SHA registration witness missing in PE' }
           if (!$data.Contains('[DSRRL V365 CLASSIC RX34 SHADER ISLAND]')) { throw 'V365 isolated DXBC materialization marker absent' }
+          if (!$data.Contains('V366 CLASSIC PTDE T11')) { throw 'V366 PE check' }
           Get-FileHash $out -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V365-RX34-Standalone-Classic-Island-OneAddon
+          name: DSRRL-V366-Classic-T11-OneAddon
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error
