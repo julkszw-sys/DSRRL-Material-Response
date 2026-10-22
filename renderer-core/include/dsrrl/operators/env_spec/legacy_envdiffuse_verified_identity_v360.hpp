@@ -31,6 +31,9 @@ constexpr name_digest k_exact_owner_rx34[] = {
       "cace4d9bdbe2bd54bb9b4e7c91002b88c6a68c367638febde9c76144ee5a7eb9",
       {18u,510u} },
 };
+
+#include "dsrrl/operators/env_spec/legacy_dsr_m10_create_roster_v363.inc"
+#include "dsrrl/operators/env_spec/legacy_dsr_m18_create_roster_v363.inc"
 constexpr int hex_digit(char c) noexcept
 {
     return c >= '0' && c <= '9' ? c-'0' :
