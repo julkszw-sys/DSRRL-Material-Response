@@ -109,6 +109,27 @@ def runtime(s):
                 need_b?1u:0u,b_ok?1u:0u,
                 static_cast<unsigned>(b),shadow?"SHADOW":"D3D11");
             reshade::log::message(reshade::log::level::warning,log);
+            // Read-only SRV dimension and native resource type witness.
+            if(diffuse[0]!=nullptr) {
+                D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
+                diffuse[0]->GetDesc(&vd);
+                ID3D11Resource *res=nullptr;
+                diffuse[0]->GetResource(&res);
+                D3D11_RESOURCE_DIMENSION dim=D3D11_RESOURCE_DIMENSION_UNKNOWN;
+                if(res!=nullptr) res->GetType(&dim);
+                char detail[300]{};
+                std::snprintf(detail,sizeof(detail),
+                    "[DSRRL V359 T11 BOUND DESC] rx=%u route=%u"
+                    " srv_dim=%u srv_fmt=%u resource_dim=%u"
+                    " has_resource=%u action=READ_ONLY",
+                    static_cast<unsigned>(decision.receiver_id),
+                    static_cast<unsigned>(decision.route_index),
+                    static_cast<unsigned>(vd.ViewDimension),
+                    static_cast<unsigned>(vd.Format),
+                    static_cast<unsigned>(dim),res!=nullptr?1u:0u);
+                reshade::log::message(reshade::log::level::warning,detail);
+                if(res!=nullptr) res->Release();
+            }
             for(auto *v:diffuse)
                 if(v!=nullptr) v->Release();
         }
