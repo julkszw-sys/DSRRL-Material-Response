@@ -99,7 +99,22 @@ replace(res,'''    if (!probe.has_value()) {
 #endif
     if (!probe.has_value()) {
         if (spec) {''',"certified and unknown native creation SHA")
-replace(res,'''    g_native_resources.erase(
+if 'DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY' in (root/res).read_text('utf8'):
+    # A separately lifetime-tracked legacy t11 registry is now present
+    # between the native t11 erase and snapshot invalidation. Restore the
+    # exact V358 spec-only resource-retirement hook independently.
+    replace(res,'''    g_native_resources.erase(
+        resource_handle.handle);
+    g_native_diffuse_resources.erase(resource_handle.handle);''',
+    '''    g_native_resources.erase(
+        resource_handle.handle);
+#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
+    g_v358_lifetime_probes.erase(resource_handle.handle);
+#endif
+    g_native_diffuse_resources.erase(resource_handle.handle);''',
+    "resource lifetime retirement V360 legacy identity")
+else:
+    replace(res,'''    g_native_resources.erase(
         resource_handle.handle);
     g_native_diffuse_resources.erase(resource_handle.handle);
 
