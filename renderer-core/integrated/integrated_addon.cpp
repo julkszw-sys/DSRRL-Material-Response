@@ -4164,6 +4164,20 @@ bool on_create_pipeline(
         pixel_shader->code_size != 0u) {
         g_mr_draw_runtime.on_init_device(device);
         g_pmetal_envspec.on_init_device(device);
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+        // Construct addon-private shader from the ORIGINAL exact 29-DWORD
+        // PTDE EnvDiffuse source operator before other operators compose.
+        // Stock create_pipeline is NOT replaced.
+        std::uint32_t independent_rx=0u;
+        std::vector<std::uint8_t> independent_dxbc;
+        if(dsrrl::operators::env_spec::
+             materialize_ptde_envdiffuse_stable_only(
+                static_cast<const std::uint8_t *>(pixel_shader->code),
+                pixel_shader->code_size,independent_dxbc,independent_rx)) {
+            g_pmetal_envspec.register_independent_envdiffuse(
+                independent_dxbc.data(),independent_dxbc.size(),independent_rx);
+        }
+#endif
     }
 
     dsrrl::operators::lightbank::
@@ -6148,6 +6162,28 @@ bool prepare_island_batch(
 #endif
 
     if (exact_pmetal_envspec) {
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+        // Stable: only PTDE EnvDiffuse owns shader+t11/s11+CB12(c86).
+        // Never call the old coupled Build131 EnvSpec+EnvDiffuse on these
+        // draws, even when independently authorized source preparation fails.
+        // Lerp is NOT silently remapped to a Stable operator; unchanged
+        // stock DSR fallback until its two-endpoint consumer is ported.
+        if (!hemenvlerp_bound &&
+            (decision.receiver_id==33u ||
+             decision.receiver_id==34u ||
+             decision.receiver_id==35u)) {
+            if(g_pmetal_envspec.prepare_independent_envdiffuse(
+                  cmd_list,material,decision,prepared.envspec)) {
+                prepared.envspec_in_batch=true;
+                if(dsrrl::runtime::append_island_draw_request(
+                      prepared.batch,prepared.envspec.request)==
+                   dsrrl::runtime::island_draw_batch_result::ready)
+                    return true;
+                release_prepared_island_batch(prepared);
+            }
+            return false; // fail-open native DSR, NEVER old joint shader
+        }
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
             static std::atomic_bool first_nonmetal_gate{false};
