@@ -1721,7 +1721,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                 ptde_envdiffuse_b_required,
                 prepared.envdiffuse_resources);
         if (independent_envdiffuse_ready) {
-            reshade::log::message(reshade::log::level::warning,
+            static std::atomic_bool once{false};
+            if (!once.exchange(true)) reshade::log::message(reshade::log::level::warning,
                 "[DSRRL V366 CLASSIC PTDE T11] ready=1");
         }
     }
