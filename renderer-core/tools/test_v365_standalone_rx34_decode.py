@@ -59,4 +59,10 @@ assert 'g_core.features().enabled' not in v365_live
 assert 'pixel_shader->code =' not in v365_live
 assert 'CreatePixelShader(' not in v365_live
 assert '/DDSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC' in build
+profile=(r/'integrated/CMakeLists.txt').read_text('utf8')
+carrier=(r/'src/runtime/pmetal_envspec_draw_runtime.cpp').read_text('utf8')
+assert 'DSRRL_V366_CLASSIC_PTDE_RESOURCE' in profile
+assert 'prepare_classic_envdiffuse_bound(' in carrier
+assert 'prepared.envdiffuse_resources.ptde_a' in carrier
+assert 'prepared.envdiffuse_resources.sampler' in carrier
 print('V365_STANDALONE_RX34_CLASSIC_RGB_DIV_ALPHA_SOURCE_PASS')
