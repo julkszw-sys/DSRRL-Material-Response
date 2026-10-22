@@ -6659,6 +6659,34 @@ void observe_bloom_fx_draw_authority() noexcept
     }
 }
 
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+void v369_envdiffuse_isolated_tx(
+   const dsrrl::runtime::draw_tx_mutation &mutation,
+   dsrrl::runtime::draw_tx_result result,
+   std::uint32_t rx,std::uint32_t route,
+   std::uint32_t slot,std::uint64_t flver) noexcept
+{
+    constexpr auto owner=dsrrl::core::operator_bit(
+        dsrrl::core::operator_id::env_diffuse);
+    if(mutation.owners!=owner || (rx!=33u && rx!=34u))return;
+    static std::atomic<std::uint32_t> samples[2]{};
+    const auto n=samples[rx-33u].fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    if(n>16u && (n&(n-1u))!=0u)return;
+    char line[390]{};
+    std::snprintf(line,sizeof(line),
+      "[DSRRL V369 ENV ONLY TX] rx=%u route=%u slot=%u"
+      " flver=%016llx n=%u issued=%u restored=%u"
+      " owners=ENVDIFFUSE_ONLY srvs=%u samplers=%u"
+      " ptde_t11=1 stock_t12=1 pixel=OPEN",
+      rx,route,slot,static_cast<unsigned long long>(flver),n,
+      dsrrl::runtime::draw_tx_issued(result)?1u:0u,
+      result==dsrrl::runtime::draw_tx_result::issued_restored?1u:0u,
+      mutation.srv_count,mutation.sampler_count);
+    reshade::log::message(reshade::log::level::warning,line);
+}
+#endif
+
 #if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
 // The V367 PREPARED marker is before append/transaction: distinguish the
 // exact EnvDiffuse-only carrier from an actually issued and restored Draw.
@@ -7146,6 +7174,11 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    v369_envdiffuse_isolated_tx(prepared.batch.mutation,dispatch.transaction,
+       decision.receiver_id,decision.route_index,material.material_slot,
+       material.flver_identity_hash);
+#endif
 
 #if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
     v368_envdiffuse_dispatch_witness(cmd_list,prepared.batch.mutation,
@@ -7714,6 +7747,11 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    v369_envdiffuse_isolated_tx(prepared.batch.mutation,dispatch.transaction,
+       decision.receiver_id,decision.route_index,material.material_slot,
+       material.flver_identity_hash);
+#endif
 
 #if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
     v368_envdiffuse_dispatch_witness(cmd_list,prepared.batch.mutation,
