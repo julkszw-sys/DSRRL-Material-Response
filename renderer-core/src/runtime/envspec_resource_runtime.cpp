@@ -1482,6 +1482,87 @@ bool get_ptde_cube(
 }
 
 
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+bool get_ptde_classic_candidate(const char *name,resource_view &out) noexcept
+{
+    out={};
+    if(name==nullptr) return false;
+    device *dev=nullptr;
+    std::vector<std::uint8_t> dds;
+    classic::source_record source{};
+    std::uint16_t id=0u;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if(!g_ptde_classic_ready || g_device==nullptr) return false;
+        const auto *r=classic::find(g_ptde_classic_rows,name);
+        if(r==nullptr) return false;
+        id=static_cast<std::uint16_t>(r-g_ptde_classic_rows.data());
+        const auto cached=g_ptde_classic_cubes.find(id);
+        if(cached!=g_ptde_classic_cubes.end()) {
+            out=cached->second.view;
+            return out.handle!=0u;
+        }
+        source=*r;
+        dds.assign(g_ptde_classic_pack.begin()+source.dds_offset,
+                   g_ptde_classic_pack.begin()+source.dds_offset+source.dds_bytes);
+        dev=g_device;
+    }
+    const auto w=static_cast<std::uint32_t>(source.width);
+    const auto mips=static_cast<std::uint32_t>(source.mip_levels);
+    const bool bc1=source.format==2u;
+    const auto fmt=bc1?format::bc1_unorm:format::r8g8b8a8_unorm;
+    std::array<subresource_data,42u> subs{};
+    std::vector<std::uint8_t> pixels;
+    std::size_t pos=128u;
+    if(!bc1) {
+        pixels.resize(static_cast<std::size_t>(w)*w*4u*6u);
+        for(unsigned face=0;face<6u;++face) {
+            auto *dst=pixels.data()+static_cast<std::size_t>(face)*w*w*4u;
+            for(std::size_t i=0;i<static_cast<std::size_t>(w)*w;++i) {
+                dst[i*4u]=dds[pos+2u];dst[i*4u+1u]=dds[pos+1u];
+                dst[i*4u+2u]=dds[pos];dst[i*4u+3u]=255u;pos+=3u;
+            }
+            subs[face]={dst,w*4u,w*w*4u};
+        }
+    } else {
+        for(unsigned face=0;face<6u;++face)
+            for(unsigned mip=0;mip<mips;++mip) {
+                const auto blocks=(std::max(1u,w>>mip)+3u)/4u;
+                const auto pitch=blocks*8u;
+                subs[face*mips+mip]={dds.data()+pos,pitch,pitch*blocks};
+                pos+=pitch*blocks;
+            }
+    }
+    if(pos!=dds.size()) return false;
+    const resource_desc desc(resource_type::texture_2d,w,w,6u,mips,fmt,
+       1u,memory_heap::default_,resource_usage::shader_resource,
+       resource_flags::cube_compatible);
+    rgba_cube cube{};
+    if(!dev->create_resource(desc,subs.data(),resource_usage::shader_resource,
+                             &cube.texture)) return false;
+    const resource_view_desc vd(resource_view_type::texture_cube,fmt,
+                                0u,mips,0u,6u);
+    if(!dev->create_resource_view(cube.texture,resource_usage::shader_resource,
+                                  vd,&cube.view)) {
+        dev->destroy_resource(cube.texture);return false;
+    }
+    bool owned=false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if(g_device==dev && g_ptde_classic_ready) {
+            const auto pair=g_ptde_classic_cubes.emplace(id,cube);
+            owned=pair.second;
+            out=pair.first->second.view;
+        }
+    }
+    if(!owned) {
+        dev->destroy_resource_view(cube.view);
+        dev->destroy_resource(cube.texture);
+    }
+    return out.handle!=0u;
+}
+#endif
+
 bool get_ptde_envdiffuse_cube(
     std::uint16_t probe,
     resource_view &view) noexcept
