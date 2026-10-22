@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -704,6 +705,49 @@ void on_destroy_device(
         device_ptr);
 }
 
+
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
+// Audits only the native DSR 64x64x6 BC6H EnvDiffuse creation path.
+// Does not assign probe IDs, read back GPU data, or change state/authority.
+std::atomic<std::uint32_t> g_v359_t11_create_log_count{0u};
+void v359_log_t11_creation(const char *stage,
+    resource handle, const resource_desc &desc,
+    const subresource_data *initial_data,
+    const std::array<std::uint8_t,32> *digest,
+    int probe) noexcept
+{
+    if (g_v359_t11_create_log_count.fetch_add(1u,
+            std::memory_order_relaxed) >= 1024u)
+        return;
+    char sha[65]{};
+    if (digest != nullptr) {
+        static constexpr char hex[]="0123456789abcdef";
+        for (std::size_t i=0u;i<32u;++i) {
+            sha[2u*i]=hex[((*digest)[i]>>4u)&0xfu];
+            sha[2u*i+1u]=hex[(*digest)[i]&0xfu];
+        }
+    } else {
+        std::memcpy(sha,"NONE",5u);
+    }
+    const unsigned face0=initial_data != nullptr &&
+        initial_data[0].data != nullptr ? 1u:0u;
+    const unsigned row0=initial_data != nullptr ?
+        initial_data[0].row_pitch : 0u;
+    char line[560]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V359 T11 CREATE SHA]"
+        " stage=%s resource=%016llx initial=%u face0=%u pitch0=%u"
+        " w=%u h=%u mips=%u array=%u fmt=%u"
+        " sha256=%s probe=%d action=READ_ONLY",
+        stage,static_cast<unsigned long long>(handle.handle),
+        initial_data!=nullptr?1u:0u,face0,row0,
+        desc.texture.width,desc.texture.height,
+        desc.texture.levels,desc.texture.depth_or_layers,
+        static_cast<unsigned>(desc.texture.format),sha,probe);
+    reshade::log::message(reshade::log::level::warning,line);
+}
+#endif
+
 void on_init_resource(
     device *device_ptr,
     const resource_desc &desc,
@@ -718,12 +762,26 @@ void on_init_resource(
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (device_ptr != g_device ||
-            (diffuse && !g_native_diffuse_atlas_ready)) return;
+            (diffuse && !g_native_diffuse_atlas_ready)) {
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
+            if (diffuse)
+                v359_log_t11_creation(
+                    device_ptr != g_device ? "DEVICE_MISMATCH" : "ATLAS_NOT_READY",
+                    resource_handle,desc,initial_data,nullptr,-1);
+#endif
+            return;
+        }
     }
     if (spec) ++g_native_candidates;
     std::vector<std::uint8_t> tight;
     if (!extract_tight_bc6h(desc, initial_data, tight)) {
         if (spec) ++g_native_hash_miss;
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
+        if (diffuse)
+            v359_log_t11_creation(
+                initial_data == nullptr ? "NO_INITIAL_DATA" : "EXTRACT_FAILED",
+                resource_handle,desc,initial_data,nullptr,-1);
+#endif
         return;
     }
     const auto digest = hashing::sha256(tight.data(),tight.size());
@@ -732,23 +790,47 @@ void on_init_resource(
         probe = env::legacy_native_probe_for_sha(digest);
     } else {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (device_ptr != g_device || !g_native_diffuse_atlas_ready)
+        if (device_ptr != g_device || !g_native_diffuse_atlas_ready) {
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
+            v359_log_t11_creation("ATLAS_LOST",
+                resource_handle,desc,initial_data,&digest,-1);
+#endif
             return;
+        }
         probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
     }
     if (!probe.has_value()) {
         if (spec) ++g_native_hash_miss;
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
+        if (diffuse)
+            v359_log_t11_creation("HASH_NOT_UNIQUE_ATLAS",
+                resource_handle,desc,initial_data,&digest,-1);
+#endif
         return;
     }
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (device_ptr != g_device ||
-            (diffuse && !g_native_diffuse_atlas_ready)) return;
+            (diffuse && !g_native_diffuse_atlas_ready)) {
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
+            if (diffuse)
+                v359_log_t11_creation("REGISTRY_DEVICE_LOST",
+                    resource_handle,desc,initial_data,&digest,
+                    static_cast<int>(probe.value()));
+#endif
+            return;
+        }
         if (spec)
             g_native_resources[resource_handle.handle] = {probe.value()};
         else
             g_native_diffuse_resources[resource_handle.handle] = {probe.value()};
     }
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
+    if (diffuse)
+        v359_log_t11_creation("MATCH_REGISTERED",
+            resource_handle,desc,initial_data,&digest,
+            static_cast<int>(probe.value()));
+#endif
     if (spec) ++g_native_matches;
 }
 
