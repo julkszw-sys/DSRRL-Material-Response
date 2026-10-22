@@ -1999,7 +1999,7 @@ bool envspec_resource_runtime::prepare_envdiffuse_bound(
                 actual_device!=nullptr &&
                 backing_key==legacy->second.resource_handle &&
                 reinterpret_cast<std::uintptr_t>(actual_device)==
-                    reinterpret_cast<std::uintptr_t>(g_device->get_native()) &&
+                    static_cast<std::uintptr_t>(g_device->get_native()) &&
                 expected!=nullptr &&
                 expected->selector==legacy->second.probe_ordinal;
             if(actual_backing)actual_backing->Release();
