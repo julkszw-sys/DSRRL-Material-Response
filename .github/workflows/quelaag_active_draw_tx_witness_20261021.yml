@@ -1,7 +1,7 @@
-name: V360 exact legacy EnvDif native resource registry one addon
+name: V361 PTDE Classic 39 DDS one addon
 on:
   push:
-    branches: [agent/v359-legacy-envdif-exact-resource-registry-20261022]
+    branches: [agent/v361-classic-envdiffuse-sidecar-runtime-20261022]
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,6 +18,7 @@ jobs:
           python3 renderer-core/tools/test_v359_t11_exact_retail_origin.py
           python3 renderer-core/tools/test_v359_t11_creation_tls_name.py
           python3 renderer-core/tools/test_v360_native_legacy_envdif_registry.py
+          python renderer-core/tools/test_v361_classic_39_dds_reader.py
       - name: Compile and test independent stock EnvDiffuse identity resolver
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
@@ -44,6 +45,7 @@ jobs:
           python renderer-core/tools/test_v359_t11_exact_retail_origin.py
           python renderer-core/tools/test_v359_t11_creation_tls_name.py
           python renderer-core/tools/test_v360_native_legacy_envdif_registry.py
+          python renderer-core/tools/test_v361_classic_39_dds_reader.py
           if ($LASTEXITCODE -ne 0) { throw 'Active transaction source test failed' }
           ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - name: Verify read-only t11 native descriptor marker in integrated PE
@@ -61,6 +63,6 @@ jobs:
           Get-FileHash $out -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V360-Legacy-EnvDif-Native-Registry-OneAddon
+          name: DSRRL-V361-PTDE-Classic-39-DDS-OneAddon
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error
