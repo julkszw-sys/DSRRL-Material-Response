@@ -631,7 +631,7 @@ register_classic_rx33_from_stock(
 {
     using namespace operators::env_spec::classic_envdiffuse_rx34_v365;
     if (stock_dxbc==nullptr || stock_size!=k_rx33_stock_bytes ||
-        legacy_plan::hashing::sha256(
+        hashing::sha256(
             static_cast<const std::uint8_t *>(stock_dxbc),stock_size)
                 != k_rx33_stock_sha256)
         return false;
