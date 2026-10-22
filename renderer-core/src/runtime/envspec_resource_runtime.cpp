@@ -1963,7 +1963,7 @@ bool envspec_resource_runtime::prepare_envdiffuse_bound(
     prepared_envdiffuse_resources &prepared) noexcept
 {
     prepared = {};
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
     (void)stock_t11; (void)stock_t13; (void)probe_b_required;
     return false;
 #else
@@ -1972,17 +1972,40 @@ bool envspec_resource_runtime::prepare_envdiffuse_bound(
     std::uint16_t a=0u,b=0u;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (!g_native_diffuse_atlas_ready || g_device == nullptr)
-            return false;
+        if (g_device == nullptr) return false;
         const auto resolve = [](ID3D11ShaderResourceView *view,
                                 std::uint16_t &id) noexcept -> bool {
             if (view == nullptr) return false;
             const auto key = static_cast<std::uint64_t>(
                 reinterpret_cast<std::uintptr_t>(view));
             const auto found = g_diffuse_by_view.find(key);
-            if (found == g_diffuse_by_view.end()) return false;
-            id = found->second.probe_ordinal;
-            return id < env::k_native_envdiffuse_count;
+            if(found!=g_diffuse_by_view.end()) {
+                id=found->second.probe_ordinal;
+                return id<env::k_native_envdiffuse_count;
+            }
+            const auto legacy=g_v371_legacy_by_view.find(key);
+            if(legacy==g_v371_legacy_by_view.end() || g_device==nullptr)
+                return false;
+            ID3D11Resource *actual_backing=nullptr;
+            ID3D11Device *actual_device=nullptr;
+            view->GetResource(&actual_backing);
+            view->GetDevice(&actual_device);
+            const auto backing_key=static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(actual_backing));
+            const auto *expected=v371_exact_resource_locked(
+                legacy->second.resource_handle);
+            const bool exact=actual_backing!=nullptr &&
+                actual_device!=nullptr &&
+                backing_key==legacy->second.resource_handle &&
+                reinterpret_cast<std::uintptr_t>(actual_device)==
+                    reinterpret_cast<std::uintptr_t>(g_device->get_native()) &&
+                expected!=nullptr &&
+                expected->selector==legacy->second.probe_ordinal;
+            if(actual_backing)actual_backing->Release();
+            if(actual_device)actual_device->Release();
+            if(!exact)return false;
+            id=legacy->second.probe_ordinal;
+            return true;
         };
         if (!resolve(stock_t11,a) ||
             (probe_b_required && !resolve(stock_t13,b))) return false;
@@ -2000,17 +2023,20 @@ bool envspec_resource_runtime::prepare_envdiffuse(
 {
     prepared = {};
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
     (void)probe_a;
     (void)probe_b;
     (void)probe_b_required;
     return false;
 #else
-    if (probe_a >=
-            env::k_legacy_envspec_probe_count ||
-        probe_b >=
-            env::k_legacy_envspec_probe_count)
-        return false;
+    const auto known=[](std::uint16_t n) noexcept {
+        return n<env::k_legacy_envspec_probe_count ||
+            operators::env_spec::v364_legacy_by_selector(n)!=nullptr;
+    };
+    if(!known(probe_a) || !known(probe_b))return false;
+    if(probe_b_required &&
+       ((probe_a>=env::k_legacy_envspec_probe_count) !=
+        (probe_b>=env::k_legacy_envspec_probe_count)))return false;
 
     resource_view a_view{};
     resource_view b_view{};
@@ -2046,9 +2072,12 @@ bool envspec_resource_runtime::prepare_envdiffuse(
     {
         std::lock_guard<std::mutex> lock(
             g_mutex);
+        const bool needs_pack=
+            probe_a<env::k_legacy_envspec_probe_count ||
+            (probe_b_required && probe_b<env::k_legacy_envspec_probe_count);
         if (!g_sampler_ready ||
             g_sampler.handle == 0u ||
-            !g_envdiffuse_pack_ready)
+            (needs_pack && !g_envdiffuse_pack_ready))
             return false;
 
         sampler_native =
