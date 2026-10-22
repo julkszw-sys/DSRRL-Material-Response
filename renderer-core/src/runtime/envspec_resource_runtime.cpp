@@ -9,6 +9,7 @@
 #include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/gi_envdif_name_witness.hpp"
+#include "dsrrl/runtime/v373_legacygi_name_sha_census.hpp"
 #include "dsrrl/operators/env_spec/legacy_envdiffuse_m18_exact.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -77,6 +78,9 @@ using v371_sha = std::array<std::uint8_t,32>;
 std::unordered_map<std::uint64_t,v371_sha> g_v371_diffuse_creation_sha;
 std::unordered_map<std::uint64_t,gi_envdif_name_witness::identity> g_v371_diffuse_names;
 std::unordered_map<std::uint64_t,native_view_record> g_v371_legacy_by_view;
+std::unordered_map<std::uint64_t,native_view_record> g_v373_census_by_view;
+std::atomic<std::uint32_t> g_v373_bound_logged{0u};
+std::atomic<std::uint32_t> g_v373_create_logged{0u};
 std::array<std::vector<std::uint8_t>,2u> g_v371_legacy_rgba{};
 std::atomic<std::uint32_t> g_v371_legacy_logged{0u};
 std::atomic<std::uint32_t> g_v371_bound_logged{0u};
@@ -91,6 +95,8 @@ void v371_record_name_locked(std::uint64_t key,
                 g_v371_diffuse_names.emplace(key,name);
         } else if(it->second.name != name.name || name.conflicting) {
             it->second.conflicting=true;
+        } else if(name.stage>it->second.stage) {
+            it->second.stage=name.stage;
         }
     } catch(...) {}
 }
@@ -576,6 +582,9 @@ void release_carrier(
         g_v371_diffuse_creation_sha.clear();
         g_v371_diffuse_names.clear();
         g_v371_legacy_by_view.clear();
+        g_v373_census_by_view.clear();
+        g_v373_bound_logged.store(0u,std::memory_order_relaxed);
+        g_v373_create_logged.store(0u,std::memory_order_relaxed);
         g_v371_legacy_rgba={};
         g_v371_legacy_logged.store(0u,std::memory_order_relaxed);
         g_v371_bound_logged.store(0u,std::memory_order_relaxed);
@@ -642,6 +651,7 @@ void on_init_device(
         g_v371_diffuse_creation_sha.reserve(256u);
         g_v371_diffuse_names.reserve(256u);
         g_v371_legacy_by_view.reserve(64u);
+        g_v373_census_by_view.reserve(96u);
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
@@ -813,6 +823,27 @@ void on_init_resource(
                 }
             }
         } catch(...) {}
+        // Read-only first 128 native Classic EnvDif create witnesses.
+        // TLS is not proof of the view or the eventual t11 consumer.
+        if(named && std::strncmp(witness.name.data(),"EnvDif_",7u)==0) {
+            const auto n=g_v373_create_logged.fetch_add(1u,std::memory_order_relaxed);
+            if(n<128u) {
+                const int index=v373_legacygi::find_exact(witness.name.data(),digest);
+                static constexpr char digits[]="0123456789abcdef";
+                char hex[65]{};
+                for(unsigned i=0u;i<32u;++i) {
+                    hex[i*2u]=digits[(digest[i]>>4u)&15u];
+                    hex[i*2u+1u]=digits[digest[i]&15u];
+                }
+                char line[340]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V373 LEGACY CREATE] n=%u name=%s sha=%s"
+                    " historical_pair=%u stage=TLS_CREATE_HINT"
+                    " t11=OPEN action=READ_ONLY pixel=OPEN",
+                    n+1u,witness.name.data(),hex,index>=0?1u:0u);
+                reshade::log::message(reshade::log::level::warning,line);
+            }
+        }
     }
     std::optional<std::uint16_t> probe;
     if (spec) {
@@ -863,6 +894,12 @@ void on_destroy_resource(
     // V371 independent t11 records are retired in the same locked callback.
     g_v371_diffuse_creation_sha.erase(resource_handle.handle);
     g_v371_diffuse_names.erase(resource_handle.handle);
+    for(auto it=g_v373_census_by_view.begin();
+        it!=g_v373_census_by_view.end();) {
+        if(it->second.resource_handle==resource_handle.handle)
+            it=g_v373_census_by_view.erase(it);
+        else ++it;
+    }
     for(auto it=g_v371_legacy_by_view.begin();
         it!=g_v371_legacy_by_view.end();) {
         if(it->second.resource_handle==resource_handle.handle)
@@ -940,6 +977,33 @@ void on_init_resource_view(
         g_v371_legacy_by_view[view.handle]={
             resource_handle.handle,legacy->selector};
 
+    // Source census candidate is not a renderer authorization. Require
+    // physical D3D11 COM backing/device equivalence at view creation.
+    const auto ni=g_v371_diffuse_names.find(resource_handle.handle);
+    const auto si=g_v371_diffuse_creation_sha.find(resource_handle.handle);
+    if(ni!=g_v371_diffuse_names.end() && !ni->second.conflicting &&
+       si!=g_v371_diffuse_creation_sha.end() &&
+       device_ptr->get_api()==device_api::d3d11) {
+        const int ix=v373_legacygi::find_exact(ni->second.name.data(),si->second);
+        if(ix>=0) {
+            auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(view.handle));
+            ID3D11Resource *backing=nullptr;
+            ID3D11Device *native_device=nullptr;
+            srv->GetResource(&backing);
+            srv->GetDevice(&native_device);
+            const bool equal=backing!=nullptr && native_device!=nullptr &&
+                reinterpret_cast<std::uintptr_t>(backing)==
+                    static_cast<std::uintptr_t>(resource_handle.handle) &&
+                reinterpret_cast<std::uintptr_t>(native_device)==
+                    static_cast<std::uintptr_t>(device_ptr->get_native());
+            if(backing)backing->Release();
+            if(native_device)native_device->Release();
+            if(equal)g_v373_census_by_view[view.handle]={
+                resource_handle.handle,static_cast<std::uint16_t>(ix)};
+        }
+    }
+
     if (native == g_native_resources.end()) {
         const auto diffuse = g_native_diffuse_resources.find(resource_handle.handle);
         if (diffuse == g_native_diffuse_resources.end()) return;
@@ -978,7 +1042,8 @@ void on_destroy_resource_view(
     const bool spec_removed = g_resource_by_view.erase(view.handle) != 0u;
     const bool diff_removed = g_diffuse_by_view.erase(view.handle) != 0u;
     const bool legacy_removed=g_v371_legacy_by_view.erase(view.handle)!=0u;
-    if (spec_removed || diff_removed || legacy_removed)
+    const bool census_removed=g_v373_census_by_view.erase(view.handle)!=0u;
+    if (spec_removed || diff_removed || legacy_removed || census_removed)
         g_snapshot_epoch.fetch_add(
             1u,
             std::memory_order_release);
@@ -1974,6 +2039,51 @@ bool envspec_resource_runtime::prepare_envdiffuse_bound(
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (g_device == nullptr) return false;
+        // Post-COM t11 witness: source identity is revalidated on the
+        // currently bound SRV. Unapproved rows remain STOCK_DSR, always.
+        const auto ci=g_v373_census_by_view.find(
+            static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(stock_t11)));
+        if(ci!=g_v373_census_by_view.end()) {
+            const auto &observed=ci->second;
+            const unsigned ix=observed.probe_ordinal;
+            const auto ni=g_v371_diffuse_names.find(observed.resource_handle);
+            const auto si=g_v371_diffuse_creation_sha.find(observed.resource_handle);
+            if(ix<v373_legacygi::k_candidates.size() &&
+               ni!=g_v371_diffuse_names.end() &&
+               si!=g_v371_diffuse_creation_sha.end() &&
+               !ni->second.conflicting &&
+               v373_legacygi::find_exact(ni->second.name.data(),
+                                          si->second)==static_cast<int>(ix)) {
+                ID3D11Resource *backing=nullptr;
+                ID3D11Device *native_device=nullptr;
+                stock_t11->GetResource(&backing);
+                stock_t11->GetDevice(&native_device);
+                const bool same=backing!=nullptr && native_device!=nullptr &&
+                    reinterpret_cast<std::uintptr_t>(backing)==
+                        static_cast<std::uintptr_t>(observed.resource_handle) &&
+                    reinterpret_cast<std::uintptr_t>(native_device)==
+                        static_cast<std::uintptr_t>(g_device->get_native());
+                if(backing)backing->Release();
+                if(native_device)native_device->Release();
+                if(same) {
+                    const auto bit=1u<<ix;
+                    if((g_v373_bound_logged.fetch_or(bit,
+                             std::memory_order_relaxed)&bit)==0u) {
+                        char line[310]{};
+                        std::snprintf(line,sizeof(line),
+                            "[DSRRL V373 LEGACY T11 CENSUS] name=%s"
+                            " ordinal=%u name_sha=PASS com=PASS stage=%u"
+                            " previously_authorized=%u action=%s pixel=OPEN",
+                            v373_legacygi::k_candidates[ix].name,ix,
+                            ni->second.stage,
+                            v373_legacygi::k_candidates[ix].previously_authorized?1u:0u,
+                            v373_legacygi::k_candidates[ix].previously_authorized
+                                ? "V371_RESOLVER" : "FAIL_OPEN_STOCK_DSR");
+                        reshade::log::message(reshade::log::level::warning,line);
+                    }
+                }
+            }
+        }
         const auto resolve = [](ID3D11ShaderResourceView *view,
                                 std::uint16_t &id) noexcept -> bool {
             if (view == nullptr) return false;
