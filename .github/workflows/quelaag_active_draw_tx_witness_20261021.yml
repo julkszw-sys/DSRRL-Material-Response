@@ -1,7 +1,7 @@
 name: Quelaag REMO cross-material active transaction witness
 on:
   push:
-    branches: [agent/quellaag-active-draw-tx-witness-20261021]
+    branches: [agent/v359-t11-bound-desc-rx34-20261022]
   workflow_dispatch:
 permissions:
   contents: read
