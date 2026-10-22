@@ -301,6 +301,14 @@ release_resources() noexcept
             entry.buffer->Release();
     }
     b12_by_context_.clear();
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    for(auto &[_,shader] : independent_envdiffuse_shaders_)
+        if(shader!=nullptr)shader->Release();
+    independent_envdiffuse_shaders_.clear();
+    for(auto &[_,cb] : independent_envdiffuse_cb_by_context_)
+        if(cb.buffer!=nullptr)cb.buffer->Release();
+    independent_envdiffuse_cb_by_context_.clear();
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
@@ -425,6 +433,14 @@ on_destroy_device(
             entry.buffer->Release();
     }
     b12_by_context_.clear();
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    for(auto &[_,shader] : independent_envdiffuse_shaders_)
+        if(shader!=nullptr)shader->Release();
+    independent_envdiffuse_shaders_.clear();
+    for(auto &[_,cb] : independent_envdiffuse_cb_by_context_)
+        if(cb.buffer!=nullptr)cb.buffer->Release();
+    independent_envdiffuse_cb_by_context_.clear();
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
@@ -762,6 +778,172 @@ register_lerp_nonmetal_r8_candidate(
         outcome.semantic_receiver_id]=shader;
     return true;
 #endif
+}
+#endif
+
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+// Independent private receiver: never publishes a patch to stock pipeline,
+// and never mutates/aliases the combined EnvSpec replacement bank.
+bool pmetal_envspec_draw_runtime::register_independent_envdiffuse(
+    const void *dxbc,std::size_t n,std::uint32_t rx) noexcept
+{
+    if(dxbc==nullptr || n==0u || rx<33u || rx>35u)return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if(device_==nullptr || quarantined_.load())return false;
+    if(independent_envdiffuse_shaders_.count(rx)!=0u)return true;
+    ID3D11PixelShader *shader=nullptr;
+    if(FAILED(device_->CreatePixelShader(dxbc,n,nullptr,&shader)) ||
+       shader==nullptr)return false;
+    independent_envdiffuse_shaders_.emplace(rx,shader);
+    char line[170]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V370 ED] PRIVATE_PTDE_C86_SHADER rx=%u bytes=%zu"
+        " original_29_dword=1 t12=STOCK pixel=OPEN",rx,n);
+    reshade::log::message(reshade::log::level::info,line);
+    return true;
+}
+
+bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
+    reshade::api::command_list *cmd_list,
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    prepared_pmetal_envspec_draw &prepared) noexcept
+{
+    prepared={};
+    if(cmd_list==nullptr || quarantined_.load() ||
+       !material.valid || !material.owner_tuple_exact ||
+       !material.material_slot_valid || !decision.active ||
+       decision.receiver_id<33u || decision.receiver_id>35u ||
+       !core_.features().enabled(core::operator_id::env_diffuse) ||
+       !exact_pmetal_envspec_candidate(material,decision))
+        return false;
+    pmetal_envspec_source source{};
+    if(!source_.latest(material,source) ||
+       !source.envdiffuse_linear_valid ||
+       !std::isfinite(source.beta) || source.beta!=0.0f)
+        return false;
+    for(float c:source.envdiffuse_a)
+        if(!std::isfinite(c) || c<0.0f)return false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(device_==nullptr)return false;
+        const auto found=independent_envdiffuse_shaders_.find(
+            decision.receiver_id);
+        if(found==independent_envdiffuse_shaders_.end() ||
+           found->second==nullptr)return false;
+        found->second->AddRef();
+        prepared.shader=found->second;
+    }
+    auto *ctx=reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+    if(ctx==nullptr){release(prepared);return false;}
+    ID3D11ShaderResourceView *t11[1]{};
+    if(!pixel_srv_shadow_snapshot(cmd_list,11u,1u,t11)) {
+        if(t11[0]!=nullptr){t11[0]->Release();t11[0]=nullptr;}
+        ctx->PSGetShaderResources(11u,1u,t11);
+    }
+    // Independent DSR t11 SHA/producer registry; never reuse t12 EnvSpec
+    // ordinal as a diffuse identity. Unknown or duplicate source fails open.
+    const bool exact_resource=env_resources_.prepare_envdiffuse_bound(
+        t11[0],nullptr,false,prepared.envdiffuse_resources);
+    if(t11[0]!=nullptr)t11[0]->Release();
+    if(!exact_resource){release(prepared);return false;}
+
+    // Exact old coupled ABI b12[3] = PTDE LightBank c86.rgb. Rows 0-2
+    // remain zero; this private shader only reads b12[3].xyz.
+    std::array<float,16> payload{};
+    payload[12]=source.envdiffuse_a[0];
+    payload[13]=source.envdiffuse_a[1];
+    payload[14]=source.envdiffuse_a[2];
+    std::array<std::uint32_t,16> bits{};
+    std::memcpy(bits.data(),payload.data(),sizeof(payload));
+    ID3D11Device *ctx_device=nullptr;
+    ctx->GetDevice(&ctx_device);
+    if(ctx_device==nullptr){release(prepared);return false;}
+    const auto key=reinterpret_cast<std::uintptr_t>(ctx);
+    ID3D11Buffer *buffer=nullptr;
+    bool upload=true;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(ctx_device!=device_ || quarantined_.load()) {
+            ctx_device->Release();release(prepared);return false;
+        }
+        auto it=independent_envdiffuse_cb_by_context_.find(key);
+        if(it!=independent_envdiffuse_cb_by_context_.end() &&
+           it->second.buffer!=nullptr) {
+            buffer=it->second.buffer;
+            buffer->AddRef();
+            upload=!it->second.valid || it->second.payload_bits!=bits;
+        } else {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth=64u;
+            desc.Usage=D3D11_USAGE_DYNAMIC;
+            desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+            if(FAILED(device_->CreateBuffer(&desc,nullptr,&buffer)) ||
+               buffer==nullptr) {
+                ctx_device->Release();release(prepared);return false;
+            }
+            envdiffuse_cb_cache entry{};
+            entry.buffer=buffer;
+            independent_envdiffuse_cb_by_context_.emplace(key,entry);
+            buffer->AddRef();
+        }
+    }
+    ctx_device->Release();
+    if(upload) {
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if(FAILED(ctx->Map(buffer,0u,D3D11_MAP_WRITE_DISCARD,0u,&mapped)) ||
+           mapped.pData==nullptr) {
+            buffer->Release();release(prepared);return false;
+        }
+        std::memcpy(mapped.pData,payload.data(),sizeof(payload));
+        ctx->Unmap(buffer,0u);
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it=independent_envdiffuse_cb_by_context_.find(key);
+        if(it!=independent_envdiffuse_cb_by_context_.end() &&
+           it->second.buffer==buffer) {
+            it->second.payload_bits=bits;
+            it->second.valid=true;
+        }
+    }
+    prepared.b12=buffer;
+    const auto owner=core::operator_bit(core::operator_id::env_diffuse);
+    auto &q=prepared.request;
+    q.primary=core::operator_id::env_diffuse;
+    q.receiver_verified=true;
+    q.material_verified=true;
+    q.pixel_shader=prepared.shader;
+    q.replace_pixel_shader=true;
+    q.constant_buffers[0]={12u,prepared.b12,owner};
+    q.constant_buffer_count=1u;
+    q.srvs[0]={11u,prepared.envdiffuse_resources.ptde_a};
+    q.srv_count=1u;
+    q.samplers[0]={11u,prepared.envdiffuse_resources.sampler};
+    q.sampler_count=1u;
+    prepared.ready=true;
+    static std::atomic<std::uint32_t> observations{0u};
+    const auto n=observations.fetch_add(1u,std::memory_order_relaxed)+1u;
+    if(n<=16u || (n&(n-1u))==0u) {
+        char line[445]{};
+        std::snprintf(line,sizeof(line),
+            "[DSRRL V370 ED REQUEST] n=%u rx=%u route=%u slot=%u"
+            " flver=%016llx bank=%016llx row=%u serial=%llu"
+            " c86=%.8g,%.8g,%.8g b12=1 t11=PTDE t12=STOCK"
+            " beta=%.8g pixel=OPEN",
+            n,decision.receiver_id,decision.route_index,
+            material.material_slot,
+            static_cast<unsigned long long>(material.flver_identity_hash),
+            static_cast<unsigned long long>(source.bank_signature_a),
+            source.row_id_a,
+            static_cast<unsigned long long>(source.serial),
+            static_cast<double>(source.envdiffuse_a[0]),
+            static_cast<double>(source.envdiffuse_a[1]),
+            static_cast<double>(source.envdiffuse_a[2]),
+            static_cast<double>(source.beta));
+        reshade::log::message(reshade::log::level::warning,line);
+    }
+    return true;
 }
 #endif
 
