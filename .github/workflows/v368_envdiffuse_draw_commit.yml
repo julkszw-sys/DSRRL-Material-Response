@@ -1,0 +1,32 @@
+name: V368 EnvDiffuse Draw Commit
+on:
+  push:
+    branches: [agent/v368-envdiffuse-draw-commit-proof-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - shell: pwsh
+        run: |
+          python renderer-core/tools/test_v368_envdiffuse_draw_commit.py
+          if ($LASTEXITCODE -ne 0) { throw 'V368 source test failed' }
+          ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude (Join-Path $PWD.Path '_reshade/include')
+      - shell: pwsh
+        run: |
+          $p = 'out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64'
+          $s = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $p)))
+          if (!$s.Contains('[DSRRL V368 ENVDIFFUSE DRAW COMMIT]')) { throw 'No compiled witness' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V368-EnvDiffuse-DrawCommit-OneAddon
+          path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
+          if-no-files-found: error
