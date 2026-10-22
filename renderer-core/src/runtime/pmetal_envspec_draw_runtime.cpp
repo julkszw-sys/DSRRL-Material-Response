@@ -1720,6 +1720,10 @@ bool pmetal_envspec_draw_runtime::prepare(
                     ? stock_envdiffuse_views[2] : nullptr,
                 ptde_envdiffuse_b_required,
                 prepared.envdiffuse_resources);
+        if (independent_envdiffuse_ready) {
+            reshade::log::message(reshade::log::level::warning,
+                "[DSRRL V366 CLASSIC PTDE T11] ready=1");
+        }
     }
 #endif
     for (auto *stock_view : stock_envdiffuse_views)
