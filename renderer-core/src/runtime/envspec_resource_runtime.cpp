@@ -1534,7 +1534,8 @@ bool get_ptde_classic_candidate(const char *name,resource_view &out) noexcept
             }
     }
     if(pos!=dds.size()) return false;
-    const resource_desc desc(resource_type::texture_2d,w,w,6u,mips,fmt,
+    const resource_desc desc(resource_type::texture_2d,w,w,6u,
+       static_cast<std::uint16_t>(mips),fmt,
        1u,memory_heap::default_,resource_usage::shader_resource,
        resource_flags::cube_compatible);
     rgba_cube cube{};
