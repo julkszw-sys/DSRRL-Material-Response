@@ -111,6 +111,11 @@ option(
     "Diagnostic: PR204 material-modulation shader/operator with exact PTDE PackedGI cubemap carrier instead of native DSR BC6H; stock EnvDiffuse/common merge; stable HemEnv + paired HemEnvLerp"
     OFF)
 
+# Only for this V370 diagnostic source branch. Stock DSR EnvSpec stays native
+# for independently ported Stable EnvDiffuse draws; no Build131 coupling.
+option(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE
+    "Standalone extraction of old exact PTDE EnvDiffuse including c86" ON)
+
 option(
     DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG
     "Diagnostic: stable P_Metal full PTDE HemEnv with exact PTDE EnvSpec + EnvDiffuse PackedGI carriers and exact PTDE LightBank endpoints"
@@ -651,6 +656,7 @@ target_compile_features(
 target_compile_definitions(
     dsrrl_renderer_core_integrated
     PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE>
     $<$<COMPILE_LANGUAGE:CXX>:WIN32_LEAN_AND_MEAN>
     $<$<COMPILE_LANGUAGE:CXX>:NOMINMAX>
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_VERSION="${DSRRL_CORE_ISLANDS_VERSION}">
