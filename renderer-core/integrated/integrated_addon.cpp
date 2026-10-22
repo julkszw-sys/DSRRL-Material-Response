@@ -4183,6 +4183,19 @@ bool on_create_pipeline(
                 " shader_bind=NO pixel=OPEN");
         }
     }
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    if(v365_pixel_shader!=nullptr && v365_pixel_shader->code!=nullptr &&
+       v365_pixel_shader->code_size==
+         dsrrl::operators::env_spec::classic_envdiffuse_rx34_v365::k_rx33_stock_bytes) {
+        const bool ok=g_pmetal_envspec.register_classic_rx33_from_stock(
+            v365_pixel_shader->code,v365_pixel_shader->code_size);
+        static std::atomic_bool reported{false};
+        if(!reported.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(ok?reshade::log::level::info:reshade::log::level::warning,
+                ok?"[DSRRL V369 RX33] PRIVATE_SHADER_READY pixel=OPEN":
+                   "[DSRRL V369 RX33] SHADER_FAIL_OPEN pixel=OPEN");
+    }
+#endif
 #endif
     if (!k_drawtime_islands_runtime_enabled) {
         const bool a1_changed =
