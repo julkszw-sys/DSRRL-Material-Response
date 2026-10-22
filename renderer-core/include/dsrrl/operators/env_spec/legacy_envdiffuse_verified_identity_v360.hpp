@@ -79,6 +79,20 @@ constexpr bool resolve(const wchar_t *name,std::size_t count,
             found=true;
         }
     }
+    for(const auto &entry:k_native_created_m10) {
+        if(exact_name(name,count,entry.name) &&
+           exact_digest(digest,entry.sha256_hex)) {
+            if(found) {out={};return false;}
+            out=entry.id;found=true;
+        }
+    }
+    for(const auto &entry:k_native_created_m18_more) {
+        if(exact_name(name,count,entry.name) &&
+           exact_digest(digest,entry.sha256_hex)) {
+            if(found) {out={};return false;}
+            out=entry.id;found=true;
+        }
+    }
     return found;
 }
 } // namespace dsrrl::operators::env_spec::legacy_diffuse_verified
