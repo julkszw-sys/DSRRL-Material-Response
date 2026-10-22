@@ -1,0 +1,36 @@
+name: V369 Quelaag Stable EnvDiffuse Split
+on:
+  push:
+    branches: [agent/v369-independent-rx33-rx34-envdiffuse-priority-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - shell: pwsh
+        run: |
+          python renderer-core/tools/test_v369_quelaag_envdiffuse_isolation.py
+          if ($LASTEXITCODE -ne 0) { throw 'V369 split test failed' }
+          python renderer-core/tools/test_v368_envdiffuse_draw_commit.py
+          if ($LASTEXITCODE -ne 0) { throw 'V368 source test failed' }
+          ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude (Join-Path $PWD.Path '_reshade/include')
+      - shell: pwsh
+        run: |
+          $p = 'out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64'
+          $s = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $p)))
+          if (!$s.Contains('[DSRRL V368 ENVDIFFUSE DRAW COMMIT]')) { throw 'No compiled V368 Draw witness' }
+          if (!$s.Contains('[DSRRL V369 RX33]')) { throw 'No compiled RX33 private shader registration' }
+          if (!$s.Contains('[DSRRL V369 ENV ONLY TX]')) { throw 'No compiled independent RX33 Draw witness' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V369-Quelaag-Stable-EnvDiffuse-OneAddon
+          path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
+          if-no-files-found: error
