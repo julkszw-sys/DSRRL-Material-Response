@@ -1,0 +1,43 @@
+name: V371 Independent PTDE EnvDiffuse LegacyGI
+on:
+  push:
+    branches: [agent/v371-v370-independent-legacy-envdiffuse-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-single-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Verify isolated original PTDE shader and V371 resource routes
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v370_exact_envdiffuse_operator_isolation.py
+          if ($LASTEXITCODE -ne 0) { throw 'V370 exact operator regression' }
+          python renderer-core/tools/test_v371_independent_legacy_envdiffuse.py
+          if ($LASTEXITCODE -ne 0) { throw 'V371 source guard regression' }
+      - name: Build exactly one Win64 addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude (Join-Path $PWD.Path '_reshade/include')
+          if ($LASTEXITCODE -ne 0) { throw 'V371 native single addon build failed' }
+      - name: Inspect PE marker and SHA
+        shell: pwsh
+        run: |
+          $p='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $p)) { throw 'Missing PE artifact' }
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $p))
+          $s=[Text.Encoding]::ASCII.GetString($b)
+          if ($b[0] -ne 77 -or $b[1] -ne 90 -or !$s.Contains('[DSRRL V370 ED]') -or !$s.Contains('[DSRRL V371 PTDE LEGACY ENVDIFFUSE CUBE]')) { throw 'PE markers missing' }
+          Get-FileHash $p -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V371-Independent-PTDE-EnvDiffuse-LegacyGI-OneAddon-PixelOpen
+          path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error
