@@ -1,7 +1,7 @@
-name: V359 RX34 native t11 descriptor witness (one addon)
+name: V359 T11 create-time SHA native witness one addon
 on:
   push:
-    branches: [agent/v359-t11-bound-desc-rx34-20261022]
+    branches: [agent/v359-t11-create-sha-witness-20261022]
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +14,7 @@ jobs:
         run: |
           python3 renderer-core/tools/test_v230_quelaag_active_tx_witness.py
           python3 renderer-core/tools/test_v359_t11_bound_descriptor_source.py
+          python3 renderer-core/tools/test_v359_t11_creation_sha_source.py
       - name: Compile and test independent stock EnvDiffuse identity resolver
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
@@ -36,6 +37,7 @@ jobs:
         run: |
           python renderer-core/tools/test_v230_quelaag_active_tx_witness.py
           python renderer-core/tools/test_v359_t11_bound_descriptor_source.py
+          python renderer-core/tools/test_v359_t11_creation_sha_source.py
           if ($LASTEXITCODE -ne 0) { throw 'Active transaction source test failed' }
           ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - name: Verify read-only t11 native descriptor marker in integrated PE
@@ -46,9 +48,10 @@ jobs:
           $data=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $out)))
           if (!$data.Contains('[DSRRL V359 T11 BOUND DESC]')) { throw 'Descriptor witness missing in PE' }
           if (!$data.Contains('[DSRRL V359 T11 REJECT JOIN]')) { throw 'Baseline t11 reject witness missing' }
+          if (!$data.Contains('[DSRRL V359 T11 CREATE SHA]')) { throw 'Creation SHA witness missing' }
           Get-FileHash $out -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V359-T11-Descriptor-ReadOnly-OneAddon
+          name: DSRRL-V359-T11-Creation-SHA-OneAddon
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error
