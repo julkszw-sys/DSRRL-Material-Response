@@ -287,6 +287,12 @@ release_resources() noexcept
         classic_rx34_shader_->Release();
         classic_rx34_shader_ = nullptr;
     }
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    if (classic_rx33_shader_ != nullptr) {
+        classic_rx33_shader_->Release();
+        classic_rx33_shader_ = nullptr;
+    }
+#endif
 #endif
 
     for (auto &[_,shader] :
@@ -417,6 +423,12 @@ on_destroy_device(
         classic_rx34_shader_->Release();
         classic_rx34_shader_ = nullptr;
     }
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    if (classic_rx33_shader_ != nullptr) {
+        classic_rx33_shader_->Release();
+        classic_rx33_shader_ = nullptr;
+    }
+#endif
 #endif
 
     for (auto &[_,shader] :
@@ -612,6 +624,39 @@ register_classic_rx34_from_stock(
     return true;
 }
 
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+bool pmetal_envspec_draw_runtime::
+register_classic_rx33_from_stock(
+    const void *stock_dxbc, std::size_t stock_size) noexcept
+{
+    using namespace operators::env_spec::classic_envdiffuse_rx34_v365;
+    if (stock_dxbc==nullptr || stock_size!=k_rx33_stock_bytes ||
+        hashing::sha256(
+            static_cast<const std::uint8_t *>(stock_dxbc),stock_size)
+                != k_rx33_stock_sha256)
+        return false;
+    std::vector<std::uint8_t> candidate;
+    if(materialize(
+          static_cast<const std::uint8_t *>(stock_dxbc),
+          stock_size,candidate)!=result::candidate_ready ||
+       candidate.size()!=k_rx33_candidate_bytes)
+        return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if(device_==nullptr || quarantined_.load())return false;
+    if(classic_rx33_shader_!=nullptr)return true;
+    ID3D11PixelShader *shader=nullptr;
+    if(FAILED(device_->CreatePixelShader(
+         candidate.data(),candidate.size(),nullptr,&shader)) ||
+       shader==nullptr)return false;
+    classic_rx33_shader_=shader;
+    reshade::log::message(reshade::log::level::info,
+       "[DSRRL V369 RX33 ENVDIFFUSE] stage=EXACT_STOCK_DXBC_REGISTERED"
+       " rx=33 t11=PTDE_RGBA_DIV_ALPHA t12=STOCK"
+       " bind=OWNER_AND_RESOURCE_GATED pixels=OPEN");
+    return true;
+}
+#endif
+
 bool pmetal_envspec_draw_runtime::
 prepare_classic_envdiffuse_only(
     reshade::api::command_list *cmd_list,
@@ -627,17 +672,30 @@ prepare_classic_envdiffuse_only(
         family != pmetal_envspec_receiver_family::stable_hemenv ||
         !material.valid || !material.owner_tuple_exact ||
         !material.material_slot_valid ||
-        !decision.active || decision.receiver_id != 34u ||
+        !decision.active ||
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+         (decision.receiver_id != 33u && decision.receiver_id != 34u) ||
+#else
+         decision.receiver_id != 34u ||
+#endif
         quarantined_.load() ||
         !core_.features().enabled(core::operator_id::env_diffuse))
         return false;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (classic_rx34_shader_ == nullptr || device_ == nullptr)
-            return false;
-        classic_rx34_shader_->AddRef();
-        prepared.shader = classic_rx34_shader_;
+        if (device_==nullptr) return false;
+        ID3D11PixelShader *selected=nullptr;
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+        if(decision.receiver_id==33u)
+            selected=classic_rx33_shader_;
+        else
+#endif
+        if(decision.receiver_id==34u)
+            selected=classic_rx34_shader_;
+        if(selected==nullptr)return false;
+        selected->AddRef();
+        prepared.shader=selected;
     }
 
     auto *context = reinterpret_cast<ID3D11DeviceContext *>(

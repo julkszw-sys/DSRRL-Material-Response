@@ -4183,6 +4183,19 @@ bool on_create_pipeline(
                 " shader_bind=NO pixel=OPEN");
         }
     }
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    if(v365_pixel_shader!=nullptr && v365_pixel_shader->code!=nullptr &&
+       v365_pixel_shader->code_size==
+         dsrrl::operators::env_spec::classic_envdiffuse_rx34_v365::k_rx33_stock_bytes) {
+        const bool ok=g_pmetal_envspec.register_classic_rx33_from_stock(
+            v365_pixel_shader->code,v365_pixel_shader->code_size);
+        static std::atomic_bool reported{false};
+        if(!reported.exchange(true,std::memory_order_relaxed))
+            reshade::log::message(ok?reshade::log::level::info:reshade::log::level::warning,
+                ok?"[DSRRL V369 RX33] PRIVATE_SHADER_READY pixel=OPEN":
+                   "[DSRRL V369 RX33] SHADER_FAIL_OPEN pixel=OPEN");
+    }
+#endif
 #endif
     if (!k_drawtime_islands_runtime_enabled) {
         const bool a1_changed =
@@ -6200,6 +6213,21 @@ bool prepare_island_batch(
 #endif
 
     if (exact_pmetal_envspec) {
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+        if (!hemenvlerp_bound &&
+            (decision.receiver_id==33u || decision.receiver_id==34u)) {
+            if (g_pmetal_envspec.prepare_classic_envdiffuse_only(
+                    cmd_list,material,decision,envspec_family,prepared.envspec)) {
+                prepared.envspec_in_batch=true;
+                if(dsrrl::runtime::append_island_draw_request(
+                      prepared.batch,prepared.envspec.request)==
+                   dsrrl::runtime::island_draw_batch_result::ready)
+                    return true;
+                release_prepared_island_batch(prepared);
+            }
+            return false;
+        }
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
             static std::atomic_bool first_nonmetal_gate{false};
@@ -6630,6 +6658,34 @@ void observe_bloom_fx_draw_authority() noexcept
             effect_probe_stage::fail_open);
     }
 }
+
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+void v369_envdiffuse_isolated_tx(
+   const dsrrl::runtime::draw_tx_mutation &mutation,
+   dsrrl::runtime::draw_tx_result result,
+   std::uint32_t rx,std::uint32_t route,
+   std::uint32_t slot,std::uint64_t flver) noexcept
+{
+    constexpr auto owner=dsrrl::core::operator_bit(
+        dsrrl::core::operator_id::env_diffuse);
+    if(mutation.owners!=owner || (rx!=33u && rx!=34u))return;
+    static std::atomic<std::uint32_t> samples[2]{};
+    const auto n=samples[rx-33u].fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    if(n>16u && (n&(n-1u))!=0u)return;
+    char line[390]{};
+    std::snprintf(line,sizeof(line),
+      "[DSRRL V369 ENV ONLY TX] rx=%u route=%u slot=%u"
+      " flver=%016llx n=%u issued=%u restored=%u"
+      " owners=ENVDIFFUSE_ONLY srvs=%u samplers=%u"
+      " ptde_t11=1 stock_t12=1 pixel=OPEN",
+      rx,route,slot,static_cast<unsigned long long>(flver),n,
+      dsrrl::runtime::draw_tx_issued(result)?1u:0u,
+      result==dsrrl::runtime::draw_tx_result::issued_restored?1u:0u,
+      mutation.srv_count,mutation.sampler_count);
+    reshade::log::message(reshade::log::level::warning,line);
+}
+#endif
 
 #if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
 // The V367 PREPARED marker is before append/transaction: distinguish the
@@ -7118,6 +7174,11 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    v369_envdiffuse_isolated_tx(prepared.batch.mutation,dispatch.transaction,
+       decision.receiver_id,decision.route_index,material.material_slot,
+       material.flver_identity_hash);
+#endif
 
 #if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
     v368_envdiffuse_dispatch_witness(cmd_list,prepared.batch.mutation,
@@ -7686,6 +7747,11 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    v369_envdiffuse_isolated_tx(prepared.batch.mutation,dispatch.transaction,
+       decision.receiver_id,decision.route_index,material.material_slot,
+       material.flver_identity_hash);
+#endif
 
 #if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
     v368_envdiffuse_dispatch_witness(cmd_list,prepared.batch.mutation,

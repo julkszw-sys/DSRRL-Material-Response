@@ -26,6 +26,19 @@ enum class result : std::uint8_t {
 
 inline constexpr std::size_t k_stock_bytes=19556u;
 inline constexpr std::size_t k_candidate_bytes=k_stock_bytes+48u;
+// V369: RX33 has a separately authenticated retail DSR Stable HemEnv
+// shader identity (generated_stable_hemenv_receivers_v1.hpp, index 894).
+// A common t11 source cut is NOT assumed: all instruction windows, temps,
+// RDEF and checksum must also pass this materializer, else stock fail-open.
+inline constexpr std::size_t k_rx33_stock_bytes=19856u;
+inline constexpr std::size_t k_rx33_candidate_bytes=k_rx33_stock_bytes+48u;
+inline constexpr std::array<std::uint8_t,32> k_rx33_stock_sha256{{
+  0x35,0x88,0x0c,0x0b,0x2f,0x23,0x30,0x20,
+  0x8d,0xfc,0x21,0xaf,0x6d,0xd3,0xd9,0x44,
+  0x21,0x8f,0xcc,0x45,0x40,0xcd,0x8e,0x59,
+  0x40,0x4a,0x0a,0xef,0xc1,0x3c,0x0b,0x24
+}};
+
 inline constexpr std::array<std::uint8_t,32> k_stock_sha256{{
   0xd6,0x03,0x8d,0xe4,0x94,0x50,0x9e,0x7c,
   0xbc,0xbf,0xb9,0x04,0xc4,0x04,0x6e,0x94,
@@ -83,9 +96,11 @@ struct chunk {
 inline result materialize(const std::uint8_t *stock,
                          std::size_t n,std::vector<std::uint8_t> &out) noexcept {
     out.clear();
-    if(stock==nullptr || n!=k_stock_bytes ||
-       legacy_plan::hashing::sha256(stock,n)!=k_stock_sha256)
-        return result::not_exact_rx34;
+    if(stock==nullptr) return result::not_exact_rx34;
+    const auto sha=legacy_plan::hashing::sha256(stock,n);
+    const bool rx34=n==k_stock_bytes && sha==k_stock_sha256;
+    const bool rx33=n==k_rx33_stock_bytes && sha==k_rx33_stock_sha256;
+    if(!rx33 && !rx34) return result::not_exact_rx34;
     if(!legacy_plan::dxbc::checksum_container_valid(stock,n))
         return result::invalid_dxbc;
     try {
@@ -179,7 +194,7 @@ inline result materialize(const std::uint8_t *stock,
             store32(out.data()+at,static_cast<std::uint32_t>(c.payload.size()));
             out.insert(out.end(),c.payload.begin(),c.payload.end());
         }
-        if(out.size()!=k_candidate_bytes)
+        if(out.size()!=n+48u)
             return result::rebuild_failed;
         store32(out.data()+24u,static_cast<std::uint32_t>(out.size()));
         std::memset(out.data()+4u,0,16u);

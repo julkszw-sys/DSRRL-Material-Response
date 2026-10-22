@@ -129,6 +129,10 @@ public:
     // never substitutes it globally for shared P_Metal/nonmetal hosts.
     bool register_classic_rx34_from_stock(
         const void *stock_dxbc, std::size_t stock_size) noexcept;
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    bool register_classic_rx33_from_stock(
+        const void *stock_dxbc, std::size_t stock_size) noexcept;
+#endif
 
     // Independent operator. Preserves native DSR t12/t14, b12,
     // material response and all other operators on the receiver.
@@ -203,6 +207,9 @@ private:
     ID3D11Device *device_ = nullptr;
 #if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
     ID3D11PixelShader *classic_rx34_shader_ = nullptr;
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+    ID3D11PixelShader *classic_rx33_shader_ = nullptr;
+#endif
 #endif
     // Device-owned exact D3D11 equivalent of the PTDE stage-7 point/border
     // shadow sampler. Only receiver 33/34 R7 draws may borrow it.
