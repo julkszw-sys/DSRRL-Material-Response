@@ -1370,16 +1370,104 @@ bool get_ptde_cube(
 }
 
 
+
+bool get_v371_ptde_legacy_envdiffuse_cube(
+    std::uint16_t selector,resource_view &view) noexcept
+{
+    view={};
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    (void)selector;
+    return false;
+#else
+    const auto *entry=operators::env_spec::v364_legacy_by_selector(selector);
+    if(!entry)return false;
+    const unsigned index=selector==500u?0u:1u;
+    device *device_ptr=nullptr;
+    std::vector<std::uint8_t> bytes;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if(g_device==nullptr || !g_sampler_ready ||
+           g_v371_legacy_rgba[index].size()!=entry->bytes)
+            return false;
+        device_ptr=g_device;
+        const auto existing=g_ptde_envdiffuse_cubes.find(selector);
+        if(existing!=g_ptde_envdiffuse_cubes.end()) {
+            view=existing->second.view;
+            return view.handle!=0u;
+        }
+        bytes=g_v371_legacy_rgba[index];
+    }
+    const unsigned face_bytes=entry->edge*entry->edge*4u;
+    std::array<subresource_data,k_faces> subresources{};
+    for(unsigned face=0u;face<k_faces;++face) {
+        subresources[face].data=bytes.data()+face*face_bytes;
+        subresources[face].row_pitch=entry->edge*4u;
+        subresources[face].slice_pitch=face_bytes;
+    }
+    const resource_desc desc(
+        resource_type::texture_2d,entry->edge,entry->edge,k_faces,1u,
+        format::r8g8b8a8_unorm,1u,memory_heap::default_,
+        resource_usage::shader_resource,resource_flags::cube_compatible);
+    rgba_cube cube{};
+    if(!device_ptr->create_resource(
+        desc,subresources.data(),resource_usage::shader_resource,
+        &cube.texture))return false;
+    const resource_view_desc view_desc(
+        resource_view_type::texture_cube,format::r8g8b8a8_unorm,
+        0u,1u,0u,k_faces);
+    if(!device_ptr->create_resource_view(
+        cube.texture,resource_usage::shader_resource,view_desc,
+        &cube.view)) {
+        device_ptr->destroy_resource(cube.texture);
+        return false;
+    }
+    bool still_alive=false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        still_alive=g_device==device_ptr &&
+            g_v371_legacy_rgba[index].size()==entry->bytes;
+        if(still_alive) {
+            const auto result=g_ptde_envdiffuse_cubes.emplace(
+                selector,cube);
+            view=result.first->second.view;
+            if(result.second) {
+                if(g_v371_legacy_logged.fetch_or(
+                    1u<<index,std::memory_order_relaxed)==0u) {
+                    char line[240]{};
+                    std::snprintf(line,sizeof(line),
+                        "[DSRRL V371 PTDE LEGACY ENVDIFFUSE CUBE]"
+                        " name=%s selector=%u edge=%u"
+                        " carrier=EXACT_ORIGINAL_PTDE_RGBA"
+                        " envspec=UNCHANGED pixel=OPEN",
+                        entry->dsr_name,
+                        static_cast<unsigned>(selector),entry->edge);
+                    reshade::log::message(reshade::log::level::info,line);
+                }
+            } else {
+                still_alive=false; // discard duplicate cube, return existing
+            }
+        }
+    }
+    if(!still_alive) {
+        device_ptr->destroy_resource_view(cube.view);
+        device_ptr->destroy_resource(cube.texture);
+    }
+    return view.handle!=0u;
+#endif
+}
+
 bool get_ptde_envdiffuse_cube(
     std::uint16_t probe,
     resource_view &view) noexcept
 {
     view = {};
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
     (void)probe;
     return false;
 #else
+    if(operators::env_spec::v364_legacy_by_selector(probe))
+        return get_v371_ptde_legacy_envdiffuse_cube(probe,view);
     if (probe >=
             env::k_legacy_envspec_probe_count)
         return false;
