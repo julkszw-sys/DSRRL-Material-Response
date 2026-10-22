@@ -6631,6 +6631,49 @@ void observe_bloom_fx_draw_authority() noexcept
     }
 }
 
+#if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
+// The V367 PREPARED marker is before append/transaction: distinguish the
+// exact EnvDiffuse-only carrier from an actually issued and restored Draw.
+// Read-only, bounded, operator-scoped; does not affect native state.
+void v368_envdiffuse_dispatch_witness(
+    reshade::api::command_list *cmd_list,
+    const dsrrl::runtime::draw_tx_mutation &mutation,
+    dsrrl::runtime::draw_tx_result result,
+    bool indexed) noexcept
+{
+    constexpr auto bit=dsrrl::core::operator_bit(
+        dsrrl::core::operator_id::env_diffuse);
+    if(mutation.owners!=bit) return;
+    static std::atomic<std::uint32_t> indexed_count{0u};
+    static std::atomic<std::uint32_t> plain_count{0u};
+    const auto sample=(indexed ? indexed_count : plain_count)
+        .fetch_add(1u,std::memory_order_relaxed);
+    if(sample>=16u) return;
+    auto *context=cmd_list==nullptr ? nullptr :
+        reinterpret_cast<ID3D11DeviceContext *>(cmd_list->get_native());
+    const unsigned context_type=context==nullptr ? 99u :
+        static_cast<unsigned>(context->GetType());
+    const bool issued=dsrrl::runtime::draw_tx_issued(result);
+    const bool restored=result==
+        dsrrl::runtime::draw_tx_result::issued_restored;
+    char line[400]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V368 ENVDIFFUSE DRAW COMMIT]"
+        " kind=%s n=%u owner=ENVDIFFUSE_ONLY"
+        " tx_code=%u draw_issued=%u state_restored=%u"
+        " context_type=%u shader_replace=%u srv=%u sampler=%u"
+        " t12=STOCK pixel=OPEN",
+        indexed?"indexed":"nonindexed",sample+1u,
+        static_cast<unsigned>(result),issued?1u:0u,
+        restored?1u:0u,context_type,
+        mutation.replace_pixel_shader?1u:0u,
+        mutation.srv_count,mutation.sampler_count);
+    reshade::log::message(issued && restored ?
+        reshade::log::level::info :
+        reshade::log::level::warning,line);
+}
+#endif
+
 bool on_draw(
     reshade::api::command_list *cmd_list,
     std::uint32_t vertex_count,
@@ -7075,6 +7118,11 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
+    v368_envdiffuse_dispatch_witness(cmd_list,prepared.batch.mutation,
+        dispatch.transaction,false);
+#endif
 
 #if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
     // Unlike the disabled persistent vtable bridge this is the ACTIVE
@@ -7638,6 +7686,11 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V368_ENVDIFFUSE_DRAW_COMMIT_PROOF)
+    v368_envdiffuse_dispatch_witness(cmd_list,prepared.batch.mutation,
+        dispatch.transaction,true);
+#endif
 
 #if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
     // Unlike the disabled persistent vtable bridge this is the ACTIVE
