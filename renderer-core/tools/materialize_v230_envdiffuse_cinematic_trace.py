@@ -109,6 +109,32 @@ def runtime(s):
                 need_b?1u:0u,b_ok?1u:0u,
                 static_cast<unsigned>(b),shadow?"SHADOW":"D3D11");
             reshade::log::message(reshade::log::level::warning,log);
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+            // New actual source->resource->SRV registry, not a guessed
+            // packed-GI probe or a PTDE donor. Scoped to rejected RX34
+            // receivers and exact whitelisted native DSR name+SHA tuples.
+            if(diffuse[0]!=nullptr) {
+                native_legacy_envdiffuse_identity legacy_identity{};
+                if(env_resources_.native_legacy_envdiffuse_for_view(
+                       diffuse[0],legacy_identity)) {
+                    char legacy_line[330]{};
+                    std::snprintf(legacy_line,sizeof(legacy_line),
+                        "[DSRRL V360 LEGACY ENVDIF ROUTED]"
+                        " rx=%u route=%u native_resource=%016llx"
+                        " map=%u legacy_row=%u"
+                        " ptde_donor=UNMAPPED t12=REJECTED"
+                        " action=STOCK_DSR pixels=OPEN",
+                        static_cast<unsigned>(decision.receiver_id),
+                        static_cast<unsigned>(decision.route_index),
+                        static_cast<unsigned long long>(
+                            legacy_identity.resource_handle),
+                        static_cast<unsigned>(legacy_identity.map),
+                        static_cast<unsigned>(legacy_identity.legacy_row));
+                    reshade::log::message(reshade::log::level::warning,
+                                         legacy_line);
+                }
+            }
+#endif
             // Read-only SRV dimension and native resource type witness.
             if(diffuse[0]!=nullptr) {
                 D3D11_SHADER_RESOURCE_VIEW_DESC vd{};
