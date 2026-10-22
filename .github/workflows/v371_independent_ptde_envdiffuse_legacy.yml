@@ -3,6 +3,8 @@ on:
   push:
     branches: [agent/v371-v370-independent-legacy-envdiffuse-20261022]
   workflow_dispatch:
+  pull_request:
+    branches: [release/v2.3.0-v359-prep]
 permissions:
   contents: read
 jobs:
