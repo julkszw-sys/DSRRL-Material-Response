@@ -108,6 +108,13 @@ public:
         native_legacy_envdiffuse_identity &out) const noexcept;
 #endif
 
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+    // GPU candidate only. Exact 39-DDS sidecar lookup by logical retail
+    // name, with original dimensions, formats and mip levels.
+    // A true return does not authorize t11/t13 binding or t12 bypass.
+    bool stage_ptde_classic_candidate(const char *retail_name) const noexcept;
+#endif
+
     // Read-only exact native t11/t13 identity probe. Works even if
     // the independent EnvSpec t12/t14 prepare step has failed; never
     // materializes PTDE resources or changes D3D11 state.
