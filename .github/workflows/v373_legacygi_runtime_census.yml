@@ -3,7 +3,7 @@ on:
   push:
     branches: [agent/v373-legacygi-name-sha-census-20261023]
   pull_request:
-    branches: [agent/v371-v370-independent-legacy-envdiffuse-20261022]
+    branches: [agent/v372-envdiffuse-draw-proof-20261023]
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude (Join-Path $PWD.Path '_reshade/include')
-          if ($LASTEXITCODE -ne 0) { throw 'V372 native build' }
+          if ($LASTEXITCODE -ne 0) { throw 'V373 native build' }
       - name: Verify PE and diagnostic markers
         shell: pwsh
         run: |
