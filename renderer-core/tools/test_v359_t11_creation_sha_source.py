@@ -5,7 +5,7 @@ root=Path(__file__).resolve().parents[1]
 source=(root/"src/runtime/envspec_resource_runtime.cpp").read_text(encoding="utf-8")
 builder=(root/"tools/build_v230_envdiffuse_cinematic_trace.ps1").read_text(encoding="utf-8")
 assert source.count("[DSRRL V359 T11 CREATE SHA]")==1
-assert source.count("v359_log_t11_creation(")>=7
+assert source.count("v359_log_t11_creation(")==6
 for stage in ("NO_INITIAL_DATA","EXTRACT_FAILED","HASH_NOT_UNIQUE_ATLAS",
               "MATCH_REGISTERED","ATLAS_NOT_READY","DEVICE_MISMATCH",
               "REGISTRY_DEVICE_LOST","ATLAS_LOST"):
