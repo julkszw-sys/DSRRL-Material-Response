@@ -977,6 +977,33 @@ void on_init_resource_view(
         g_v371_legacy_by_view[view.handle]={
             resource_handle.handle,legacy->selector};
 
+    // Source census candidate is not a renderer authorization. Require
+    // physical D3D11 COM backing/device equivalence at view creation.
+    const auto ni=g_v371_diffuse_names.find(resource_handle.handle);
+    const auto si=g_v371_diffuse_creation_sha.find(resource_handle.handle);
+    if(ni!=g_v371_diffuse_names.end() && !ni->second.conflicting &&
+       si!=g_v371_diffuse_creation_sha.end() &&
+       device_ptr->get_api()==device_api::d3d11) {
+        const int ix=v373_legacygi::find_exact(ni->second.name.data(),si->second);
+        if(ix>=0) {
+            auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(view.handle));
+            ID3D11Resource *backing=nullptr;
+            ID3D11Device *native_device=nullptr;
+            srv->GetResource(&backing);
+            srv->GetDevice(&native_device);
+            const bool equal=backing!=nullptr && native_device!=nullptr &&
+                reinterpret_cast<std::uintptr_t>(backing)==
+                    static_cast<std::uintptr_t>(resource_handle.handle) &&
+                reinterpret_cast<std::uintptr_t>(native_device)==
+                    static_cast<std::uintptr_t>(device_ptr->get_native());
+            if(backing)backing->Release();
+            if(native_device)native_device->Release();
+            if(equal)g_v373_census_by_view[view.handle]={
+                resource_handle.handle,static_cast<std::uint16_t>(ix)};
+        }
+    }
+
     if (native == g_native_resources.end()) {
         const auto diffuse = g_native_diffuse_resources.find(resource_handle.handle);
         if (diffuse == g_native_diffuse_resources.end()) return;
