@@ -124,6 +124,22 @@ public:
         const void *dxbc,
         std::size_t dxbc_size) noexcept;
 
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+    // Exact stock RX34 DXBC only. Stages a separate PTDE t11-only shader;
+    // never substitutes it globally for shared P_Metal/nonmetal hosts.
+    bool register_classic_rx34_from_stock(
+        const void *stock_dxbc, std::size_t stock_size) noexcept;
+
+    // Independent operator. Preserves native DSR t12/t14, b12,
+    // material response and all other operators on the receiver.
+    bool prepare_classic_envdiffuse_only(
+        reshade::api::command_list *cmd_list,
+        const operators::material_response::material_identity &material,
+        const operators::material_response::decision &decision,
+        pmetal_envspec_receiver_family family,
+        prepared_pmetal_envspec_draw &prepared) noexcept;
+#endif
+
     bool register_lerp_replacement(
         const operators::env_spec::
             pmetal_rgba_lerp_materialize_outcome &outcome,
@@ -185,6 +201,9 @@ private:
 
     mutable std::mutex mutex_;
     ID3D11Device *device_ = nullptr;
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+    ID3D11PixelShader *classic_rx34_shader_ = nullptr;
+#endif
     // Device-owned exact D3D11 equivalent of the PTDE stage-7 point/border
     // shadow sampler. Only receiver 33/34 R7 draws may borrow it.
     ID3D11SamplerState *shadow_sampler_ = nullptr;
