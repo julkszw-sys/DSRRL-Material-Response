@@ -7075,7 +7075,8 @@ bool on_draw(
                 prepared.batch.mutation.sampler_count,
                 static_cast<unsigned>(result),
                 dsrrl::runtime::draw_tx_issued(result)?1u:0u,
-                result==dsrrl::runtime::draw_tx_result::issued_restore_failed
+                (dsrrl::runtime::draw_tx_issued(result) &&
+                 result!=dsrrl::runtime::draw_tx_result::issued_restored)
                     ?1u:0u);
             reshade::log::message(reshade::log::level::warning,line);
         }
@@ -7679,7 +7680,8 @@ bool on_draw_indexed(
                 prepared.batch.mutation.sampler_count,
                 static_cast<unsigned>(result),
                 dsrrl::runtime::draw_tx_issued(result)?1u:0u,
-                result==dsrrl::runtime::draw_tx_result::issued_restore_failed
+                (dsrrl::runtime::draw_tx_issued(result) &&
+                 result!=dsrrl::runtime::draw_tx_result::issued_restored)
                     ?1u:0u);
             reshade::log::message(reshade::log::level::warning,line);
         }
