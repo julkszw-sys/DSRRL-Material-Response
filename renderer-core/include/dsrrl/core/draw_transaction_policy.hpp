@@ -75,8 +75,16 @@ inline constexpr std::array<
          draw_mutation_srv | draw_mutation_sampler,
      true, true, true},
     {operator_id::env_diffuse, draw_transaction_mode::draw_required,
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+     // RX34 PTDE RGB/A is a source+consumer-only cut: shader + exact
+     // t11/s11, with the original host CBs unchanged. Do not require an
+     // artificial CB write to satisfy the older joint-operator contract.
+     // All legacy CB-owning EnvDiffuse requests remain admissible.
+     draw_mutation_srv | draw_mutation_sampler,
+#else
      draw_mutation_constant_buffer | draw_mutation_srv |
          draw_mutation_sampler,
+#endif
      draw_mutation_shader | draw_mutation_constant_buffer |
          draw_mutation_srv | draw_mutation_sampler,
      true, false, true},
