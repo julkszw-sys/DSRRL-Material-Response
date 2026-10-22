@@ -895,24 +895,6 @@ void on_init_resource_view(
     const resource_view_desc &,
     resource_view view)
 {
-    // V371: only the live SRV's actual COM backing can carry a source witness.
-    gi_envdif_name_witness::identity name{};
-    bool exact_backing=false;
-    if(device_ptr!=nullptr && resource_handle.handle!=0u &&
-       view.handle!=0u &&
-       (usage&resource_usage::shader_resource)!=resource_usage::undefined &&
-       device_ptr->get_api()==device_api::d3d11 &&
-       gi_envdif_name_witness::capture(name)) {
-        auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
-            static_cast<std::uintptr_t>(view.handle));
-        ID3D11Resource *actual=nullptr;
-        srv->GetResource(&actual);
-        exact_backing=actual!=nullptr &&
-            reinterpret_cast<std::uintptr_t>(actual)==
-                static_cast<std::uintptr_t>(resource_handle.handle);
-        if(actual)actual->Release();
-    }
-
     if (device_ptr == nullptr ||
         resource_handle.handle == 0u ||
         view.handle == 0u ||
@@ -927,20 +909,37 @@ void on_init_resource_view(
     if (device_ptr != g_device)
         return;
 
-    if(exact_backing &&
-       g_v371_diffuse_creation_sha.count(resource_handle.handle)!=0u) {
-        name.stage=2u;
-        v371_record_name_locked(resource_handle.handle,name);
-    }
-    const auto *legacy=v371_exact_resource_locked(resource_handle.handle);
-    if(legacy!=nullptr) {
-        g_v371_legacy_by_view[view.handle]={
-            resource_handle.handle,legacy->selector};
-    }
-
     const auto native =
         g_native_resources.find(
             resource_handle.handle);
+    if(g_v371_diffuse_creation_sha.count(resource_handle.handle)!=0u &&
+       device_ptr->get_api()==device_api::d3d11) {
+        gi_envdif_name_witness::identity name{};
+        if(gi_envdif_name_witness::capture(name)) {
+            auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(view.handle));
+            ID3D11Resource *backing=nullptr;
+            ID3D11Device *dev=nullptr;
+            srv->GetResource(&backing);
+            srv->GetDevice(&dev);
+            bool valid=backing!=nullptr && dev!=nullptr &&
+                reinterpret_cast<std::uintptr_t>(backing)==
+                    static_cast<std::uintptr_t>(resource_handle.handle) &&
+                reinterpret_cast<std::uintptr_t>(dev)==
+                    static_cast<std::uintptr_t>(device_ptr->get_native());
+            if(backing)backing->Release();
+            if(dev)dev->Release();
+            if(valid) {
+                name.stage=2u;
+                v371_record_name_locked(resource_handle.handle,name);
+            }
+        }
+    }
+    const auto *legacy=v371_exact_resource_locked(resource_handle.handle);
+    if(legacy)
+        g_v371_legacy_by_view[view.handle]={
+            resource_handle.handle,legacy->selector};
+
     if (native == g_native_resources.end()) {
         const auto diffuse = g_native_diffuse_resources.find(resource_handle.handle);
         if (diffuse == g_native_diffuse_resources.end()) return;
