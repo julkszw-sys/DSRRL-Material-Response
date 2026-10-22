@@ -14,7 +14,8 @@ assert addon.count('[DSRRL V372 ED TX]')==2
 assert 'kind=draw' in addon and 'kind=indexed' in addon
 assert '[DSRRL V372 ED APPEND FAIL]' in addon
 assert 'dsrrl::runtime::draw_tx_issued(result)' in addon
-assert 'dsrrl::runtime::draw_tx_result::issued_restore_failed' in addon
+assert addon.count('result!=dsrrl::runtime::draw_tx_result::issued_restored')==2
+assert addon.count('dsrrl::runtime::draw_tx_result::issued_restore_failed')==2
 assert 'prepared.envspec.envdiffuse_resources.probe_a' in addon
 assert 'const char *cls=(probe==500u || probe==510u)' in addon
 assert 'probe<342u' in addon
