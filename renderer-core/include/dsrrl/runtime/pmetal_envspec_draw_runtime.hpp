@@ -139,6 +139,20 @@ public:
         std::size_t r19_size) noexcept;
 #endif
 
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    bool register_independent_envdiffuse(
+        const void *dxbc,std::size_t size,
+        std::uint32_t receiver_id) noexcept;
+
+    // Exact PTDE EnvDiffuse isolated from EnvSpec. Requires verified
+    // independent native t11 -> PTDE cubemap, LightBank c86, shader and CB12.
+    bool prepare_independent_envdiffuse(
+        reshade::api::command_list *cmd_list,
+        const operators::material_response::material_identity &material,
+        const operators::material_response::decision &decision,
+        prepared_pmetal_envspec_draw &prepared) noexcept;
+#endif
+
     bool prepare(
         reshade::api::command_list *cmd_list,
         const operators::material_response::material_identity &material,
@@ -202,6 +216,17 @@ private:
         lerp_replacement_size_;
     std::unordered_map<std::uintptr_t,b12_context_cache>
         b12_by_context_;
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    std::unordered_map<std::uint32_t,ID3D11PixelShader *>
+        independent_envdiffuse_shaders_;
+    struct envdiffuse_cb_cache {
+        ID3D11Buffer *buffer = nullptr;
+        std::array<std::uint32_t,16> payload_bits{};
+        bool valid = false;
+    };
+    std::unordered_map<std::uintptr_t,envdiffuse_cb_cache>
+        independent_envdiffuse_cb_by_context_;
+#endif
 
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
