@@ -816,29 +816,26 @@ void on_init_resource(
 #endif
         return;
     }
+    bool registry_valid=false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (device_ptr != g_device ||
-            (diffuse && !g_native_diffuse_atlas_ready)) {
-#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
-            if (diffuse)
-                v359_log_t11_creation("REGISTRY_DEVICE_LOST",
-                    resource_handle,desc,initial_data,&digest,
-                    static_cast<int>(probe.value()));
-#endif
-            return;
+        registry_valid=(device_ptr==g_device &&
+            (!diffuse || g_native_diffuse_atlas_ready));
+        if (registry_valid) {
+            if (spec)
+                g_native_resources[resource_handle.handle] = {probe.value()};
+            else
+                g_native_diffuse_resources[resource_handle.handle] = {probe.value()};
         }
-        if (spec)
-            g_native_resources[resource_handle.handle] = {probe.value()};
-        else
-            g_native_diffuse_resources[resource_handle.handle] = {probe.value()};
     }
 #if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
     if (diffuse)
-        v359_log_t11_creation("MATCH_REGISTERED",
+        v359_log_t11_creation(
+            registry_valid?"MATCH_REGISTERED":"REGISTRY_DEVICE_LOST",
             resource_handle,desc,initial_data,&digest,
             static_cast<int>(probe.value()));
 #endif
+    if (!registry_valid) return;
     if (spec) ++g_native_matches;
 }
 
