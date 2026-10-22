@@ -53,7 +53,7 @@ assert 'DSRRL V365 CLASSIC RX34 SHADER ISLAND' in cleanup
 assert 'reshade::log::level::info' in pre_early
 # Never allow the release logging cleanup to erase the ONLY remaining
 # side effect of candidate materialization and dead-strip the entire island.
-assert 'if not any(w in args for w in essential):' in cleanup
+assert 'and not any(w in args for w in essential):' in cleanup
 v365_live=pre_early
 assert 'g_core.features().enabled' not in v365_live
 assert 'pixel_shader->code =' not in v365_live
