@@ -823,6 +823,27 @@ void on_init_resource(
                 }
             }
         } catch(...) {}
+        // Read-only first 128 native Classic EnvDif create witnesses.
+        // TLS is not proof of the view or the eventual t11 consumer.
+        if(named && std::strncmp(witness.name.data(),"EnvDif_",7u)==0) {
+            const auto n=g_v373_create_logged.fetch_add(1u,std::memory_order_relaxed);
+            if(n<128u) {
+                const int index=v373_legacygi::find_exact(witness.name.data(),digest);
+                static constexpr char digits[]="0123456789abcdef";
+                char hex[65]{};
+                for(unsigned i=0u;i<32u;++i) {
+                    hex[i*2u]=digits[(digest[i]>>4u)&15u];
+                    hex[i*2u+1u]=digits[digest[i]&15u];
+                }
+                char line[340]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V373 LEGACY CREATE] n=%u name=%s sha=%s"
+                    " historical_pair=%u stage=TLS_CREATE_HINT"
+                    " t11=OPEN action=READ_ONLY pixel=OPEN",
+                    n+1u,witness.name.data(),hex,index>=0?1u:0u);
+                reshade::log::message(reshade::log::level::warning,line);
+            }
+        }
     }
     std::optional<std::uint16_t> probe;
     if (spec) {
