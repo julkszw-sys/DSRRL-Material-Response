@@ -2085,6 +2085,15 @@ bool envspec_resource_runtime::native_legacy_envdiffuse_for_view(
 }
 #endif
 
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+bool envspec_resource_runtime::stage_ptde_classic_candidate(
+    const char *retail_name) const noexcept
+{
+    resource_view candidate{};
+    return get_ptde_classic_candidate(retail_name,candidate);
+}
+#endif
+
 bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
     ID3D11ShaderResourceView *stock_view,
     std::uint16_t &probe) const noexcept
