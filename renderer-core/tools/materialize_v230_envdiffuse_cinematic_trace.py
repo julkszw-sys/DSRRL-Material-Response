@@ -123,7 +123,11 @@ def runtime(s):
                         "EnvDif_m%u_%03u",
                         static_cast<unsigned>(legacy_identity.map),
                         static_cast<unsigned>(legacy_identity.legacy_row));
-                    const bool candidate=env_resources_.stage_ptde_classic_candidate(ptde_name);
+                    prepared_envdiffuse_resources acquired_classic{};
+                    const bool acquired=env_resources_.prepare_classic_envdiffuse_bound(
+                        diffuse[0],need_b?diffuse[2]:nullptr,need_b,
+                        acquired_classic);
+                    const bool candidate=acquired && acquired_classic.ready;
                     char asset_line[285]{};
                     std::snprintf(asset_line,sizeof(asset_line),
                         "[DSRRL V361 CLASSIC PTDE CANDIDATE]"
@@ -133,6 +137,20 @@ def runtime(s):
                         static_cast<unsigned>(decision.route_index),
                         ptde_name,candidate?"GPU_READY":"NOT_READY");
                     reshade::log::message(reshade::log::level::warning,asset_line);
+                    char v364_line[315]{};
+                    std::snprintf(v364_line,sizeof(v364_line),
+                        "[DSRRL V364 CLASSIC DONOR ACQUIRED]"
+                        " rx=%u route=%u name=%s"
+                        " stage=%s native_resource=%016llx"
+                        " envspec_t12=REJECTED bind=NO pixels=OPEN",
+                        static_cast<unsigned>(decision.receiver_id),
+                        static_cast<unsigned>(decision.route_index),
+                        ptde_name,candidate?"RESOURCE_READY":"FAIL_OPEN",
+                        static_cast<unsigned long long>(
+                            legacy_identity.resource_handle));
+                    reshade::log::message(reshade::log::level::warning,
+                                         v364_line);
+                    env_resources_.release(acquired_classic);
 #endif
                     char legacy_line[330]{};
                     std::snprintf(legacy_line,sizeof(legacy_line),
