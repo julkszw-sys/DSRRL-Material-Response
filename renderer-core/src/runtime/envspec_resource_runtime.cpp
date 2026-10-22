@@ -907,9 +907,26 @@ void on_init_resource(
         if(texture_identity_transport::snapshot_raw(retail_name,retail_len) &&
            env::legacy_diffuse_verified::resolve(
                retail_name,retail_len,digest,legacy_id)) {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            if(device_ptr==g_device && g_native_diffuse_atlas_ready)
-                g_legacy_diffuse_by_resource[resource_handle.handle]=legacy_id;
+            bool registered=false;
+            {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                if(device_ptr==g_device && g_native_diffuse_atlas_ready) {
+                    g_legacy_diffuse_by_resource[resource_handle.handle]=legacy_id;
+                    registered=true;
+                }
+            }
+            // Exact name and hash are both verified. One diagnostic event
+            // per creation, outside the registry lock, no GPU state changes.
+            char line[220]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V362 LEGACY T11 REGISTER]"
+                " resource=%016llx map=%u row=%u registered=%u"
+                " action=IDENTITY_ONLY pixels=OPEN",
+                static_cast<unsigned long long>(resource_handle.handle),
+                static_cast<unsigned>(legacy_id.map),
+                static_cast<unsigned>(legacy_id.legacy_row),
+                registered?1u:0u);
+            reshade::log::message(reshade::log::level::warning,line);
         }
     }
 #endif
