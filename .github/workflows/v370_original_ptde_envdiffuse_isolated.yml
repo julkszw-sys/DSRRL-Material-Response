@@ -1,0 +1,38 @@
+name: V370 Original PTDE EnvDiffuse Independent
+on:
+  push:
+    branches: [agent/v370-v230-ptde-envdiffuse-isolated-original-operator-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Source-check and build one addon
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v370_exact_envdiffuse_operator_isolation.py
+          if ($LASTEXITCODE -ne 0) { throw 'V370 source fail' }
+          ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude (Join-Path $PWD.Path '_reshade/include')
+          if ($LASTEXITCODE -ne 0) { throw 'V370 native fail' }
+      - name: Verify V370 PE
+        shell: pwsh
+        run: |
+          $p='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $p)) { throw 'Missing PE' }
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $p))
+          $str=[Text.Encoding]::ASCII.GetString($b)
+          if ($b[0] -ne 77 -or $b[1] -ne 90 -or !$str.Contains('[DSRRL V370 ED]')) { throw 'V370 marker or PE missing' }
+          Get-FileHash $p -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V370-Original-PTDE-EnvDiffuse-OneAddon
+          path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error

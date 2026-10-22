@@ -1141,6 +1141,9 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::upper_lower,
     dsrrl::core::operator_id::hemdir3,
     dsrrl::core::operator_id::env_spec,
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    dsrrl::core::operator_id::env_diffuse,
+#endif
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::point_light,
@@ -4164,6 +4167,20 @@ bool on_create_pipeline(
         pixel_shader->code_size != 0u) {
         g_mr_draw_runtime.on_init_device(device);
         g_pmetal_envspec.on_init_device(device);
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+        // Construct addon-private shader from the ORIGINAL exact 29-DWORD
+        // PTDE EnvDiffuse source operator before other operators compose.
+        // Stock create_pipeline is NOT replaced.
+        std::uint32_t independent_rx=0u;
+        std::vector<std::uint8_t> independent_dxbc;
+        if(dsrrl::operators::env_spec::
+             materialize_ptde_envdiffuse_stable_only(
+                static_cast<const std::uint8_t *>(pixel_shader->code),
+                pixel_shader->code_size,independent_dxbc,independent_rx)) {
+            g_pmetal_envspec.register_independent_envdiffuse(
+                independent_dxbc.data(),independent_dxbc.size(),independent_rx);
+        }
+#endif
     }
 
     dsrrl::operators::lightbank::
@@ -6148,6 +6165,28 @@ bool prepare_island_batch(
 #endif
 
     if (exact_pmetal_envspec) {
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+        // Stable: only PTDE EnvDiffuse owns shader+t11/s11+CB12(c86).
+        // Never call the old coupled Build131 EnvSpec+EnvDiffuse on these
+        // draws, even when independently authorized source preparation fails.
+        // Lerp is NOT silently remapped to a Stable operator; unchanged
+        // stock DSR fallback until its two-endpoint consumer is ported.
+        if (!hemenvlerp_bound &&
+            (decision.receiver_id==33u ||
+             decision.receiver_id==34u ||
+             decision.receiver_id==35u)) {
+            if(g_pmetal_envspec.prepare_independent_envdiffuse(
+                  cmd_list,material,decision,prepared.envspec)) {
+                prepared.envspec_in_batch=true;
+                if(dsrrl::runtime::append_island_draw_request(
+                      prepared.batch,prepared.envspec.request)==
+                   dsrrl::runtime::island_draw_batch_result::ready)
+                    return true;
+                release_prepared_island_batch(prepared);
+            }
+            return false; // fail-open native DSR, NEVER old joint shader
+        }
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
             static std::atomic_bool first_nonmetal_gate{false};
@@ -6990,6 +7029,79 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
+    // Unlike the disabled persistent vtable bridge this is the ACTIVE
+    // current-native/replay transaction used by the actual host.
+    // Cross-material scope is mandatory: armor is black across materials,
+    // helmet spared; never select route 345 as a causality shortcut.
+    // Read only: never modifies the draw, CB/SRV state or fail-open policy.
+    {
+        const auto w =
+            dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        // Receiver-first: witness EVERY exact selected material route,
+        // not just P_Metal. The previous 345-only gate produced a
+        // diagnostic selection bias for the cutscene regression.
+        if (w.source && w.ready && w.selected &&
+            w.route == static_cast<unsigned>(decision.route_index) &&
+            prepared.envspec_in_batch) {
+            const bool issued =
+                dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            using edc_tx_result = dsrrl::runtime::draw_tx_result;
+            const bool restore_failed =
+                dispatch.transaction ==
+                edc_tx_result::issued_restore_failed;
+            const bool envdiff_owner =
+                (prepared.batch.mutation.owners &
+                 dsrrl::core::operator_bit(
+                     dsrrl::core::operator_id::env_diffuse)) != 0u;
+            char line[1024]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL EDC ACTIVE TX] kind=draw"
+                " id=%llu frame=%llu serial=%llu"
+                " bank=%016llx row=%u"
+                " route=%u rx=%u slot=%u"
+                " dispatch_direct=%u envspec_batch=%u"
+                " envdiff_owner=%u shader_replace=%u"
+                " cb=%u srv=%u sampler=%u"
+                " mat_spec=%u mat_diff=%u mat_norm=%u mat_reqs=%u"
+                " spec_probe=%u:%u diff_probe=%u:%u"
+                " probe_pair_same=%u"
+                " tx_code=%u draw_issued=%u restore_failed=%u"
+                " pixel=NOT_MEASURED",
+                static_cast<unsigned long long>(w.id),
+                static_cast<unsigned long long>(w.frame),
+                static_cast<unsigned long long>(w.serial),
+                static_cast<unsigned long long>(w.bank_a),
+                w.row_a, w.route, w.rx, w.slot,
+                direct_current_native ? 1u : 0u,
+                prepared.envspec_in_batch ? 1u : 0u,
+                envdiff_owner ? 1u : 0u,
+                prepared.batch.mutation.replace_pixel_shader ? 1u : 0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                prepared.envspec.material_resources.spec_rgb ? 1u : 0u,
+                prepared.envspec.material_resources.diffuse ? 1u : 0u,
+                prepared.envspec.material_resources.normal ? 1u : 0u,
+                prepared.envspec.material_resources.request_count,
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_b),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_b),
+                (prepared.envspec.env_resources.probe_a ==
+                    prepared.envspec.envdiffuse_resources.probe_a &&
+                 prepared.envspec.env_resources.probe_b ==
+                    prepared.envspec.envdiffuse_resources.probe_b) ? 1u : 0u,
+                static_cast<unsigned>(dispatch.transaction),
+                issued ? 1u : 0u,
+                restore_failed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::warning, line);
+        }
+    }
+#endif
+
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
@@ -7479,6 +7591,79 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE)
+    // Unlike the disabled persistent vtable bridge this is the ACTIVE
+    // current-native/replay transaction used by the actual host.
+    // Cross-material scope is mandatory: armor is black across materials,
+    // helmet spared; never select route 345 as a causality shortcut.
+    // Read only: never modifies the draw, CB/SRV state or fail-open policy.
+    {
+        const auto w =
+            dsrrl::runtime::envdiffuse_cinematic_trace::local;
+        // Receiver-first: witness EVERY exact selected material route,
+        // not just P_Metal. The previous 345-only gate produced a
+        // diagnostic selection bias for the cutscene regression.
+        if (w.source && w.ready && w.selected &&
+            w.route == static_cast<unsigned>(decision.route_index) &&
+            prepared.envspec_in_batch) {
+            const bool issued =
+                dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+            using edc_tx_result = dsrrl::runtime::draw_tx_result;
+            const bool restore_failed =
+                dispatch.transaction ==
+                edc_tx_result::issued_restore_failed;
+            const bool envdiff_owner =
+                (prepared.batch.mutation.owners &
+                 dsrrl::core::operator_bit(
+                     dsrrl::core::operator_id::env_diffuse)) != 0u;
+            char line[1024]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL EDC ACTIVE TX] kind=indexed"
+                " id=%llu frame=%llu serial=%llu"
+                " bank=%016llx row=%u"
+                " route=%u rx=%u slot=%u"
+                " dispatch_direct=%u envspec_batch=%u"
+                " envdiff_owner=%u shader_replace=%u"
+                " cb=%u srv=%u sampler=%u"
+                " mat_spec=%u mat_diff=%u mat_norm=%u mat_reqs=%u"
+                " spec_probe=%u:%u diff_probe=%u:%u"
+                " probe_pair_same=%u"
+                " tx_code=%u draw_issued=%u restore_failed=%u"
+                " pixel=NOT_MEASURED",
+                static_cast<unsigned long long>(w.id),
+                static_cast<unsigned long long>(w.frame),
+                static_cast<unsigned long long>(w.serial),
+                static_cast<unsigned long long>(w.bank_a),
+                w.row_a, w.route, w.rx, w.slot,
+                direct_current_native ? 1u : 0u,
+                prepared.envspec_in_batch ? 1u : 0u,
+                envdiff_owner ? 1u : 0u,
+                prepared.batch.mutation.replace_pixel_shader ? 1u : 0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                prepared.envspec.material_resources.spec_rgb ? 1u : 0u,
+                prepared.envspec.material_resources.diffuse ? 1u : 0u,
+                prepared.envspec.material_resources.normal ? 1u : 0u,
+                prepared.envspec.material_resources.request_count,
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.env_resources.probe_b),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_a),
+                static_cast<unsigned>(prepared.envspec.envdiffuse_resources.probe_b),
+                (prepared.envspec.env_resources.probe_a ==
+                    prepared.envspec.envdiffuse_resources.probe_a &&
+                 prepared.envspec.env_resources.probe_b ==
+                    prepared.envspec.envdiffuse_resources.probe_b) ? 1u : 0u,
+                static_cast<unsigned>(dispatch.transaction),
+                issued ? 1u : 0u,
+                restore_failed ? 1u : 0u);
+            reshade::log::message(
+                reshade::log::level::warning, line);
+        }
+    }
+#endif
 
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)

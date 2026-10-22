@@ -65,38 +65,25 @@ replace(res,"        g_native_resources.reserve(\n            env::k_legacy_envs
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
         g_v358_lifetime_probes.reserve(512u);
 #endif''',"init reserve")
-replace(res,'''    if (!extract_tight_bc6h(
-            desc,
-            initial_data,
-            tight)) {
-        ++g_native_hash_miss;''',
-'''    if (!extract_tight_bc6h(
-            desc,
-            initial_data,
-            tight)) {
-        ++g_native_hash_miss;
+# V359 has two independent BC6H producer families. V358's historical
+# EnvSpec origin census only owns 256px t12/t14, never diffuse 64px t11/t13.
+replace(res,'''    if (!extract_tight_bc6h(desc, initial_data, tight)) {''',
+'''    if (!extract_tight_bc6h(desc, initial_data, tight)) {
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
-        {
+        if (spec) {
             std::lock_guard<std::mutex> lock(g_mutex);
             if (device_ptr==g_device) {
                 v358_lifetime_probe_record item{};
                 item.serial=g_v358_lifetime_next.fetch_add(
                     1u,std::memory_order_relaxed);
-                // Absent initial data is explicitly NOT a valid hash.
                 g_v358_lifetime_probes[resource_handle.handle]=item;
             }
         }
 #endif''',"missing BC6H initial data")
-replace(res,'''    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
-
-    if (!probe.has_value()) {''',
-'''    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
-#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
-    {
+replace(res,'''    if (!probe.has_value()) {
+        if (spec) {''',
+'''#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
+    if (spec) {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (device_ptr==g_device) {
             v358_lifetime_probe_record item{};
@@ -110,10 +97,11 @@ replace(res,'''    const auto probe =
         }
     }
 #endif
-
-    if (!probe.has_value()) {''',"certified and unknown native creation SHA")
+    if (!probe.has_value()) {
+        if (spec) {''',"certified and unknown native creation SHA")
 replace(res,'''    g_native_resources.erase(
         resource_handle.handle);
+    g_native_diffuse_resources.erase(resource_handle.handle);
 
     g_snapshot_epoch.fetch_add(''',
 '''    g_native_resources.erase(
@@ -121,6 +109,7 @@ replace(res,'''    g_native_resources.erase(
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
     g_v358_lifetime_probes.erase(resource_handle.handle);
 #endif
+    g_native_diffuse_resources.erase(resource_handle.handle);
 
     g_snapshot_epoch.fetch_add(''',"resource lifetime retirement")
 helper=r'''#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)

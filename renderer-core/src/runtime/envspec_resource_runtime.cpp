@@ -6,7 +6,10 @@
 #endif
 
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
+#include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/gi_envdif_name_witness.hpp"
+#include "dsrrl/operators/env_spec/legacy_envdiffuse_m18_exact.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -22,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -33,6 +37,8 @@ namespace env = operators::env_spec;
 namespace hashing = operators::legacy_plan::hashing;
 
 constexpr std::uint32_t k_dsr_size = 256u;
+constexpr std::uint32_t k_dsr_diffuse_size = 64u;
+constexpr std::size_t k_dsr_diffuse_tight_bc6h_bytes = 24576u;
 constexpr std::uint32_t k_faces = 6u;
 constexpr std::uint32_t k_dsr_levels = 8u;
 constexpr std::size_t k_dsr_tight_bc6h_bytes = 524352u;
@@ -64,6 +70,44 @@ std::unordered_map<std::uint64_t,native_probe_record>
     g_native_resources;
 std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
+std::unordered_map<std::uint64_t,native_probe_record> g_native_diffuse_resources;
+std::unordered_map<std::uint64_t,native_view_record> g_diffuse_by_view;
+// V371: independent legacy EnvDif identity; NEVER sourced from EnvSpec t12.
+using v371_sha = std::array<std::uint8_t,32>;
+std::unordered_map<std::uint64_t,v371_sha> g_v371_diffuse_creation_sha;
+std::unordered_map<std::uint64_t,gi_envdif_name_witness::identity> g_v371_diffuse_names;
+std::unordered_map<std::uint64_t,native_view_record> g_v371_legacy_by_view;
+std::array<std::vector<std::uint8_t>,2u> g_v371_legacy_rgba{};
+std::atomic<std::uint32_t> g_v371_legacy_logged{0u};
+std::atomic<std::uint32_t> g_v371_bound_logged{0u};
+void v371_record_name_locked(std::uint64_t key,
+     const gi_envdif_name_witness::identity &name) noexcept
+{
+    if(key==0u || name.name[0]==0) return;
+    try {
+        auto it=g_v371_diffuse_names.find(key);
+        if(it==g_v371_diffuse_names.end()) {
+            if(g_v371_diffuse_names.size()<4096u)
+                g_v371_diffuse_names.emplace(key,name);
+        } else if(it->second.name != name.name || name.conflicting) {
+            it->second.conflicting=true;
+        }
+    } catch(...) {}
+}
+const operators::env_spec::exact_ptde_legacy_envdiffuse *
+v371_exact_resource_locked(std::uint64_t key) noexcept
+{
+    const auto si=g_v371_diffuse_creation_sha.find(key);
+    const auto ni=g_v371_diffuse_names.find(key);
+    if(si==g_v371_diffuse_creation_sha.end() ||
+       ni==g_v371_diffuse_names.end() ||
+       ni->second.conflicting) return nullptr;
+    return operators::env_spec::v364_exact_legacy_diffuse(
+        ni->second.name.data(),si->second);
+}
+
+env::native_diffuse_hash_atlas g_native_diffuse_hashes{};
+bool g_native_diffuse_atlas_ready = false;
 std::unordered_map<std::uint32_t,rgba_cube>
     g_ptde_cubes;
 std::unordered_map<std::uint16_t,rgba_cube>
@@ -264,12 +308,58 @@ bool load_pack(
 }
 
 
+bool load_native_diffuse_hash_atlas(env::native_diffuse_hash_atlas &out)
+{
+    out = {};
+    try {
+        const auto root = process_dir();
+        if (root.empty()) return false;
+        const auto path = root /
+            std::filesystem::path(env::k_native_envdiffuse_atlas_relative_path);
+        std::error_code ec;
+        const auto size = std::filesystem::file_size(path, ec);
+        if (ec || size != env::k_native_envdiffuse_atlas_size) return false;
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream) return false;
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+        if (!stream.read(reinterpret_cast<char *>(bytes.data()),
+                         static_cast<std::streamsize>(bytes.size()))) return false;
+        if (hashing::sha256(bytes.data(), bytes.size()) !=
+            env::k_native_envdiffuse_atlas_sha) return false;
+        return env::parse_native_diffuse_hash_atlas(bytes.data(), bytes.size(), out);
+    } catch (...) {
+        out = {};
+        return false;
+    }
+}
+
+bool v371_load_exact_legacy_asset(
+    const operators::env_spec::exact_ptde_legacy_envdiffuse &entry,
+    std::vector<std::uint8_t> &out) noexcept
+{
+    out.clear();
+    try {
+        const auto path=process_dir()/std::filesystem::path(entry.relative_path);
+        std::error_code ec{};
+        if(std::filesystem::file_size(path,ec)!=entry.bytes || ec)return false;
+        std::ifstream in(path,std::ios::binary);
+        if(!in)return false;
+        std::vector<std::uint8_t> bytes(entry.bytes);
+        if(!in.read(reinterpret_cast<char *>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()))) return false;
+        if(hashing::sha256(bytes.data(),bytes.size())!=entry.ptde_asset_sha)
+            return false;
+        out=std::move(bytes);
+        return true;
+    }catch(...) {out.clear();return false;}
+}
+
 bool load_envdiffuse_pack(
     std::vector<std::uint8_t> &out)
 {
     out.clear();
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
     return false;
 #else
     try {
@@ -348,28 +438,42 @@ bool is_native_envspec_desc(
             format::bc6h_sfloat;
 }
 
+bool is_native_envdiffuse_desc(const resource_desc &desc) noexcept
+{
+    if (desc.type != resource_type::texture_2d ||
+        desc.texture.width != k_dsr_diffuse_size ||
+        desc.texture.height != k_dsr_diffuse_size ||
+        desc.texture.depth_or_layers != k_faces ||
+        desc.texture.levels != 1u ||
+        desc.texture.samples != 1u) return false;
+    return desc.texture.format == format::bc6h_typeless ||
+           desc.texture.format == format::bc6h_ufloat ||
+           desc.texture.format == format::bc6h_sfloat;
+}
+
 bool extract_tight_bc6h(
     const resource_desc &desc,
     const subresource_data *initial_data,
     std::vector<std::uint8_t> &out)
 {
-    if (!is_native_envspec_desc(desc) ||
-        initial_data == nullptr)
+    const bool spec = is_native_envspec_desc(desc);
+    const bool diffuse = is_native_envdiffuse_desc(desc);
+    if ((!spec && !diffuse) || initial_data == nullptr)
         return false;
 
     try {
         out.clear();
         out.reserve(
-            k_dsr_tight_bc6h_bytes);
+            spec ? k_dsr_tight_bc6h_bytes : k_dsr_diffuse_tight_bc6h_bytes);
 
         for (std::uint32_t face = 0u;
              face < k_faces;
              ++face) {
             for (std::uint32_t level = 0u;
-                 level < k_dsr_levels;
+                 level < desc.texture.levels;
                  ++level) {
                 const std::uint32_t sub =
-                    face * k_dsr_levels +
+                    face * desc.texture.levels +
                     level;
                 const auto &src =
                     initial_data[sub];
@@ -380,11 +484,11 @@ bool extract_tight_bc6h(
                 const std::uint32_t width =
                     std::max(
                         1u,
-                        k_dsr_size >> level);
+                        desc.texture.width >> level);
                 const std::uint32_t height =
                     std::max(
                         1u,
-                        k_dsr_size >> level);
+                        desc.texture.height >> level);
                 const std::uint32_t block_cols =
                     std::max(
                         1u,
@@ -429,8 +533,8 @@ bool extract_tight_bc6h(
     }
 
     return
-        out.size() ==
-        k_dsr_tight_bc6h_bytes;
+        out.size() == (spec ? k_dsr_tight_bc6h_bytes :
+                         k_dsr_diffuse_tight_bc6h_bytes);
 }
 
 void release_carrier(
@@ -469,9 +573,19 @@ void release_carrier(
         g_envdiffuse_pack_ready = false;
         g_pack.clear();
         g_envdiffuse_pack.clear();
+        g_v371_diffuse_creation_sha.clear();
+        g_v371_diffuse_names.clear();
+        g_v371_legacy_by_view.clear();
+        g_v371_legacy_rgba={};
+        g_v371_legacy_logged.store(0u,std::memory_order_relaxed);
+        g_v371_bound_logged.store(0u,std::memory_order_relaxed);
 
         g_native_resources.clear();
         g_resource_by_view.clear();
+        g_native_diffuse_resources.clear();
+        g_diffuse_by_view.clear();
+        g_native_diffuse_hashes = {};
+        g_native_diffuse_atlas_ready = false;
         g_device = nullptr;
     }
 
@@ -523,6 +637,11 @@ void on_init_device(
             env::k_legacy_envspec_probe_count);
         g_resource_by_view.reserve(
             env::k_legacy_envspec_probe_count * 2u);
+        g_native_diffuse_resources.reserve(env::k_native_envdiffuse_count);
+        g_diffuse_by_view.reserve(env::k_native_envdiffuse_count * 2u);
+        g_v371_diffuse_creation_sha.reserve(256u);
+        g_v371_diffuse_names.reserve(256u);
+        g_v371_legacy_by_view.reserve(64u);
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
@@ -530,14 +649,21 @@ void on_init_device(
             env::k_legacy_envspec_probe_count);
     }
 
+    env::native_diffuse_hash_atlas native_diffuse_atlas{};
+    const bool native_diffuse_ready =
+        load_native_diffuse_hash_atlas(native_diffuse_atlas);
     std::vector<std::uint8_t> pack;
     const bool pack_ready =
         load_pack(pack);
     std::vector<std::uint8_t>
         envdiffuse_pack;
     const bool envdiffuse_pack_ready =
-        load_envdiffuse_pack(
-            envdiffuse_pack);
+        load_envdiffuse_pack(envdiffuse_pack);
+    std::array<std::vector<std::uint8_t>,2u> v371_assets{};
+    for(std::size_t i=0;i<v371_assets.size();++i)
+        v371_load_exact_legacy_asset(
+            operators::env_spec::k_v364_m18_legacy_envdiffuse[i],
+            v371_assets[i]);
 
     sampler_desc desc{};
     desc.filter =
@@ -575,10 +701,13 @@ void on_init_device(
             replaced_sampler = g_sampler;
             g_pack = std::move(pack);
             g_pack_ready = pack_ready;
+            g_native_diffuse_hashes = native_diffuse_atlas;
+            g_native_diffuse_atlas_ready = native_diffuse_ready;
             g_envdiffuse_pack =
                 std::move(envdiffuse_pack);
             g_envdiffuse_pack_ready =
                 envdiffuse_pack_ready;
+            g_v371_legacy_rgba=std::move(v371_assets);
             g_sampler = created_sampler;
             g_sampler_ready = sampler_ready;
             adopted = true;
@@ -598,6 +727,14 @@ void on_init_device(
         device_ptr->destroy_sampler(
             replaced_sampler);
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    reshade::log::message(
+        native_diffuse_ready ? reshade::log::level::info :
+                               reshade::log::level::warning,
+        native_diffuse_ready
+            ? "[DSRRL ENVDIFFUSE ID] independently authenticated t11/t13 atlas ready."
+            : "[DSRRL ENVDIFFUSE ID] missing/invalid native t11/t13 atlas: exact diffuse fails open.");
+#endif
     if (pack_ready)
         ++g_pack_admit_ok;
     else
@@ -646,53 +783,59 @@ void on_init_resource(
     resource_usage,
     resource resource_handle)
 {
-    if (device_ptr == nullptr ||
-        resource_handle.handle == 0u ||
-        !is_native_envspec_desc(desc))
-        return;
-
+    if (device_ptr == nullptr || resource_handle.handle == 0u) return;
+    const bool spec = is_native_envspec_desc(desc);
+    const bool diffuse = is_native_envdiffuse_desc(desc);
+    if (!spec && !diffuse) return;
     {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-        if (device_ptr != g_device)
-            return;
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (device_ptr != g_device) return;
     }
-
-    ++g_native_candidates;
-
+    if (spec) ++g_native_candidates;
     std::vector<std::uint8_t> tight;
-    if (!extract_tight_bc6h(
-            desc,
-            initial_data,
-            tight)) {
-        ++g_native_hash_miss;
+    if (!extract_tight_bc6h(desc, initial_data, tight)) {
+        if (spec) ++g_native_hash_miss;
         return;
     }
-
-    const auto digest =
-        hashing::sha256(
-            tight.data(),
-            tight.size());
-
-    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
-
+    const auto digest = hashing::sha256(tight.data(),tight.size());
+    // Creation SHA and TLS source are recorded on the exact native t11 producer.
+    // Neither a matching name alone nor EnvSpec t12 may authorize this path.
+    if(diffuse) {
+        gi_envdif_name_witness::identity witness{};
+        const bool named=gi_envdif_name_witness::capture(witness);
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            if(device_ptr==g_device && g_v371_diffuse_creation_sha.size()<4096u) {
+                g_v371_diffuse_creation_sha[resource_handle.handle]=digest;
+                if(named) {
+                    witness.stage=1u;
+                    v371_record_name_locked(resource_handle.handle,witness);
+                }
+            }
+        } catch(...) {}
+    }
+    std::optional<std::uint16_t> probe;
+    if (spec) {
+        probe = env::legacy_native_probe_for_sha(digest);
+    } else {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (device_ptr != g_device) return;
+        if (g_native_diffuse_atlas_ready)
+            probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
+    }
     if (!probe.has_value()) {
-        ++g_native_hash_miss;
+        if (spec) ++g_native_hash_miss;
         return;
     }
-
     {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-        g_native_resources[
-            resource_handle.handle] = {
-                probe.value()
-            };
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (device_ptr != g_device) return;
+        if (spec)
+            g_native_resources[resource_handle.handle] = {probe.value()};
+        else
+            g_native_diffuse_resources[resource_handle.handle] = {probe.value()};
     }
-
-    ++g_native_matches;
+    if (spec) ++g_native_matches;
 }
 
 void on_destroy_resource(
@@ -711,10 +854,21 @@ void on_destroy_resource(
 
     g_native_resources.erase(
         resource_handle.handle);
+    g_native_diffuse_resources.erase(resource_handle.handle);
 
     g_snapshot_epoch.fetch_add(
         1u,
         std::memory_order_release);
+    // Keep the V358 protected lifetime-retirement anchor intact.
+    // V371 independent t11 records are retired in the same locked callback.
+    g_v371_diffuse_creation_sha.erase(resource_handle.handle);
+    g_v371_diffuse_names.erase(resource_handle.handle);
+    for(auto it=g_v371_legacy_by_view.begin();
+        it!=g_v371_legacy_by_view.end();) {
+        if(it->second.resource_handle==resource_handle.handle)
+            it=g_v371_legacy_by_view.erase(it);
+        else ++it;
+    }
 
     for (auto it =
              g_resource_by_view.begin();
@@ -726,6 +880,11 @@ void on_destroy_resource(
                     it);
         else
             ++it;
+    }
+    for (auto it=g_diffuse_by_view.begin();it!=g_diffuse_by_view.end();) {
+        if (it->second.resource_handle == resource_handle.handle)
+            it=g_diffuse_by_view.erase(it);
+        else ++it;
     }
 }
 
@@ -753,9 +912,41 @@ void on_init_resource_view(
     const auto native =
         g_native_resources.find(
             resource_handle.handle);
-    if (native ==
-        g_native_resources.end())
+    if(g_v371_diffuse_creation_sha.count(resource_handle.handle)!=0u &&
+       device_ptr->get_api()==device_api::d3d11) {
+        gi_envdif_name_witness::identity name{};
+        if(gi_envdif_name_witness::capture(name)) {
+            auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
+                static_cast<std::uintptr_t>(view.handle));
+            ID3D11Resource *backing=nullptr;
+            ID3D11Device *dev=nullptr;
+            srv->GetResource(&backing);
+            srv->GetDevice(&dev);
+            bool valid=backing!=nullptr && dev!=nullptr &&
+                reinterpret_cast<std::uintptr_t>(backing)==
+                    static_cast<std::uintptr_t>(resource_handle.handle) &&
+                reinterpret_cast<std::uintptr_t>(dev)==
+                    static_cast<std::uintptr_t>(device_ptr->get_native());
+            if(backing)backing->Release();
+            if(dev)dev->Release();
+            if(valid) {
+                name.stage=2u;
+                v371_record_name_locked(resource_handle.handle,name);
+            }
+        }
+    }
+    const auto *legacy=v371_exact_resource_locked(resource_handle.handle);
+    if(legacy)
+        g_v371_legacy_by_view[view.handle]={
+            resource_handle.handle,legacy->selector};
+
+    if (native == g_native_resources.end()) {
+        const auto diffuse = g_native_diffuse_resources.find(resource_handle.handle);
+        if (diffuse == g_native_diffuse_resources.end()) return;
+        g_diffuse_by_view[view.handle] = {
+            resource_handle.handle, diffuse->second.probe_ordinal};
         return;
+    }
 
     g_resource_by_view[
         view.handle] = {
@@ -784,8 +975,10 @@ void on_destroy_resource_view(
     if (device_ptr != g_device)
         return;
 
-    if (g_resource_by_view.erase(
-            view.handle) != 0u)
+    const bool spec_removed = g_resource_by_view.erase(view.handle) != 0u;
+    const bool diff_removed = g_diffuse_by_view.erase(view.handle) != 0u;
+    const bool legacy_removed=g_v371_legacy_by_view.erase(view.handle)!=0u;
+    if (spec_removed || diff_removed || legacy_removed)
         g_snapshot_epoch.fetch_add(
             1u,
             std::memory_order_release);
@@ -1178,16 +1371,104 @@ bool get_ptde_cube(
 }
 
 
+
+bool get_v371_ptde_legacy_envdiffuse_cube(
+    std::uint16_t selector,resource_view &view) noexcept
+{
+    view={};
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    (void)selector;
+    return false;
+#else
+    const auto *entry=operators::env_spec::v364_legacy_by_selector(selector);
+    if(!entry)return false;
+    const unsigned index=selector==500u?0u:1u;
+    device *device_ptr=nullptr;
+    std::vector<std::uint8_t> bytes;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if(g_device==nullptr || !g_sampler_ready ||
+           g_v371_legacy_rgba[index].size()!=entry->bytes)
+            return false;
+        device_ptr=g_device;
+        const auto existing=g_ptde_envdiffuse_cubes.find(selector);
+        if(existing!=g_ptde_envdiffuse_cubes.end()) {
+            view=existing->second.view;
+            return view.handle!=0u;
+        }
+        bytes=g_v371_legacy_rgba[index];
+    }
+    const unsigned face_bytes=entry->edge*entry->edge*4u;
+    std::array<subresource_data,k_faces> subresources{};
+    for(unsigned face=0u;face<k_faces;++face) {
+        subresources[face].data=bytes.data()+face*face_bytes;
+        subresources[face].row_pitch=entry->edge*4u;
+        subresources[face].slice_pitch=face_bytes;
+    }
+    const resource_desc desc(
+        resource_type::texture_2d,entry->edge,entry->edge,k_faces,1u,
+        format::r8g8b8a8_unorm,1u,memory_heap::default_,
+        resource_usage::shader_resource,resource_flags::cube_compatible);
+    rgba_cube cube{};
+    if(!device_ptr->create_resource(
+        desc,subresources.data(),resource_usage::shader_resource,
+        &cube.texture))return false;
+    const resource_view_desc view_desc(
+        resource_view_type::texture_cube,format::r8g8b8a8_unorm,
+        0u,1u,0u,k_faces);
+    if(!device_ptr->create_resource_view(
+        cube.texture,resource_usage::shader_resource,view_desc,
+        &cube.view)) {
+        device_ptr->destroy_resource(cube.texture);
+        return false;
+    }
+    bool still_alive=false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        still_alive=g_device==device_ptr &&
+            g_v371_legacy_rgba[index].size()==entry->bytes;
+        if(still_alive) {
+            const auto result=g_ptde_envdiffuse_cubes.emplace(
+                selector,cube);
+            view=result.first->second.view;
+            if(result.second) {
+                if(g_v371_legacy_logged.fetch_or(
+                    1u<<index,std::memory_order_relaxed)==0u) {
+                    char line[240]{};
+                    std::snprintf(line,sizeof(line),
+                        "[DSRRL V371 PTDE LEGACY ENVDIFFUSE CUBE]"
+                        " name=%s selector=%u edge=%u"
+                        " carrier=EXACT_ORIGINAL_PTDE_RGBA"
+                        " envspec=UNCHANGED pixel=OPEN",
+                        entry->dsr_name,
+                        static_cast<unsigned>(selector),entry->edge);
+                    reshade::log::message(reshade::log::level::info,line);
+                }
+            } else {
+                still_alive=false; // discard duplicate cube, return existing
+            }
+        }
+    }
+    if(!still_alive) {
+        device_ptr->destroy_resource_view(cube.view);
+        device_ptr->destroy_resource(cube.texture);
+    }
+    return view.handle!=0u;
+#endif
+}
+
 bool get_ptde_envdiffuse_cube(
     std::uint16_t probe,
     resource_view &view) noexcept
 {
     view = {};
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
     (void)probe;
     return false;
 #else
+    if(operators::env_spec::v364_legacy_by_selector(probe))
+        return get_v371_ptde_legacy_envdiffuse_cube(probe,view);
     if (probe >=
             env::k_legacy_envspec_probe_count)
         return false;
@@ -1676,6 +1957,81 @@ bool envspec_resource_runtime::prepare_native_dsr(
 }
 
 
+bool envspec_resource_runtime::prepare_envdiffuse_bound(
+    ID3D11ShaderResourceView *stock_t11,
+    ID3D11ShaderResourceView *stock_t13,
+    bool probe_b_required,
+    prepared_envdiffuse_resources &prepared) noexcept
+{
+    prepared = {};
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    (void)stock_t11; (void)stock_t13; (void)probe_b_required;
+    return false;
+#else
+    if (stock_t11 == nullptr ||
+        (probe_b_required && stock_t13 == nullptr)) return false;
+    std::uint16_t a=0u,b=0u;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (g_device == nullptr) return false;
+        const auto resolve = [](ID3D11ShaderResourceView *view,
+                                std::uint16_t &id) noexcept -> bool {
+            if (view == nullptr) return false;
+            const auto key = static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(view));
+            const auto found = g_diffuse_by_view.find(key);
+            if(found!=g_diffuse_by_view.end()) {
+                id=found->second.probe_ordinal;
+                return id<env::k_native_envdiffuse_count;
+            }
+            const auto legacy=g_v371_legacy_by_view.find(key);
+            if(legacy==g_v371_legacy_by_view.end() || g_device==nullptr)
+                return false;
+            ID3D11Resource *actual_backing=nullptr;
+            ID3D11Device *actual_device=nullptr;
+            view->GetResource(&actual_backing);
+            view->GetDevice(&actual_device);
+            const auto backing_key=static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(actual_backing));
+            const auto *expected=v371_exact_resource_locked(
+                legacy->second.resource_handle);
+            const bool exact=actual_backing!=nullptr &&
+                actual_device!=nullptr &&
+                backing_key==legacy->second.resource_handle &&
+                reinterpret_cast<std::uintptr_t>(actual_device)==
+                    static_cast<std::uintptr_t>(g_device->get_native()) &&
+                expected!=nullptr &&
+                expected->selector==legacy->second.probe_ordinal;
+            if(actual_backing)actual_backing->Release();
+            if(actual_device)actual_device->Release();
+            if(!exact)return false;
+            id=legacy->second.probe_ordinal;
+            return true;
+        };
+        if (!resolve(stock_t11,a) ||
+            (probe_b_required && !resolve(stock_t13,b))) return false;
+        if (!probe_b_required) b=a;
+    }
+    const bool ready=prepare_envdiffuse(a,b,probe_b_required,prepared);
+    if(ready && a>=env::k_legacy_envspec_probe_count) {
+        const unsigned bit=a==500u?1u:2u;
+        const auto old=g_v371_bound_logged.fetch_or(
+            bit,std::memory_order_relaxed);
+        if((old&bit)==0u) {
+            char line[220]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V371 LEGACY T11 RESOURCE READY]"
+                " selector=%u class=LEGACY_EXACT"
+                " native_sha_name_com=PASS donor=PTDE_RGBA"
+                " gpu=PREPARED owner_shader_bind=OPEN pixel=OPEN",
+                static_cast<unsigned>(a));
+            reshade::log::message(reshade::log::level::info,line);
+        }
+    }
+    return ready;
+#endif
+}
+
 bool envspec_resource_runtime::prepare_envdiffuse(
     std::uint16_t probe_a,
     std::uint16_t probe_b,
@@ -1684,17 +2040,20 @@ bool envspec_resource_runtime::prepare_envdiffuse(
 {
     prepared = {};
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
     (void)probe_a;
     (void)probe_b;
     (void)probe_b_required;
     return false;
 #else
-    if (probe_a >=
-            env::k_legacy_envspec_probe_count ||
-        probe_b >=
-            env::k_legacy_envspec_probe_count)
-        return false;
+    const auto known=[](std::uint16_t n) noexcept {
+        return n<env::k_legacy_envspec_probe_count ||
+            operators::env_spec::v364_legacy_by_selector(n)!=nullptr;
+    };
+    if(!known(probe_a) || !known(probe_b))return false;
+    if(probe_b_required &&
+       ((probe_a>=env::k_legacy_envspec_probe_count) !=
+        (probe_b>=env::k_legacy_envspec_probe_count)))return false;
 
     resource_view a_view{};
     resource_view b_view{};
@@ -1730,9 +2089,12 @@ bool envspec_resource_runtime::prepare_envdiffuse(
     {
         std::lock_guard<std::mutex> lock(
             g_mutex);
+        const bool needs_pack=
+            probe_a<env::k_legacy_envspec_probe_count ||
+            (probe_b_required && probe_b<env::k_legacy_envspec_probe_count);
         if (!g_sampler_ready ||
             g_sampler.handle == 0u ||
-            !g_envdiffuse_pack_ready)
+            (needs_pack && !g_envdiffuse_pack_ready))
             return false;
 
         sampler_native =

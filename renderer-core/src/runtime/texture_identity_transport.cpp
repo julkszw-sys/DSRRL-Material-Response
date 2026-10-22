@@ -6,11 +6,14 @@
 #endif
 
 #include "dsrrl/runtime/texture_identity_transport.hpp"
+#include <reshade.hpp>
 
 #include <Windows.h>
 #include <bcrypt.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdio>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -23,10 +26,14 @@
 
 extern "C" void dsrrl_texture_name_hook_entry();
 extern "C" void dsrrl_texture_name_clear_hook_entry();
+extern "C" void dsrrl_gi_reflection_branch_entry();
 
 extern "C" {
 void *g_dsrrl_texture_name_resume = nullptr;
 void *g_dsrrl_texture_name_clear_resume = nullptr;
+void *g_dsrrl_gi_reflection_resume = nullptr;
+void *g_dsrrl_gi_reflection_format_name = nullptr;
+void *g_dsrrl_gi_reflection_format_call = nullptr;
 }
 
 namespace dsrrl::runtime::texture_identity_transport {
@@ -37,6 +44,13 @@ constexpr char k_exe_sha256[] =
 
 constexpr std::uintptr_t k_name_rva = 0x583AA6u;
 constexpr std::uintptr_t k_clear_rva = 0x583E81u;
+constexpr std::uintptr_t k_gi_reflection_branch_rva = 0x2017F4u;
+constexpr std::uintptr_t k_gi_reflection_format_rva = 0x12E9D40u;
+constexpr std::uintptr_t k_gi_reflection_formatter_rva = 0x0CF290u;
+// Only r14d==5 enters this 17-byte format-call sequence.
+constexpr std::array<std::uint8_t,17> k_gi_reflection_branch_bytes = {
+  0x44,0x89,0x7C,0x24,0x20,0x48,0x8D,0x15,0x40,0x85,0x0E,0x01,
+  0xE8,0x8B,0xDA,0xEC,0xFF};
 
 constexpr std::array<std::uint8_t,14> k_name_bytes = {
     0x4C,0x8D,0x75,0xE7,0x48,0x83,0x7D,0xFF,0x08,0x4C,0x0F,0x43,0x75,0xE7
@@ -55,7 +69,8 @@ struct hook {
 };
 
 std::uintptr_t g_base = 0;
-hook g_name{}, g_clear{};
+hook g_name{}, g_clear{}, g_gi_reflection{};
+std::atomic<std::uint64_t> g_gi_reflection_branch_hits{0u};
 hook_status g_status{};
 constexpr std::size_t k_logical_name_capacity = 512u;
 thread_local std::array<wchar_t,k_logical_name_capacity + 1u>
@@ -459,6 +474,41 @@ void capture_name(
 
 } // namespace
 
+extern "C" void dsrrl_gi_reflection_branch_observer(
+    std::uint32_t packed_subarea, std::uint32_t local_id,
+    const wchar_t *mapstem) noexcept
+{
+    const auto count = g_gi_reflection_branch_hits.fetch_add(
+        1u, std::memory_order_relaxed) + 1u;
+    if (count > 12u && count % 65536u != 0u)
+        return;
+    char observed_stem[40]{};
+    bool stem_exact=false;
+    if (mapstem!=nullptr) {
+        for(std::size_t i=0u;i<sizeof(observed_stem)-1u;++i) {
+            if(!readable_range(mapstem+i,sizeof(wchar_t))) break;
+            const auto ch=mapstem[i];
+            if(ch==L'\0') {stem_exact=true;break;}
+            if((ch>=L'A'&&ch<=L'Z')||(ch>=L'a'&&ch<=L'z')||
+               (ch>=L'0'&&ch<=L'9')||ch==L'_'||ch==L'-')
+                observed_stem[i]=static_cast<char>(ch);
+            else break;
+        }
+    }
+    char line[350]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V230 GI REFLECTION PRODUCER] stage=RETAIL_FORMAT_BRANCH"
+        " class=GI_Reflection selector=5 subarea=%u local=%u packed=%u"
+        " mapstem=%.39s stem_exact=%u"
+        " hit=%llu source_to_native_join=NOT_ESTABLISHED"
+        " action=OBSERVE_ONLY_NO_ALIAS",
+        packed_subarea,local_id,
+        packed_subarea*10000u+local_id,
+        observed_stem,stem_exact?1u:0u,
+        static_cast<unsigned long long>(count));
+    reshade::log::message(reshade::log::level::warning,line);
+}
+
 extern "C" void
 dsrrl_texture_name_observer(
     const wchar_t *logical_name) noexcept
@@ -522,6 +572,25 @@ bool install() noexcept
 
     g_status.name_hook_armed = true;
     g_status.clear_hook_armed = true;
+#if defined(DSRRL_V230_GI_REFLECTION_SOURCE_BRANCH)
+    // Separate guarded observational hook: failure cannot revoke the existing
+    // exact texture identity producer, and cannot authorize any GPU probe.
+    if (prepare_hook(g_gi_reflection,k_gi_reflection_branch_rva,
+          k_gi_reflection_branch_bytes,
+          reinterpret_cast<void *>(&dsrrl_gi_reflection_branch_entry))) {
+        g_dsrrl_gi_reflection_resume = reinterpret_cast<std::uint8_t *>(
+            g_gi_reflection.target)+g_gi_reflection.stolen;
+        g_dsrrl_gi_reflection_format_name = reinterpret_cast<void *>(
+            g_base+k_gi_reflection_format_rva);
+        g_dsrrl_gi_reflection_format_call = reinterpret_cast<void *>(
+            g_base+k_gi_reflection_formatter_rva);
+        g_status.gi_reflection_branch_armed=arm(g_gi_reflection);
+    }
+    reshade::log::message(reshade::log::level::warning,
+      g_status.gi_reflection_branch_armed
+        ? "[DSRRL V230 GI REFLECTION SOURCE HOOK] status=ARMED exact_exe=1 branch_rva=0x2017f4 selector=5 purpose=DIAG_ONLY"
+        : "[DSRRL V230 GI REFLECTION SOURCE HOOK] status=FAIL_OPEN branch_byte_or_patch_mismatch");
+#endif
     return true;
 
 fail:
@@ -531,13 +600,15 @@ fail:
 
 void uninstall() noexcept
 {
+    const bool gi_ok = restore(g_gi_reflection);
     const bool clear_ok =
         restore(g_clear);
     const bool name_ok =
         restore(g_name);
 
-    if (!clear_ok || !name_ok) {
+    if (!gi_ok || !clear_ok || !name_ok) {
         g_status.restore_failed = true;
+        g_status.gi_reflection_branch_armed = g_gi_reflection.patched;
         g_status.name_hook_armed =
             g_name.patched;
         g_status.clear_hook_armed =
@@ -545,6 +616,9 @@ void uninstall() noexcept
         return;
     }
 
+    g_dsrrl_gi_reflection_resume = nullptr;
+    g_dsrrl_gi_reflection_format_name = nullptr;
+    g_dsrrl_gi_reflection_format_call = nullptr;
     g_dsrrl_texture_name_resume = nullptr;
     g_dsrrl_texture_name_clear_resume = nullptr;
     g_logical_name_length = 0u;

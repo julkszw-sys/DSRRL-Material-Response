@@ -43,6 +43,13 @@ struct pmetal_rgba_materialize_outcome {
     bool envdiffuse_linear_consumer_diag = false;
 };
 
+// V370: original full PTDE EnvDiffuse equation extracted from old coupled
+// P_Metal Stable shader. Builds a separate stock-EnvSpec private DXBC.
+bool materialize_ptde_envdiffuse_stable_only(
+    const std::uint8_t *stock, std::size_t n,
+    std::vector<std::uint8_t> &out,
+    std::uint32_t &receiver_id) noexcept;
+
 pmetal_rgba_materialize_outcome
 materialize_pmetal_rgba_receiver(
     const core::feature_registry &features,
