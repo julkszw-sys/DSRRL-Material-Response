@@ -1,0 +1,169 @@
+name: R44 Main-Profile Runtime
+
+on:
+  pull_request:
+    paths:
+      - "renderer-core/include/dsrrl/runtime/flver_identity_registry.hpp"
+      - "renderer-core/src/runtime/flver_identity_registry.cpp"
+      - "renderer-core/src/runtime/flver_engine_hooks.cpp"
+      - "renderer-core/tests/flver_identity_registry_tests.cpp"
+      - "renderer-core/tests/islands_phase1_tests.cpp"
+      - "renderer-core/tools/audit_runtime_v2_hotpaths.py"
+      - "renderer-core/tools/verify_operator_catalog.py"
+      - "renderer-core/data/operator_catalog_v1.json"
+      - "renderer-core/src/operator_catalog.cpp"
+      - "runtime-v1/include/dsrrl/runtime/feature_manifest.hpp"
+      - "runtime-v1/tests/feature_manifest_tests.cpp"
+      - ".github/workflows/renderer-core-islands.yml"
+      - ".github/workflows/r44-main-profile-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Resolve exact source identity
+        shell: pwsh
+        run: |
+          $commit = (git rev-parse HEAD).Trim()
+          "DSRRL_CHECKOUT_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify exact main baseline and R44-only delta
+        shell: pwsh
+        run: |
+          $base = "fa2a2af00b57b0f1d38f8433731837f4406878d3"
+          git merge-base --is-ancestor $base HEAD
+          if ($LASTEXITCODE -ne 0) { throw "R44 HEAD is not descended from exact audited main $base" }
+          $global:LASTEXITCODE = 0
+          $allowed = @(
+            '^renderer-core/include/dsrrl/runtime/flver_identity_registry\.hpp$',
+            '^renderer-core/src/runtime/flver_identity_registry\.cpp$',
+            '^renderer-core/src/runtime/flver_engine_hooks\.cpp$',
+            '^renderer-core/tests/flver_identity_registry_tests\.cpp$',
+            '^renderer-core/tests/islands_phase1_tests\.cpp$',
+            '^renderer-core/tools/audit_runtime_v2_hotpaths\.py$',
+            '^renderer-core/tools/verify_operator_catalog\.py$',
+            '^renderer-core/data/operator_catalog_v1\.json$',
+            '^renderer-core/src/operator_catalog\.cpp$',
+            '^runtime-v1/include/dsrrl/runtime/feature_manifest\.hpp$',
+            '^runtime-v1/tests/feature_manifest_tests\.cpp$',
+            '^\.github/workflows/renderer-core-islands\.yml$',
+            '^\.github/workflows/r44-main-profile-runtime\.yml$'
+          )
+          $changed = @(git diff --name-only "$base..HEAD")
+          foreach ($file in $changed) {
+            $ok = $false
+            foreach ($pattern in $allowed) {
+              if ($file -match $pattern) { $ok = $true; break }
+            }
+            if (-not $ok) { throw "Non-R44 file changed relative to audited main: $file" }
+          }
+          Write-Host "R44_EXACT_MAIN_DELTA_PASS changed=$($changed.Count)"
+
+      - name: Checkout pinned ReShade API
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+
+      - name: Audit R44 hot path
+        shell: pwsh
+        run: |
+          python renderer-core/tools/audit_runtime_v2_hotpaths.py renderer-core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Configure exact main visual profile plus R44 source
+        shell: pwsh
+        run: >
+          cmake
+          -S renderer-core/integrated
+          -B build-r44-main-profile
+          -A x64
+          -DRESHADE_INCLUDE_DIR="${{ github.workspace }}/_reshade/include"
+          -DDSRRL_SOURCE_COMMIT="$env:DSRRL_CHECKOUT_COMMIT"
+          -DDSRRL_BUILD_FLAVOR="r44_main_profile_perf"
+          -DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF
+          -DDSRRL_DOF_DEFAULT_ON=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R3=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R4=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R5=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R6=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT=ON
+          -DDSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL=ON
+          -DDSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW=ON
+          -DDSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE=ON
+          -DDSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE=ON
+
+      - name: Verify exact main visual profile
+        shell: pwsh
+        run: |
+          $cache = Get-Content build-r44-main-profile/CMakeCache.txt -Raw
+          foreach ($required in @(
+            "DSRRL_FULL_TELEMETRY_DEFAULT_ON:BOOL=OFF",
+            "DSRRL_DOF_DEFAULT_ON:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R3:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R4:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R5:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R6:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R8_PRE_AB:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R11_COMMON_MERGE:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R15_PTDE_LIVEOUT_PAIR:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R16_LEGACY_DIFFUSE_SPLIT:BOOL=ON",
+            "DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL:BOOL=ON",
+            "DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW:BOOL=ON",
+            "DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE:BOOL=ON",
+            "DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE:BOOL=ON"
+          )) {
+            if ($cache -notmatch [regex]::Escape($required)) { throw "Missing exact main profile flag: $required" }
+          }
+
+      - name: Build R44 main-profile addon
+        shell: pwsh
+        run: |
+          cmake --build build-r44-main-profile --config Release --target dsrrl_renderer_core_integrated
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $addons = @(Get-ChildItem build-r44-main-profile -Recurse -Filter *.addon64)
+          if ($addons.Count -ne 1) { throw "Expected exactly one addon, found $($addons.Count)" }
+          Copy-Item $addons[0].FullName "DSRRL_R44_MAIN_PROFILE.addon64" -Force
+
+      - name: Verify binary visual lineage
+        shell: pwsh
+        run: |
+          $path = "DSRRL_R44_MAIN_PROFILE.addon64"
+          $ascii = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($path))
+          foreach ($required in @(
+            $env:DSRRL_CHECKOUT_COMMIT,
+            "r44_main_profile_perf",
+            "[DSRRL PMETAL R19 LERP]",
+            "[DSRRL PMETAL R7 SHADOW]",
+            "[DSRRL PMETAL R3 SPEC ATTEST]",
+            "[DSRRL POINTLIGHT R43-DRAWPARAM]",
+            "[DSRRL DoF R43-DRAWPARAM]",
+            "[DSRRL PMETAL R43] producer_cache=SET256_WAY2"
+          )) {
+            if (-not $ascii.Contains($required)) { throw "Missing required main visual-lineage marker: $required" }
+          }
+          $sha = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "R44_MAIN_PROFILE_SHA256=$sha"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_R44_MAIN_PROFILE
+          path: DSRRL_R44_MAIN_PROFILE.addon64
+          if-no-files-found: error

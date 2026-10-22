@@ -8,7 +8,8 @@
       "project.materialization.ptde_specrgb_bridge_full24_stable_hemenv_v1",
       "project.renderer.equipment_diffuse_bridge_architecture_v1",
       "project.renderer.equipment_normal_material_route_gate_v1",
-      "project.renderer.material_response_single_addon_subsurf_normal_diffuse_v1"
+      "project.renderer.material_response_single_addon_subsurf_normal_diffuse_v1",
+      "renderer.dof.ptde_pass03_pass10_exact_routing_v1"
     ]
   },
   "architecture_contract": {
@@ -632,6 +633,39 @@
       "default_port_state": "ACTIVE",
       "fail_open_behavior": "PRESERVE_PRIOR_CORE_ROUTE",
       "operator_id": "pmetal_black_safe_v10"
+    },
+    {
+      "status": "CONFIRMED",
+      "metadata": {
+        "carrier": "PARAM+COMPOSITE",
+        "receiver": "ImageProcessDof_Flat",
+        "live_drawparam_source": "CONFIRMED_REV11642",
+        "exact_closed_passes": [
+          "0x03",
+          "0x10"
+        ],
+        "remaining_open": [
+          "0x00",
+          "0x01",
+          "0x02",
+          "0x0D",
+          "0x0E",
+          "0x0F"
+        ],
+        "sampler_state_rule": "PRESERVE_EXACT_PER_PASS_LIFETIME",
+        "current_runtime_mapping": "PARTIAL_RECONSTRUCTION",
+        "pixel_behavior": "OPEN",
+        "default_on": false
+      },
+      "description": "Partial PTDE DoF postprocess reconstruction. Live selected DoFBank rows are the source carrier; exact pass03/pass10 routing is confirmed while the remaining PTDE pass graph is still open. Keep hold-off/fail-open to stock DSR until the complete graph closes.",
+      "display_name": "PTDE DoF postprocess reconstruction",
+      "operator_key": "post.dof_ptde",
+      "canonical_key": "renderer.dof.ptde_pass03_pass10_exact_routing_v1",
+      "operator_class": "POSTPROCESS_DOF",
+      "canonical_revision": 11694,
+      "default_port_state": "PARTIAL",
+      "fail_open_behavior": "STOCK_DSR",
+      "operator_id": "post_dof_ptde"
     }
   ]
 }

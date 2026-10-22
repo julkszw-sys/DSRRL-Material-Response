@@ -82,7 +82,9 @@ k_runtime_feature_manifest = {{
     {core::operator_id::pmetal_black_safe_source,
      runtime_feature_stage::current_wired,runtime_boot_policy::runtime_preflight,"pmetal_black_safe_source"},
     {core::operator_id::pmetal_black_safe_v10,
-     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"pmetal_black_safe_v10"}
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"pmetal_black_safe_v10"},
+    {core::operator_id::post_dof_ptde,
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"post_dof_ptde"}
 }};
 
 constexpr bool runtime_feature_manifest_is_ordered_complete() noexcept
@@ -176,5 +178,8 @@ static_assert(
 static_assert(
     runtime_feature_needs_boot_preflight(core::operator_id::pmetal_black_safe_source),
     "P_Metal black-safe source must remain fail-open OFF until the V13 producer guard passes.");
+static_assert(
+    !runtime_feature_boot_enabled(core::operator_id::post_dof_ptde),
+    "PTDE DoF remains fail-open OFF while exact pass routing and pixel equivalence are open.");
 
 } // namespace dsrrl::runtime
