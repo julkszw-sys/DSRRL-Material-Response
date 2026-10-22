@@ -9,6 +9,7 @@ decl=(r/'include/dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp').read_te
 build=(r/'tools/build_v230_envdiffuse_cinematic_trace.ps1').read_text('utf8')
 integrated=(r/'integrated/integrated_addon.cpp').read_text('utf8')
 cmake=(r/'integrated/CMakeLists.txt').read_text('utf8')
+cleanup=(r/'tools/materialize_v230_release_cleanup.py').read_text('utf8')
 for key in (
     'k_stock_bytes=19556u','k_candidate_bytes=k_stock_bytes+48u',
     '0xd6,0x03,0x8d,0xe4','k_dsr_t11_sample','k_dsr_source',
@@ -47,6 +48,12 @@ assert '#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)' in pre_early
 assert 'classic_envdiffuse_rx34_v365::materialize(' in pre_early
 assert 'stage=EXACT_SOURCE_CREATED' in pre_early
 assert 'shader_bind=NO pixel=OPEN' in pre_early
+assert 'v365_island_logged.exchange(' in pre_early
+assert 'DSRRL V365 CLASSIC RX34 SHADER ISLAND' in cleanup
+assert 'reshade::log::level::info' in pre_early
+# Never allow the release logging cleanup to erase the ONLY remaining
+# side effect of candidate materialization and dead-strip the entire island.
+assert 'if not any(w in args for w in essential):' in cleanup
 v365_live=pre_early
 assert 'g_core.features().enabled' not in v365_live
 assert 'pixel_shader->code =' not in v365_live
