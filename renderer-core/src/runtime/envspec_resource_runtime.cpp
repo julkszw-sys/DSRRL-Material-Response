@@ -733,17 +733,40 @@ void v359_log_t11_creation(const char *stage,
         initial_data[0].data != nullptr ? 1u:0u;
     const unsigned row0=initial_data != nullptr ?
         initial_data[0].row_pitch : 0u;
-    char line[560]{};
+    // Capture the original retail loader's thread-local producer hint at
+    // this exact resource-create callback. It is NOT a device/resource join.
+    // In particular, an active TLS value may refer to a different creation
+    // path. No name from this witness can authorize probe identity.
+    const auto hook=texture_identity_transport::status();
+    const wchar_t *tls_name=nullptr;
+    std::size_t tls_len=0u;
+    const bool tls_present=texture_identity_transport::snapshot_raw(
+        tls_name,tls_len);
+    char printable_tls[97]{};
+    if(tls_present && tls_name!=nullptr) {
+        const auto limit=std::min(tls_len,sizeof(printable_tls)-1u);
+        for(std::size_t i=0u;i<limit;++i) {
+            const auto ch=tls_name[i];
+            printable_tls[i]=(ch>=33 && ch<=126)
+                ?static_cast<char>(ch):'?';
+        }
+    }
+    char line[900]{};
     std::snprintf(line,sizeof(line),
         "[DSRRL V359 T11 CREATE SHA]"
         " stage=%s resource=%016llx initial=%u face0=%u pitch0=%u"
         " w=%u h=%u mips=%u array=%u fmt=%u"
-        " sha256=%s probe=%d action=READ_ONLY",
+        " sha256=%s probe=%d"
+        " tls_hooks=%u tls_present=%u tls_name=%.96s"
+        " tls_scope=THREAD_HINT_NOT_NATIVE_RESOURCE_PROOF"
+        " action=READ_ONLY",
         stage,static_cast<unsigned long long>(handle.handle),
         initial_data!=nullptr?1u:0u,face0,row0,
         desc.texture.width,desc.texture.height,
         desc.texture.levels,desc.texture.depth_or_layers,
-        static_cast<unsigned>(desc.texture.format),sha,probe);
+        static_cast<unsigned>(desc.texture.format),sha,probe,
+        hook.name_hook_armed && hook.clear_hook_armed ? 1u:0u,
+        tls_present?1u:0u,printable_tls);
     reshade::log::message(reshade::log::level::warning,line);
 }
 #endif
