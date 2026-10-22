@@ -4158,7 +4158,13 @@ bool on_create_pipeline(
         if(v365_result==
             dsrrl::operators::env_spec::
                 classic_envdiffuse_rx34_v365::result::candidate_ready) {
-            reshade::log::message(reshade::log::level::info,
+            // One log per process, even if the engine recreates RX34
+            // pipelines. Production INFO cleanup preserves this exact
+            // construction witness; all other INFO observers remain cut.
+            static std::atomic<bool> v365_island_logged{false};
+            if(!v365_island_logged.exchange(
+                   true,std::memory_order_relaxed))
+                reshade::log::message(reshade::log::level::info,
                 "[DSRRL V365 CLASSIC RX34 SHADER ISLAND]"
                 " stage=EXACT_SOURCE_CREATED"
                 " bytes=19604 decoded=RGB_DIV_ALPHA"
