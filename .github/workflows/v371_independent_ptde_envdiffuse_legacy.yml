@@ -12,6 +12,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/v371-v370-independent-legacy-envdiffuse-20261022
       - uses: actions/checkout@v4
         with:
           repository: crosire/reshade
