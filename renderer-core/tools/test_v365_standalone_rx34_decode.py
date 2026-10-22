@@ -3,8 +3,9 @@
 from pathlib import Path
 r=Path(__file__).resolve().parents[1]
 h=(r/'include/dsrrl/operators/env_spec/classic_envdiffuse_rx34_decode_v365.hpp').read_text('utf8')
-pipe=(r/'src/runtime/a1_create_pipeline_bridge.cpp').read_text('utf8')
-decl=(r/'include/dsrrl/runtime/a1_create_pipeline_bridge.hpp').read_text('utf8')
+materializer=(r/'src/operators/env_spec/pmetal_rgba_materializer.cpp').read_text('utf8')
+runtime=(r/'src/runtime/pmetal_envspec_draw_runtime.cpp').read_text('utf8')
+decl=(r/'include/dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp').read_text('utf8')
 build=(r/'tools/build_v230_envdiffuse_cinematic_trace.ps1').read_text('utf8')
 for key in (
     'k_stock_bytes=19556u','k_candidate_bytes=k_stock_bytes+48u',
@@ -21,12 +22,14 @@ for forbidden in ('0x0000000cu,0x00000003u','k_ptde_rgba_envspec_chain',
                   't12_replacement','g_pack_ready','PSSetShaderResources',
                   'PSSetSamplers','global_lightbank_gain'):
     assert forbidden not in h,forbidden
-assert 'v365_rx34_decode_candidate_.clear();' in pipe
-assert 'v365_rx34_decode_candidate_=std::move(isolated)' in pipe
-assert 'isolated;' in pipe
-assert 'pixel_shader->code = isolated' not in pipe
-assert 'material_route=UNAUTHORIZED' in pipe
-assert 'bind=NO pixels=OPEN' in pipe
-assert 'classic_rx34_decode_candidate' in decl
+assert 'g_v365_classic_candidate=std::move(candidate)' in materializer
+assert 'classic_envdiffuse_rx34_v365::materialize(' in materializer
+assert 'staged_v365_classic_rx34(' in materializer
+assert 'staged_v365_classic_rx34(' in decl
+assert 'staged_v365_classic_rx34(' in runtime
+assert 'outcome.v365_classic_rx34_standalone_candidate_ready' in runtime
+assert '[DSRRL V365 CLASSIC RX34 SHADER ISLAND]' in runtime
+assert 'material_authority=OPEN bind=NO pixels=OPEN' in runtime
+assert 'PSSetShaderResources(' not in runtime.split('if(outcome.receiver_id==34u &&',1)[1].split('// Final Renderer Edition policy',1)[0]
 assert '/DDSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC' in build
 print('V365_STANDALONE_RX34_CLASSIC_RGB_DIV_ALPHA_SOURCE_PASS')
