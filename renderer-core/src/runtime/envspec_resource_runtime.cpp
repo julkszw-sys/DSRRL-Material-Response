@@ -759,18 +759,21 @@ void on_init_resource(
     const bool spec = is_native_envspec_desc(desc);
     const bool diffuse = is_native_envdiffuse_desc(desc);
     if (!spec && !diffuse) return;
+    bool creation_device_ok=false;
+    bool creation_atlas_ready=false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (device_ptr != g_device ||
-            (diffuse && !g_native_diffuse_atlas_ready)) {
+        creation_device_ok=(device_ptr==g_device);
+        creation_atlas_ready=g_native_diffuse_atlas_ready;
+    }
+    if (!creation_device_ok || (diffuse && !creation_atlas_ready)) {
 #if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)
-            if (diffuse)
-                v359_log_t11_creation(
-                    device_ptr != g_device ? "DEVICE_MISMATCH" : "ATLAS_NOT_READY",
-                    resource_handle,desc,initial_data,nullptr,-1);
+        if (diffuse)
+            v359_log_t11_creation(
+                !creation_device_ok ? "DEVICE_MISMATCH" : "ATLAS_NOT_READY",
+                resource_handle,desc,initial_data,nullptr,-1);
 #endif
-            return;
-        }
+        return;
     }
     if (spec) ++g_native_candidates;
     std::vector<std::uint8_t> tight;
