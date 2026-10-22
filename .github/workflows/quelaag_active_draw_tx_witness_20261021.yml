@@ -1,7 +1,7 @@
-name: V362 exact legacy EnvDif registry fix one addon
+name: V363 exact native EnvDif census one addon
 on:
   push:
-    branches: [agent/v362-legacy-envdif-terminator-registry-fix-20261022]
+    branches: [agent/v363-legacy-envdif-native-m10-m18-exact-roster-20261022]
   workflow_dispatch:
 permissions:
   contents: read
@@ -68,6 +68,6 @@ jobs:
           Get-FileHash $out -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V362-Exact-Legacy-EnvDif-Fix-OneAddon
+          name: DSRRL-V363-Exact-Legacy-EnvDif-Census-OneAddon
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error
