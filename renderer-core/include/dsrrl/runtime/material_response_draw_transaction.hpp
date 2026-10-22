@@ -117,6 +117,21 @@ public:
         std::size_t dxbc_size,
         core::operator_mask composed_owners) noexcept;
 
+    // Exact equipment-only legacy spec/material consumer. These banks are
+    // never selected by generic MR preparation. Draw-local promotion requires
+    // exact owner+slot+SpecRGB companion proof from material_resource_runtime.
+    bool register_equipment_spec_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
+    bool register_equipment_lerp_spec_replacement(
+        std::uint32_t receiver_id,
+        const void *dxbc,
+        std::size_t dxbc_size,
+        core::operator_mask composed_owners) noexcept;
+
     bool prepare_draw_request(
         const operators::material_response::decision &decision,
         prepared_material_response_draw &prepared) noexcept;
@@ -156,6 +171,9 @@ public:
     // Only the exact DSBT->DSB Subsurface route may call this. Generic MR has
     // no paired-SpecRGB promotion entry point after the reset.
     bool promote_prevalidated_subsurface_to_spec_rgb(
+        prepared_material_response_draw &prepared) noexcept;
+
+    bool promote_prevalidated_equipment_to_spec_rgb(
         prepared_material_response_draw &prepared) noexcept;
 
     // Carrier-only seam for an independently authorized operator that shares
@@ -206,7 +224,9 @@ private:
         lerp,
         lerp_upper_lower,
         upper_lower,
-        subsurface_spec
+        subsurface_spec,
+        equipment_spec,
+        equipment_lerp_spec
     };
 
     bool acquire_replacement(
@@ -240,6 +260,10 @@ private:
         upper_lower_replacements_;
     std::unordered_map<std::uint32_t, replacement_record>
         subsurface_spec_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        equipment_spec_replacements_;
+    std::unordered_map<std::uint32_t, replacement_record>
+        equipment_lerp_spec_replacements_;
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
     std::atomic<std::uint64_t> resource_epoch_{1u};
 

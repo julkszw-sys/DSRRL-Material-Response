@@ -904,7 +904,8 @@ bool v13_lerp_material_mod_postcondition(
         std::equal(
             preserved_envdiffuse.begin(),preserved_envdiffuse.end(),
             words.begin() + static_cast<std::ptrdiff_t>(site.t11_word + 4u));
-}
+} 
+#endif
 #endif
 #endif
 

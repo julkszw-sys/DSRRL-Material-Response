@@ -79,20 +79,36 @@ def main() -> None:
     if legacy in integrated:
         fail("legacy owner-only generic SpecRGB candidate gate is present")
 
-    # Generic MR must keep stock t1/PBL semantics and never advertise a t10
-    # SpecRGB consumer after the MR operator reset.
+    # Generic MR remains diffuse-v1 and cannot consume SpecRGB by itself.
+    # A diagnostic equipment consumer is legal only as a separate replacement
+    # bank promoted after draw-local exact t10 sidecar proof.
     require(
         integrated,
-        "generic stable MR is diffuse-v1 only.",
+        "Generic stable MR is diffuse-v1 only.",
         "generic MR anti-hybrid guard",
     )
     require(
         integrated,
-        "generic diffuse MR must never advertise\n            // a SpecRGB consumer.",
+        "Generic Lerp MR remains diffuse-v1.",
         "generic Lerp anti-hybrid guard",
     )
+    require(
+        integrated,
+        "DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME",
+        "equipment diagnostic compile scope",
+    )
+    require(
+        integrated,
+        "promote_prevalidated_equipment_to_spec_rgb(",
+        "equipment exact draw-local promotion",
+    )
+    require(
+        integrated,
+        "prepared.resources.spec_rgb",
+        "equipment exact SpecRGB carrier readiness",
+    )
 
-    # Three legal equipment consumers are source-complete.
+    # Four legal equipment consumers are source-complete.
     require(
         integrated,
         "prepare_fixed_pointlight_material_requests(",
@@ -129,9 +145,9 @@ def main() -> None:
     print("DSRRL_SPECRGB_EQUIPMENT_SCOPE_PASS")
     print("  carrier=exact equipment owner/resource -> PTDE sidecar -> consumer-local transaction")
     print("  carrier_probe=passive_no_bind")
-    print("  legal_consumers=fixed_local_specular,pmetal_envspec,subsurface")
+    print("  legal_consumers=fixed_local_specular,pmetal_envspec,subsurface,equipment_legacy_spec")
     print("  effect_probe=prepared_resource_only")
-    print("  generic_mr=stock_t1_no_specrgb")
+    print("  generic_mr=diffuse_v1; equipment spec requires separate exact promotion")
     print("  clustered_pointlight=independent_no_inherited_specrgb")
 
 

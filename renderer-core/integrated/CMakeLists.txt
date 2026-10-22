@@ -77,6 +77,11 @@ option(
     OFF)
 
 option(
+    DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME
+    "Diagnostic: exact equipment split PTDE SpecRGB + raw c101 + COLOR0 legacy material response; removes DSR SPEC pow/angular/t9 while preserving native EnvSpec source/dynamic LOD"
+    OFF)
+
+option(
     DSRRL_POINTLIGHT_DRAWTIME_BYPASS
     "Diagnostic: disable PointLight producer hooks, runtime pipeline binding and draw-time carrier/replay while preserving all non-PointLight runtime paths"
     OFF)
@@ -501,6 +506,7 @@ add_library(
     "${DSRRL_RENDERER_CORE_ROOT}/src/runtime/material_response_draw_transaction.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/material_response/material_response_diffuse_v1.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/spec_rgb_consumer_materializer.cpp"
+    "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/equipment_legacy_spec_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_materializer.cpp"
     "${DSRRL_RENDERER_CORE_ROOT}/src/operators/env_spec/pmetal_rgba_lerp_materializer.cpp"
@@ -596,6 +602,13 @@ if(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG>)
+endif()
+
+if(DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME)
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated
+        PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_EQUIPMENT_LEGACY_MATERIAL_MOD_RUNTIME>)
 endif()
 
 if(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
