@@ -1144,6 +1144,10 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::upper_lower,
     dsrrl::core::operator_id::hemdir3,
     dsrrl::core::operator_id::env_spec,
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+    // V367 independent t11 operator has a separate feature bit from EnvSpec.
+    dsrrl::core::operator_id::env_diffuse,
+#endif
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::point_light,
