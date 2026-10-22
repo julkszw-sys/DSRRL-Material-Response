@@ -84,6 +84,12 @@ public:
 
     a1_runtime_telemetry telemetry() const noexcept;
 
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+    // Exact stock RX34 -> independent t11 RGB/A-only candidate, never
+    // auto-attached to the shared P_Metal/nonmetal pipeline.
+    bool classic_rx34_decode_candidate(std::vector<std::uint8_t> &out) const noexcept;
+#endif
+
     void reset() noexcept;
 
 private:
@@ -185,6 +191,10 @@ private:
         std::uint64_t,
         std::shared_ptr<const replacement_record>>
         pipeline_records_;
+
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+    std::vector<std::uint8_t> v365_rx34_decode_candidate_;
+#endif
 
     reshade::api::device *device_ = nullptr;
 
