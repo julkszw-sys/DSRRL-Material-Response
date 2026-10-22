@@ -8,7 +8,7 @@ function RequireReplace([string]$old,[string]$new,[string]$label,[int]$expected=
     $script:base=$script:base.Replace($old,$new)
 }
 # Keep original owner235 PR484 shader swizzle fix and all native CMake features.
-RequireReplace '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS' '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS /DDSRRL_V230_REFLECTION_TO_342 /DDSRRL_V230_GI_REFLECTION_SOURCE_BRANCH /DDSRRL_V230_A14_ENVDIFFUSE_WITNESS /DDSRRL_V230_A14_REQUEST_READY_WITNESS /DDSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE' 'feature define'
+RequireReplace '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS' '/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS /DDSRRL_V230_REFLECTION_TO_342 /DDSRRL_V230_GI_REFLECTION_SOURCE_BRANCH /DDSRRL_V230_A14_ENVDIFFUSE_WITNESS /DDSRRL_V230_A14_REQUEST_READY_WITNESS /DDSRRL_V230_ENVDIFFUSE_CINEMATIC_TRACE /DDSRRL_V359_T11_CREATION_SHA_WITNESS' 'feature define'
 $v359Verify=@'
 python renderer-core/tools/materialize_v230_reflection_342_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V230 exact GI Reflection source alias materialization failed' }
