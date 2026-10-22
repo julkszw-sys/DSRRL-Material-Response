@@ -1,4 +1,7 @@
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+#include "dsrrl/operators/env_spec/classic_envdiffuse_rx34_decode_v365.hpp"
+#endif
 #include "dsrrl/runtime/generated_stable_hemenv_receivers_v1.hpp"
 
 #include <cstring>
@@ -125,6 +128,9 @@ void a1_create_pipeline_bridge::on_destroy_device(
     pipeline_records_.clear();
     code_records_.clear();
     cache_.clear();
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+    v365_rx34_decode_candidate_.clear();
+#endif
     device_ = nullptr;
 }
 
@@ -249,6 +255,45 @@ bool a1_create_pipeline_bridge::on_create_pipeline(
         pixel_shader->code_size == 0u)
         return false;
 
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+    // An independent, byte-for-byte-verified 19604-byte SM5 DXBC shader
+    // candidate is retained, never put into pixel_shader->code. Global
+    // RX34 also renders nonmetal materials: on-create identity ALONE does
+    // not authorize an operator swap on a draw.
+    if (pixel_shader->code_size ==
+        operators::env_spec::classic_envdiffuse_rx34_v365::k_stock_bytes) {
+        std::vector<std::uint8_t> isolated;
+        const auto verdict =
+            operators::env_spec::classic_envdiffuse_rx34_v365::materialize(
+                static_cast<const std::uint8_t *>(pixel_shader->code),
+                pixel_shader->code_size,isolated);
+        if(verdict ==
+           operators::env_spec::classic_envdiffuse_rx34_v365::result::candidate_ready) {
+            bool retained=false;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if(v365_rx34_decode_candidate_.empty()) {
+                    v365_rx34_decode_candidate_=std::move(isolated);
+                    retained=true;
+                } else if(v365_rx34_decode_candidate_==isolated) {
+                    retained=true;
+                } else {
+                    quarantined_.store(true,std::memory_order_release);
+                }
+            }
+            if(retained) {
+                // Source-only construction. No PS create/replace and no t11
+                // mutation until exact material, source and receiver gates.
+                reshade::log::message(reshade::log::level::info,
+                    "[DSRRL V365 CLASSIC RX34 SHADER ISLAND]"
+                    " source=EXACT_SHA dxbc=CANDIDATE_READY"
+                    " temp=FRESH_R13 op=RGB_DIV_ALPHA"
+                    " envspec=STOCK material_route=UNAUTHORIZED"
+                    " bind=NO pixels=OPEN");
+            }
+        }
+    }
+#endif
     const bool historical_candidate =
         operators::legacy_plan::
             a1_candidate_code_size(
@@ -498,6 +543,21 @@ bool a1_create_pipeline_bridge::pipeline_attested(
     return pipeline_records_.find(pipeline_handle) !=
         pipeline_records_.end();
 }
+
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+bool a1_create_pipeline_bridge::classic_rx34_decode_candidate(
+    std::vector<std::uint8_t> &out) const noexcept
+{
+    out.clear();
+    try {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(quarantined_.load() || v365_rx34_decode_candidate_.empty())
+            return false;
+        out=v365_rx34_decode_candidate_;
+        return true;
+    } catch (...) {out.clear();return false;}
+}
+#endif
 
 bool a1_create_pipeline_bridge::on_bind_pipeline(
     reshade::api::pipeline_stage stages,
