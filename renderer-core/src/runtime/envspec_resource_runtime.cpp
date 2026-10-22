@@ -2011,7 +2011,23 @@ bool envspec_resource_runtime::prepare_envdiffuse_bound(
             (probe_b_required && !resolve(stock_t13,b))) return false;
         if (!probe_b_required) b=a;
     }
-    return prepare_envdiffuse(a,b,probe_b_required,prepared);
+    const bool ready=prepare_envdiffuse(a,b,probe_b_required,prepared);
+    if(ready && a>=env::k_legacy_envspec_probe_count) {
+        const unsigned bit=a==500u?1u:2u;
+        const auto old=g_v371_bound_logged.fetch_or(
+            bit,std::memory_order_relaxed);
+        if((old&bit)==0u) {
+            char line[220]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V371 LEGACY T11 RESOURCE READY]"
+                " selector=%u class=LEGACY_EXACT"
+                " native_sha_name_com=PASS donor=PTDE_RGBA"
+                " gpu=PREPARED owner_shader_bind=OPEN pixel=OPEN",
+                static_cast<unsigned>(a));
+            reshade::log::message(reshade::log::level::info,line);
+        }
+    }
+    return ready;
 #endif
 }
 
