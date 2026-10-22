@@ -26,7 +26,7 @@ assert "env_resources_.prepare_bound(" not in island
 assert "constant_buffers[0]" not in island
 assert "11u, prepared.envdiffuse_resources.ptde_a" in island
 assert "11u, prepared.envdiffuse_resources.sampler" in island
-create=integrated.split("bool on_create_pipeline(",1)[1].split(
+create=integrated.rsplit("bool on_create_pipeline(",1)[1].split(
     "if (!k_drawtime_islands_runtime_enabled)",1)[0]
 assert "register_classic_rx33_from_stock(" in create
 assert "k_rx33_stock_bytes" in create
