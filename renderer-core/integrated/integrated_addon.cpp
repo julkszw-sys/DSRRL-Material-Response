@@ -6213,6 +6213,21 @@ bool prepare_island_batch(
 #endif
 
     if (exact_pmetal_envspec) {
+#if defined(DSRRL_V369_RX33_ENVDIFFUSE_SPLIT)
+        if (!hemenvlerp_bound &&
+            (decision.receiver_id==33u || decision.receiver_id==34u)) {
+            if (g_pmetal_envspec.prepare_classic_envdiffuse_only(
+                    cmd_list,material,decision,envspec_family,prepared.envspec)) {
+                prepared.envspec_in_batch=true;
+                if(dsrrl::runtime::append_island_draw_request(
+                      prepared.batch,prepared.envspec.request)==
+                   dsrrl::runtime::island_draw_batch_result::ready)
+                    return true;
+                release_prepared_island_batch(prepared);
+            }
+            return false;
+        }
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
             static std::atomic_bool first_nonmetal_gate{false};
