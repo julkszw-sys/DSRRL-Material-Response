@@ -9,6 +9,7 @@
 #include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/gi_envdif_name_witness.hpp"
+#include "dsrrl/runtime/v373_legacygi_name_sha_census.hpp"
 #include "dsrrl/operators/env_spec/legacy_envdiffuse_m18_exact.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -77,6 +78,9 @@ using v371_sha = std::array<std::uint8_t,32>;
 std::unordered_map<std::uint64_t,v371_sha> g_v371_diffuse_creation_sha;
 std::unordered_map<std::uint64_t,gi_envdif_name_witness::identity> g_v371_diffuse_names;
 std::unordered_map<std::uint64_t,native_view_record> g_v371_legacy_by_view;
+std::unordered_map<std::uint64_t,native_view_record> g_v373_census_by_view;
+std::atomic<std::uint32_t> g_v373_bound_logged{0u};
+std::atomic<std::uint32_t> g_v373_create_logged{0u};
 std::array<std::vector<std::uint8_t>,2u> g_v371_legacy_rgba{};
 std::atomic<std::uint32_t> g_v371_legacy_logged{0u};
 std::atomic<std::uint32_t> g_v371_bound_logged{0u};
@@ -91,6 +95,8 @@ void v371_record_name_locked(std::uint64_t key,
                 g_v371_diffuse_names.emplace(key,name);
         } else if(it->second.name != name.name || name.conflicting) {
             it->second.conflicting=true;
+        } else if(name.stage>it->second.stage) {
+            it->second.stage=name.stage;
         }
     } catch(...) {}
 }
@@ -576,6 +582,9 @@ void release_carrier(
         g_v371_diffuse_creation_sha.clear();
         g_v371_diffuse_names.clear();
         g_v371_legacy_by_view.clear();
+        g_v373_census_by_view.clear();
+        g_v373_bound_logged.store(0u,std::memory_order_relaxed);
+        g_v373_create_logged.store(0u,std::memory_order_relaxed);
         g_v371_legacy_rgba={};
         g_v371_legacy_logged.store(0u,std::memory_order_relaxed);
         g_v371_bound_logged.store(0u,std::memory_order_relaxed);
@@ -642,6 +651,7 @@ void on_init_device(
         g_v371_diffuse_creation_sha.reserve(256u);
         g_v371_diffuse_names.reserve(256u);
         g_v371_legacy_by_view.reserve(64u);
+        g_v373_census_by_view.reserve(96u);
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
