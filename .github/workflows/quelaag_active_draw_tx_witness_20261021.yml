@@ -1,7 +1,7 @@
 name: V365 independent RX34 Classic RGB/A shader island
 on:
   push:
-    branches: [agent/v365-rx34-classic-envdiffuse-standalone-dxbc-20261022]
+    branches: [agent/v366-v230-islands-pointlight-off-classic-ptde-t11-20261022]
   workflow_dispatch:
 permissions:
   contents: read
