@@ -1501,7 +1501,7 @@ bool add_b12_rdef(
 }
 
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) || defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
 bool apply_exact_ptde_envdiffuse_consumer(
     std::vector<std::uint8_t> &bytes,
     bool independent=false) noexcept
