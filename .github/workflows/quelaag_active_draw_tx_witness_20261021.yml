@@ -1,7 +1,7 @@
-name: V364 independent PTDE Classic resource carrier
+name: V365 independent RX34 Classic RGB/A shader island
 on:
   push:
-    branches: [agent/v364-classic-envdiffuse-independent-donor-acquisition-20261022]
+    branches: [agent/v365-rx34-classic-envdiffuse-standalone-dxbc-20261022]
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,6 +21,9 @@ jobs:
           python3 renderer-core/tools/test_v361_classic_39_dds_reader.py
           python3 renderer-core/tools/test_v362_legacy_exact_terminators.py
           python3 renderer-core/tools/test_v364_classic_resource_contract.py
+          python3 renderer-core/tools/test_v365_standalone_rx34_decode.py
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_v365_rx34_classic_decode_contract.cpp -o /tmp/test_v365_rx34
+          /tmp/test_v365_rx34
       - name: Compile and test independent stock EnvDiffuse identity resolver
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_native_envdiffuse_identity.cpp -o /tmp/test_native_envdiffuse_identity
@@ -54,6 +57,7 @@ jobs:
           python renderer-core/tools/test_v361_classic_39_dds_reader.py
           python renderer-core/tools/test_v362_legacy_exact_terminators.py
           python renderer-core/tools/test_v364_classic_resource_contract.py
+          python renderer-core/tools/test_v365_standalone_rx34_decode.py
           if ($LASTEXITCODE -ne 0) { throw 'Active transaction source test failed' }
           ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - name: Verify read-only t11 native descriptor marker in integrated PE
@@ -69,9 +73,10 @@ jobs:
           if (!$data.Contains('tls_scope=THREAD_HINT_NOT_NATIVE_RESOURCE_PROOF')) { throw 'TLS creation witness missing in PE' }
           if (!$data.Contains('[DSRRL V360 LEGACY ENVDIF ROUTED]')) { throw 'Legacy native resource registry missing in PE' }
           if (!$data.Contains('[DSRRL V362 LEGACY T11 REGISTER]')) { throw 'Exact name + SHA registration witness missing in PE' }
+          if (!$data.Contains('[DSRRL V365 CLASSIC RX34 SHADER ISLAND]')) { throw 'V365 isolated DXBC materialization marker absent' }
           Get-FileHash $out -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V364-Independent-Classic-Donor-OneAddon
+          name: DSRRL-V365-RX34-Standalone-Classic-Island-OneAddon
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error

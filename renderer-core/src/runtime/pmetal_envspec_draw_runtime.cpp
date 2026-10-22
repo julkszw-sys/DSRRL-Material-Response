@@ -450,6 +450,26 @@ register_replacement(
         operators::env_spec::
             pmetal_rgba_materialize_result;
 
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+    if(outcome.receiver_id==34u &&
+       outcome.v365_classic_rx34_standalone_candidate_ready) {
+        std::vector<std::uint8_t> verified_island;
+        const bool staged=operators::env_spec::staged_v365_classic_rx34(
+            verified_island);
+        if(staged) {
+            // The compiled shader operator is real and exact-source pinned,
+            // but is intentionally NOT substituted for stock RX34: this
+            // shader is shared by metal and nonmetal material slots. Future
+            // PTDE bridge requires distinct exact MTD/FLVER/source gates.
+            reshade::log::message(reshade::log::level::info,
+                "[DSRRL V365 CLASSIC RX34 SHADER ISLAND]"
+                " stage=STANDALONE_DXBC_READY"
+                " bytes=19604 decoded=RGB_DIV_ALPHA"
+                " t12=STOCK r13=FRESH"
+                " material_authority=OPEN bind=NO pixels=OPEN");
+        }
+    }
+#endif
     // Final Renderer Edition policy keeps visible U/L disabled. P_Metal
     // EnvSpec therefore accepts only the U/L-independent payload that
     // preserves the stock DSR b0[7]/b0[8] continuation.

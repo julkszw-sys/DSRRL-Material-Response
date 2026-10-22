@@ -11,6 +11,9 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+#include "dsrrl/operators/env_spec/classic_envdiffuse_rx34_decode_v365.hpp"
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
@@ -4134,6 +4137,42 @@ bool on_create_pipeline(
     std::uint32_t subobject_count,
     const reshade::api::pipeline_subobject *subobjects)
 {
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+    // V365 shader island construction executes BEFORE the physical-cut
+    // stock-draw early return. The drawtime islands are intentionally
+    // disabled in the V359-RC1 descendant. Do not re-enable them.
+    // Shader source must be the exact RX34 DXBC, never name-matched alone.
+    const auto *v365_pixel_shader=find_pixel_shader(
+        subobject_count,subobjects);
+    if(v365_pixel_shader!=nullptr &&
+       v365_pixel_shader->code!=nullptr &&
+       v365_pixel_shader->code_size==
+           dsrrl::operators::env_spec::
+               classic_envdiffuse_rx34_v365::k_stock_bytes) {
+        std::vector<std::uint8_t> v365_candidate;
+        const auto v365_result=
+            dsrrl::operators::env_spec::
+                classic_envdiffuse_rx34_v365::materialize(
+                    static_cast<const std::uint8_t *>(v365_pixel_shader->code),
+                    v365_pixel_shader->code_size,v365_candidate);
+        if(v365_result==
+            dsrrl::operators::env_spec::
+                classic_envdiffuse_rx34_v365::result::candidate_ready) {
+            // One log per process, even if the engine recreates RX34
+            // pipelines. Production INFO cleanup preserves this exact
+            // construction witness; all other INFO observers remain cut.
+            static std::atomic<bool> v365_island_logged{false};
+            if(!v365_island_logged.exchange(
+                   true,std::memory_order_relaxed))
+                reshade::log::message(reshade::log::level::info,
+                "[DSRRL V365 CLASSIC RX34 SHADER ISLAND]"
+                " stage=EXACT_SOURCE_CREATED"
+                " bytes=19604 decoded=RGB_DIV_ALPHA"
+                " t12=STOCK temp=R13"
+                " shader_bind=NO pixel=OPEN");
+        }
+    }
+#endif
     if (!k_drawtime_islands_runtime_enabled) {
         const bool a1_changed =
             g_a1_bridge.on_create_pipeline(
@@ -4185,6 +4224,8 @@ bool on_create_pipeline(
         const auto *source =
             static_cast<const std::uint8_t *>(
                 pixel_shader->code);
+
+
 
         // Close the Subsurface creation-order gap at the source receiver
         // itself. For the three exact Subsurf shaders, reconstruct the

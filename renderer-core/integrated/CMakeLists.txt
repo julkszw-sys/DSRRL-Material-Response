@@ -653,6 +653,10 @@ target_compile_definitions(
     PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:WIN32_LEAN_AND_MEAN>
     $<$<COMPILE_LANGUAGE:CXX>:NOMINMAX>
+    # V365 draft-only construction: compile into the actual integrated
+    # addon rather than relying on overwritten nested PowerShell $env:CL.
+    # Runtime still does NOT activate the standalone shader island.
+    $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC>
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_VERSION="${DSRRL_CORE_ISLANDS_VERSION}">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_CORE_ISLANDS_PRODUCT_LINE="DSRRL_Core_Islands">
     $<$<COMPILE_LANGUAGE:CXX>:DSRRL_SOURCE_COMMIT="${DSRRL_SOURCE_COMMIT}">

@@ -41,6 +41,8 @@ struct pmetal_rgba_materialize_outcome {
     // Diagnostic-only: stable HemEnv t11 consumes the exact pre-draw-gain
     // EnvDiffuse endpoint carried in b12[3].xyz instead of DSR cb0[3]*cb0[79].x.
     bool envdiffuse_linear_consumer_diag = false;
+    // Candidate staging only: not a shader replacement or pixel activation.
+    bool v365_classic_rx34_standalone_candidate_ready = false;
 };
 
 pmetal_rgba_materialize_outcome
@@ -50,5 +52,11 @@ materialize_pmetal_rgba_receiver(
     std::size_t stock_size,
     bool compose_upper_lower,
     std::vector<std::uint8_t> &output) noexcept;
+
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+// Copy source-validated DXBC operator island; caller must separately prove
+// exact material route, source and full draw state before any GPU binding.
+bool staged_v365_classic_rx34(std::vector<std::uint8_t> &candidate) noexcept;
+#endif
 
 } // namespace dsrrl::operators::env_spec

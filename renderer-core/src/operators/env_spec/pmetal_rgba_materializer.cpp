@@ -1,4 +1,7 @@
 #include "dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp"
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+#include "dsrrl/operators/env_spec/classic_envdiffuse_rx34_decode_v365.hpp"
+#endif
 
 #include "dsrrl/operators/env_spec/pmetal_rgba_authority.hpp"
 #include "dsrrl/operators/lightbank/upper_lower_hemenv_materializer.hpp"
@@ -15,6 +18,9 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+#include <mutex>
+#endif
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -25,6 +31,12 @@ namespace {
 
 namespace hashing =
     legacy_plan::hashing;
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+// Only the exact RX34 stock DXBC is ever staged. This is separate from the
+// active shared RX34 metal/nonmetal shader bank and never bound at draw time.
+std::mutex g_v365_classic_candidate_mutex;
+std::vector<std::uint8_t> g_v365_classic_candidate;
+#endif
 using legacy_plan::dxbc::read_u32;
 using legacy_plan::dxbc::write_u32;
 
@@ -4610,6 +4622,25 @@ materialize_pmetal_rgba_receiver(
         return outcome;
     }
 
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+    if(stock_size==classic_envdiffuse_rx34_v365::k_stock_bytes) {
+        std::vector<std::uint8_t> candidate;
+        if(classic_envdiffuse_rx34_v365::materialize(
+               stock_source,stock_size,candidate) ==
+           classic_envdiffuse_rx34_v365::result::candidate_ready) {
+            std::lock_guard<std::mutex> lock(g_v365_classic_candidate_mutex);
+            if(g_v365_classic_candidate.empty()) {
+                g_v365_classic_candidate=std::move(candidate);
+                outcome.v365_classic_rx34_standalone_candidate_ready=true;
+            } else if(g_v365_classic_candidate==candidate) {
+                outcome.v365_classic_rx34_standalone_candidate_ready=true;
+            }
+            // A conflicting candidate is rejected rather than silently
+            // replacing the original. No GPU state is changed here.
+        }
+    }
+#endif
+
     std::vector<std::uint8_t> base;
     const auto mr =
         material_response::
@@ -4965,5 +4996,23 @@ materialize_pmetal_rgba_receiver(
     return outcome;
 #endif
 }
+
+#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)
+bool staged_v365_classic_rx34(std::vector<std::uint8_t> &candidate) noexcept
+{
+    candidate.clear();
+    try {
+        std::lock_guard<std::mutex> lock(g_v365_classic_candidate_mutex);
+        if(g_v365_classic_candidate.size() !=
+           classic_envdiffuse_rx34_v365::k_candidate_bytes)
+            return false;
+        candidate=g_v365_classic_candidate;
+        return true;
+    } catch (...) {
+        candidate.clear();
+        return false;
+    }
+}
+#endif
 
 } // namespace dsrrl::operators::env_spec
