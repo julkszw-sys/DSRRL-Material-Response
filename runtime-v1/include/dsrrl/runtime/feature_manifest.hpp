@@ -82,7 +82,9 @@ k_runtime_feature_manifest = {{
     {core::operator_id::pmetal_black_safe_source,
      runtime_feature_stage::current_wired,runtime_boot_policy::runtime_preflight,"pmetal_black_safe_source"},
     {core::operator_id::pmetal_black_safe_v10,
-     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"pmetal_black_safe_v10"}
+     runtime_feature_stage::current_wired,runtime_boot_policy::enable_immediately,"pmetal_black_safe_v10"},
+    {core::operator_id::post_dof_ptde,
+     runtime_feature_stage::future_partial,runtime_boot_policy::hold_off,"post_dof_ptde"}
 }};
 
 constexpr bool runtime_feature_manifest_is_ordered_complete() noexcept

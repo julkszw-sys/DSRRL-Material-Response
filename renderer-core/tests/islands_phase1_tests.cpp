@@ -1,4 +1,5 @@
 #include "dsrrl/operators/env_spec/env_spec_island.hpp"
+#include "dsrrl/operators/dof/dof_resource_contract.hpp"
 #include "dsrrl/operators/material_response/material_response_island.hpp"
 #include "dsrrl/operators/material_response/material_response_seed.hpp"
 #include "dsrrl/operators/material_response/generated_material_constants_v1.hpp"
@@ -528,7 +529,7 @@ int main()
 
     const auto &catalog = core::known_operator_catalog();
     CHECK(catalog.size() == core::operator_count);
-    CHECK(core::operator_count == 25);
+    CHECK(core::operator_count == 26);
 
     std::size_t draw_required_count = 0;
     std::size_t create_time_safe_count = 0;
@@ -572,8 +573,49 @@ int main()
 
     CHECK(draw_required_count == 15u);
     CHECK(create_time_safe_count == 5u);
-    CHECK(blocked_count == 3u);
+    CHECK(blocked_count == 4u);
     CHECK(host_preserve_count == 2u);
+
+    const auto dof_contract =
+        core::find_operator_contract(core::operator_id::post_dof_ptde);
+    CHECK(dof_contract.has_value());
+    CHECK(dof_contract->default_state == core::port_state::partial);
+    CHECK(dof_contract->carrier == core::carrier_kind::composite);
+
+    using namespace operators::dof;
+    CHECK(production_seed_graph_is_structurally_closed());
+    CHECK(production_seed_passes.size() == 10u);
+
+    const auto *dof_prefix =
+        find_ptde_surface(ptde_surface_role::full_prefix);
+    CHECK(dof_prefix != nullptr);
+    CHECK(dof_prefix->raster.width == 1024u);
+    CHECK(dof_prefix->raster.height == 720u);
+    CHECK(dof_prefix->raster.format == legacy_format::a8r8g8b8);
+
+    CHECK(production_seed_passes[0].target ==
+          ptde_surface_role::full_prefix);
+    CHECK(production_seed_passes[0].shader ==
+          retained_shader_role::downsample);
+    CHECK(production_seed_passes[0].rt0_write_mask == 0x07u);
+
+    CHECK(production_seed_passes[1].logical_pass == 0x00u);
+    CHECK(production_seed_passes[1].target ==
+          ptde_surface_role::full_prefix);
+    CHECK(production_seed_passes[1].shader ==
+          retained_shader_role::dof_rate_plain);
+    CHECK(production_seed_passes[1].rt0_write_mask == 0x08u);
+
+    CHECK(production_seed_passes[2].logical_pass == 0x02u);
+    CHECK(production_seed_passes[2].target ==
+          ptde_surface_role::half_rate);
+    CHECK(production_seed_passes[2].sources[0] ==
+          production_source_kind::full_prefix);
+
+    CHECK(production_seed_passes.back().logical_pass == 0x10u);
+    CHECK(production_seed_passes.back().inherit_host_om);
+    CHECK(core::draw_policy(core::operator_id::post_dof_ptde).mode ==
+          core::draw_transaction_mode::blocked);
 
     CHECK(core::requires_draw_transaction(
         core::operator_id::material_response));

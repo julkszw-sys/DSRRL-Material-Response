@@ -29,6 +29,7 @@ REQUIRED_IDS = {
     "dsr_sfx_inverse_tonemap",
     "pmetal_black_safe_source",
     "pmetal_black_safe_v10",
+    "post_dof_ptde",
 }
 
 def main() -> int:

@@ -45,7 +45,6 @@ def main() -> int:
     required_flver = (
         '#include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"',
         "fixed_pointlight_selector_event_bridge(owner);",
-        "clustered_pnts_selector_event_bridge(",
     )
     for token in required_flver:
         if token not in flver_hooks:
@@ -54,6 +53,58 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+
+    # Clustered PointLight is intentionally source-only on the R43 PARAM line.
+    # FLVER/material receiver dispatch is forbidden; stock DSR consumes the
+    # corrected source carrier.
+    for token in (
+        "clustered_pnts_selector_event_bridge(",
+        "clustered_pnts_selector_source_event_bridge(",
+        "clustered_pnts_selector_identity_event_bridge(",
+    ):
+        if token in flver_hooks:
+            print(
+                f"PointLight runtime audit: Clustered receiver dispatch survived: {token}",
+                file=sys.stderr,
+            )
+            return 1
+
+    clustered_draw = (
+        source_dir / "src" / "runtime" /
+        "clustered_pnts_draw_runtime.cpp"
+    ).read_text(encoding="utf-8")
+    for token in (
+        "k_clustered_source_override_rva = 0xB7E02u;",
+        "capture_clustered_live_drawparam_source(",
+        "g_source_dsr_only_fail_open",
+    ):
+        if token not in clustered_draw:
+            print(
+                f"PointLight runtime audit: Clustered live-DrawParam source invariant missing: {token}",
+                file=sys.stderr,
+            )
+            return 1
+
+    callback_begin = clustered_draw.find(
+        "void __fastcall clustered_source_override_callback("
+    )
+    callback_end = clustered_draw.find(
+        "bool build_clustered_source_override_stub(",
+        callback_begin,
+    )
+    if callback_begin < 0 or callback_end <= callback_begin:
+        print(
+            "PointLight runtime audit: cannot isolate Clustered source callback",
+            file=sys.stderr,
+        )
+        return 1
+    callback = clustered_draw[callback_begin:callback_end]
+    if "pointlight_ptde_source::capture(" in callback:
+        print(
+            "PointLight runtime audit: Clustered source callback still uses embedded donor lookup",
+            file=sys.stderr,
+        )
+        return 1
 
     bridge_begin = upper_lower.find(
         "void upper_lower_selector_event_bridge("
