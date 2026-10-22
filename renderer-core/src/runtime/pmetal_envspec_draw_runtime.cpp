@@ -1704,13 +1704,24 @@ bool pmetal_envspec_draw_runtime::prepare(
         context->PSGetShaderResources(
             11u, envdiffuse_view_count, stock_envdiffuse_views);
     }
-    const bool independent_envdiffuse_ready =
+    bool independent_envdiffuse_ready =
         env_resources_.prepare_envdiffuse_bound(
             stock_envdiffuse_views[0],
             ptde_envdiffuse_b_required
                 ? stock_envdiffuse_views[2] : nullptr,
             ptde_envdiffuse_b_required,
             prepared.envdiffuse_resources);
+#if defined(DSRRL_V366_CLASSIC_PTDE_RESOURCE)
+    if (!independent_envdiffuse_ready) {
+        independent_envdiffuse_ready =
+            env_resources_.prepare_classic_envdiffuse_bound(
+                stock_envdiffuse_views[0],
+                ptde_envdiffuse_b_required
+                    ? stock_envdiffuse_views[2] : nullptr,
+                ptde_envdiffuse_b_required,
+                prepared.envdiffuse_resources);
+    }
+#endif
     for (auto *stock_view : stock_envdiffuse_views)
         if (stock_view != nullptr)
             stock_view->Release();
