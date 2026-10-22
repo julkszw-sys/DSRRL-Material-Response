@@ -8,6 +8,8 @@
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/gi_envdif_name_witness.hpp"
+#include "dsrrl/operators/env_spec/legacy_envdiffuse_m18_exact.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -23,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -69,6 +72,40 @@ std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
 std::unordered_map<std::uint64_t,native_probe_record> g_native_diffuse_resources;
 std::unordered_map<std::uint64_t,native_view_record> g_diffuse_by_view;
+// V371: independent legacy EnvDif identity; NEVER sourced from EnvSpec t12.
+using v371_sha = std::array<std::uint8_t,32>;
+std::unordered_map<std::uint64_t,v371_sha> g_v371_diffuse_creation_sha;
+std::unordered_map<std::uint64_t,gi_envdif_name_witness::identity> g_v371_diffuse_names;
+std::unordered_map<std::uint64_t,native_view_record> g_v371_legacy_by_view;
+std::array<std::vector<std::uint8_t>,2u> g_v371_legacy_rgba{};
+std::atomic<std::uint32_t> g_v371_legacy_logged{0u};
+std::atomic<std::uint32_t> g_v371_bound_logged{0u};
+void v371_record_name_locked(std::uint64_t key,
+     const gi_envdif_name_witness::identity &name) noexcept
+{
+    if(key==0u || name.name[0]==0) return;
+    try {
+        auto it=g_v371_diffuse_names.find(key);
+        if(it==g_v371_diffuse_names.end()) {
+            if(g_v371_diffuse_names.size()<4096u)
+                g_v371_diffuse_names.emplace(key,name);
+        } else if(it->second.name != name.name || name.conflicting) {
+            it->second.conflicting=true;
+        }
+    } catch(...) {}
+}
+const operators::env_spec::exact_ptde_legacy_envdiffuse *
+v371_exact_resource_locked(std::uint64_t key) noexcept
+{
+    const auto si=g_v371_diffuse_creation_sha.find(key);
+    const auto ni=g_v371_diffuse_names.find(key);
+    if(si==g_v371_diffuse_creation_sha.end() ||
+       ni==g_v371_diffuse_names.end() ||
+       ni->second.conflicting) return nullptr;
+    return operators::env_spec::v364_exact_legacy_diffuse(
+        ni->second.name.data(),si->second);
+}
+
 env::native_diffuse_hash_atlas g_native_diffuse_hashes{};
 bool g_native_diffuse_atlas_ready = false;
 std::unordered_map<std::uint32_t,rgba_cube>
@@ -296,6 +333,27 @@ bool load_native_diffuse_hash_atlas(env::native_diffuse_hash_atlas &out)
     }
 }
 
+bool v371_load_exact_legacy_asset(
+    const operators::env_spec::exact_ptde_legacy_envdiffuse &entry,
+    std::vector<std::uint8_t> &out) noexcept
+{
+    out.clear();
+    try {
+        const auto path=process_dir()/std::filesystem::path(entry.relative_path);
+        std::error_code ec{};
+        if(std::filesystem::file_size(path,ec)!=entry.bytes || ec)return false;
+        std::ifstream in(path,std::ios::binary);
+        if(!in)return false;
+        std::vector<std::uint8_t> bytes(entry.bytes);
+        if(!in.read(reinterpret_cast<char *>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()))) return false;
+        if(hashing::sha256(bytes.data(),bytes.size())!=entry.ptde_asset_sha)
+            return false;
+        out=std::move(bytes);
+        return true;
+    }catch(...) {out.clear();return false;}
+}
+
 bool load_envdiffuse_pack(
     std::vector<std::uint8_t> &out)
 {
@@ -515,6 +573,12 @@ void release_carrier(
         g_envdiffuse_pack_ready = false;
         g_pack.clear();
         g_envdiffuse_pack.clear();
+        g_v371_diffuse_creation_sha.clear();
+        g_v371_diffuse_names.clear();
+        g_v371_legacy_by_view.clear();
+        g_v371_legacy_rgba={};
+        g_v371_legacy_logged.store(0u,std::memory_order_relaxed);
+        g_v371_bound_logged.store(0u,std::memory_order_relaxed);
 
         g_native_resources.clear();
         g_resource_by_view.clear();
@@ -575,6 +639,9 @@ void on_init_device(
             env::k_legacy_envspec_probe_count * 2u);
         g_native_diffuse_resources.reserve(env::k_native_envdiffuse_count);
         g_diffuse_by_view.reserve(env::k_native_envdiffuse_count * 2u);
+        g_v371_diffuse_creation_sha.reserve(256u);
+        g_v371_diffuse_names.reserve(256u);
+        g_v371_legacy_by_view.reserve(64u);
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
@@ -591,8 +658,12 @@ void on_init_device(
     std::vector<std::uint8_t>
         envdiffuse_pack;
     const bool envdiffuse_pack_ready =
-        load_envdiffuse_pack(
-            envdiffuse_pack);
+        load_envdiffuse_pack(envdiffuse_pack);
+    std::array<std::vector<std::uint8_t>,2u> v371_assets{};
+    for(std::size_t i=0;i<v371_assets.size();++i)
+        v371_load_exact_legacy_asset(
+            operators::env_spec::k_v364_m18_legacy_envdiffuse[i],
+            v371_assets[i]);
 
     sampler_desc desc{};
     desc.filter =
@@ -636,6 +707,7 @@ void on_init_device(
                 std::move(envdiffuse_pack);
             g_envdiffuse_pack_ready =
                 envdiffuse_pack_ready;
+            g_v371_legacy_rgba=std::move(v371_assets);
             g_sampler = created_sampler;
             g_sampler_ready = sampler_ready;
             adopted = true;
