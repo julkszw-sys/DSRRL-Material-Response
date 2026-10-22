@@ -2112,6 +2112,86 @@ bool envspec_resource_runtime::stage_ptde_classic_candidate(
 }
 #endif
 
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER) && defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+// Independent resource carrier for original PTDE Classic EnvDiffuse.
+// No packed-GI ordinal, no t12/t14 EnvSpec lookup, and NO draw mutation.
+bool envspec_resource_runtime::prepare_classic_envdiffuse_bound(
+    ID3D11ShaderResourceView *stock_t11,
+    ID3D11ShaderResourceView *stock_t13,
+    bool required_b,
+    prepared_envdiffuse_resources &out) noexcept
+{
+    out={};
+    if(stock_t11==nullptr || (required_b && stock_t13==nullptr))
+        return false;
+
+    native_legacy_envdiffuse_identity a{},b{};
+    if(!native_legacy_envdiffuse_for_view(stock_t11,a))
+        return false;
+    if(required_b && !native_legacy_envdiffuse_for_view(stock_t13,b))
+        return false;
+    if(!required_b) b=a;
+
+    char name_a[40]{},name_b[40]{};
+    std::snprintf(name_a,sizeof(name_a),"EnvDif_m%u_%03u",
+                  static_cast<unsigned>(a.map),
+                  static_cast<unsigned>(a.legacy_row));
+    std::snprintf(name_b,sizeof(name_b),"EnvDif_m%u_%03u",
+                  static_cast<unsigned>(b.map),
+                  static_cast<unsigned>(b.legacy_row));
+
+    resource_view candidate_a{},candidate_b{};
+    if(!get_ptde_classic_candidate(name_a,candidate_a))
+        return false;
+    if(required_b && (a.map!=b.map || a.legacy_row!=b.legacy_row)) {
+        if(!get_ptde_classic_candidate(name_b,candidate_b))
+            return false;
+    } else candidate_b=candidate_a;
+
+    // Verify that the original SRVs still belong to the exact same
+    // name+SHA-attested DSR resources AFTER staging PTDE candidates.
+    // All AddRefs happen under the shared device/resource lifetime mutex.
+    const auto matches=[](ID3D11ShaderResourceView *v,
+                          const native_legacy_envdiffuse_identity &id) noexcept {
+        const auto key=static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(v));
+        const auto i=g_legacy_diffuse_resource_by_view.find(key);
+        if(i==g_legacy_diffuse_resource_by_view.end() ||
+           i->second!=id.resource_handle) return false;
+        const auto r=g_legacy_diffuse_by_resource.find(i->second);
+        return r!=g_legacy_diffuse_by_resource.end() &&
+            r->second.map==id.map && r->second.legacy_row==id.legacy_row;
+    };
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if(!g_ptde_classic_ready || !g_sampler_ready ||
+       g_device==nullptr || g_sampler.handle==0u ||
+       candidate_a.handle==0u || candidate_b.handle==0u ||
+       !matches(stock_t11,a) ||
+       (required_b && !matches(stock_t13,b)))
+        return false;
+
+    auto *native_a=reinterpret_cast<ID3D11ShaderResourceView *>(
+        static_cast<std::uintptr_t>(candidate_a.handle));
+    auto *native_b=reinterpret_cast<ID3D11ShaderResourceView *>(
+        static_cast<std::uintptr_t>(candidate_b.handle));
+    auto *sampler=reinterpret_cast<ID3D11SamplerState *>(
+        static_cast<std::uintptr_t>(g_sampler.handle));
+    if(native_a==nullptr || native_b==nullptr || sampler==nullptr)
+        return false;
+    native_a->AddRef();
+    native_b->AddRef();
+    sampler->AddRef();
+    out.ptde_a=native_a;
+    out.ptde_b=native_b;
+    out.sampler=sampler;
+    out.probe_b_required=required_b;
+    out.ready=true;
+    // out.probe_a/b remain zero: Classic rows are NOT packed-GI ordinals.
+    // Caller must use release(out); this function does not bind a shader.
+    return true;
+}
+#endif
+
 bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
     ID3D11ShaderResourceView *stock_view,
     std::uint16_t &probe) const noexcept

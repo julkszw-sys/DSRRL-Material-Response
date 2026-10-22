@@ -113,6 +113,9 @@ public:
     // name, with original dimensions, formats and mip levels.
     // A true return does not authorize t11/t13 binding or t12 bypass.
     bool stage_ptde_classic_candidate(const char *retail_name) const noexcept;
+    bool prepare_classic_envdiffuse_bound(ID3D11ShaderResourceView *stock_t11,
+        ID3D11ShaderResourceView *stock_t13,bool required_b,
+        prepared_envdiffuse_resources &out) noexcept;
 #endif
 
     // Read-only exact native t11/t13 identity probe. Works even if
