@@ -6178,10 +6178,26 @@ bool prepare_island_batch(
             if(g_pmetal_envspec.prepare_independent_envdiffuse(
                   cmd_list,material,decision,prepared.envspec)) {
                 prepared.envspec_in_batch=true;
-                if(dsrrl::runtime::append_island_draw_request(
-                      prepared.batch,prepared.envspec.request)==
+                const auto v372_append=
+                    dsrrl::runtime::append_island_draw_request(
+                        prepared.batch,prepared.envspec.request);
+                if(v372_append==
                    dsrrl::runtime::island_draw_batch_result::ready)
                     return true;
+                // Request-prepared does not imply an executable draw batch.
+                // A single explicit warning distinguishes this from a
+                // post-dispatch failure without guessing about pixels.
+                static std::atomic_bool v372_append_warned{false};
+                if(!v372_append_warned.exchange(
+                    true,std::memory_order_relaxed)) {
+                    char line[190]{};
+                    std::snprintf(line,sizeof(line),
+                        "[DSRRL V372 ED APPEND FAIL] rx=%u route=%u"
+                        " code=%u action=STOCK_DSR pixel=OPEN",
+                        decision.receiver_id,decision.route_index,
+                        static_cast<unsigned>(v372_append));
+                    reshade::log::message(reshade::log::level::warning,line);
+                }
                 release_prepared_island_batch(prepared);
             }
             return false; // fail-open native DSR, NEVER old joint shader
@@ -7025,6 +7041,47 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance);
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    // V372: owner-visible post-dispatch evidence. A V370 ED REQUEST is only
+    // PREPARED; this records whether the shared D3D11 transaction actually
+    // issued and restored a draw under the private PTDE EnvDiffuse shader.
+    // Keep WARN (not INFO): production release cleanup strips INFO.
+    if(prepared.envspec_in_batch &&
+       (prepared.batch.mutation.owners &
+        dsrrl::core::operator_bit(dsrrl::core::operator_id::env_diffuse))!=0u) {
+        static std::atomic<std::uint64_t> v372_ed_tx_count{0u};
+        const auto n=v372_ed_tx_count.fetch_add(
+            1u,std::memory_order_relaxed)+1u;
+        if(n<=16u || ((n&(n-1u))==0u)) {
+            const auto probe=prepared.envspec.envdiffuse_resources.probe_a;
+            const char *cls=(probe==500u || probe==510u)
+                ? "LEGACY_M18_EXACT"
+                : ((probe<342u)?"PACKED_GI":"UNRECOGNIZED");
+            const auto result=dispatch.transaction;
+            char line[340]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V372 ED TX] kind=draw n=%llu rx=%u route=%u"
+                " slot=%u probe=%u class=%s"
+                " owners=%08x shader=%u cb=%u srv=%u sampler=%u"
+                " tx=%u issued=%u restore_failed=%u pixel=OPEN",
+                static_cast<unsigned long long>(n),
+                decision.receiver_id,decision.route_index,
+                material.material_slot,
+                static_cast<unsigned>(probe),cls,
+                static_cast<unsigned>(prepared.batch.mutation.owners),
+                prepared.batch.mutation.replace_pixel_shader?1u:0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                static_cast<unsigned>(result),
+                dsrrl::runtime::draw_tx_issued(result)?1u:0u,
+                result==dsrrl::runtime::draw_tx_result::issued_restore_failed
+                    ?1u:0u);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
+
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
@@ -7588,6 +7645,47 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance);
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    // V372: owner-visible post-dispatch evidence. A V370 ED REQUEST is only
+    // PREPARED; this records whether the shared D3D11 transaction actually
+    // issued and restored a draw under the private PTDE EnvDiffuse shader.
+    // Keep WARN (not INFO): production release cleanup strips INFO.
+    if(prepared.envspec_in_batch &&
+       (prepared.batch.mutation.owners &
+        dsrrl::core::operator_bit(dsrrl::core::operator_id::env_diffuse))!=0u) {
+        static std::atomic<std::uint64_t> v372_ed_tx_count{0u};
+        const auto n=v372_ed_tx_count.fetch_add(
+            1u,std::memory_order_relaxed)+1u;
+        if(n<=16u || ((n&(n-1u))==0u)) {
+            const auto probe=prepared.envspec.envdiffuse_resources.probe_a;
+            const char *cls=(probe==500u || probe==510u)
+                ? "LEGACY_M18_EXACT"
+                : ((probe<342u)?"PACKED_GI":"UNRECOGNIZED");
+            const auto result=dispatch.transaction;
+            char line[340]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V372 ED TX] kind=indexed n=%llu rx=%u route=%u"
+                " slot=%u probe=%u class=%s"
+                " owners=%08x shader=%u cb=%u srv=%u sampler=%u"
+                " tx=%u issued=%u restore_failed=%u pixel=OPEN",
+                static_cast<unsigned long long>(n),
+                decision.receiver_id,decision.route_index,
+                material.material_slot,
+                static_cast<unsigned>(probe),cls,
+                static_cast<unsigned>(prepared.batch.mutation.owners),
+                prepared.batch.mutation.replace_pixel_shader?1u:0u,
+                prepared.batch.mutation.constant_buffer_count,
+                prepared.batch.mutation.srv_count,
+                prepared.batch.mutation.sampler_count,
+                static_cast<unsigned>(result),
+                dsrrl::runtime::draw_tx_issued(result)?1u:0u,
+                result==dsrrl::runtime::draw_tx_result::issued_restore_failed
+                    ?1u:0u);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
+
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
