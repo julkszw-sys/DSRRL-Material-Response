@@ -51,6 +51,18 @@ struct prepared_envdiffuse_resources {
     bool ready = false;
 };
 
+// DSR native source identity ONLY, not a PTDE probe ordinal.
+// A true result says the *live view* belongs to one strictly whitelisted
+// DSR legacy EnvDif resource (exact retail TLS name and exact BC6H SHA).
+// It NEVER authorizes PTDE cubemap replacement or any t12 EnvSpec mutation.
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+struct native_legacy_envdiffuse_identity {
+    std::uint64_t resource_handle = 0u;
+    std::uint16_t map = 0u;
+    std::uint16_t legacy_row = 0u;
+};
+#endif
+
 class envspec_resource_runtime {
 public:
     envspec_resource_runtime() noexcept = default;
@@ -89,6 +101,12 @@ public:
         std::uint8_t slot,
         bool probe_b_required,
         prepared_envspec_resources &prepared) noexcept;
+
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+    bool native_legacy_envdiffuse_for_view(
+        ID3D11ShaderResourceView *stock_view,
+        native_legacy_envdiffuse_identity &out) const noexcept;
+#endif
 
     // Read-only exact native t11/t13 identity probe. Works even if
     // the independent EnvSpec t12/t14 prepare step has failed; never

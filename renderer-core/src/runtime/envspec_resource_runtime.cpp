@@ -7,6 +7,9 @@
 
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+#include "dsrrl/operators/env_spec/legacy_envdiffuse_verified_identity_v360.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -70,6 +73,11 @@ std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
 std::unordered_map<std::uint64_t,native_probe_record> g_native_diffuse_resources;
 std::unordered_map<std::uint64_t,native_view_record> g_diffuse_by_view;
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+using legacy_diffuse_id=env::legacy_diffuse_verified::identity;
+std::unordered_map<std::uint64_t,legacy_diffuse_id> g_legacy_diffuse_by_resource;
+std::unordered_map<std::uint64_t,std::uint64_t> g_legacy_diffuse_resource_by_view;
+#endif
 env::native_diffuse_hash_atlas g_native_diffuse_hashes{};
 bool g_native_diffuse_atlas_ready = false;
 std::unordered_map<std::uint32_t,rgba_cube>
@@ -521,6 +529,10 @@ void release_carrier(
         g_resource_by_view.clear();
         g_native_diffuse_resources.clear();
         g_diffuse_by_view.clear();
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+        g_legacy_diffuse_by_resource.clear();
+        g_legacy_diffuse_resource_by_view.clear();
+#endif
         g_native_diffuse_hashes = {};
         g_native_diffuse_atlas_ready = false;
         g_device = nullptr;
@@ -576,6 +588,10 @@ void on_init_device(
             env::k_legacy_envspec_probe_count * 2u);
         g_native_diffuse_resources.reserve(env::k_native_envdiffuse_count);
         g_diffuse_by_view.reserve(env::k_native_envdiffuse_count * 2u);
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+        g_legacy_diffuse_by_resource.reserve(16u);
+        g_legacy_diffuse_resource_by_view.reserve(32u);
+#endif
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
@@ -811,6 +827,23 @@ void on_init_resource(
         return;
     }
     const auto digest = hashing::sha256(tight.data(),tight.size());
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+    // Independent legacy EnvDif identity, WITHOUT any packed-GI ordinal.
+    // The exact retail TLS name and exact BC6H SHA must BOTH match a
+    // runtime-confirmed DSR native identity; never infer PTDE donor mapping.
+    if(diffuse) {
+        const wchar_t *retail_name=nullptr;
+        std::size_t retail_len=0u;
+        legacy_diffuse_id legacy_id{};
+        if(texture_identity_transport::snapshot_raw(retail_name,retail_len) &&
+           env::legacy_diffuse_verified::resolve(
+               retail_name,retail_len,digest,legacy_id)) {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            if(device_ptr==g_device && g_native_diffuse_atlas_ready)
+                g_legacy_diffuse_by_resource[resource_handle.handle]=legacy_id;
+        }
+    }
+#endif
     std::optional<std::uint16_t> probe;
     if (spec) {
         probe = env::legacy_native_probe_for_sha(digest);
@@ -879,6 +912,15 @@ void on_destroy_resource(
     g_native_resources.erase(
         resource_handle.handle);
     g_native_diffuse_resources.erase(resource_handle.handle);
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+    g_legacy_diffuse_by_resource.erase(resource_handle.handle);
+    for(auto it=g_legacy_diffuse_resource_by_view.begin();
+        it!=g_legacy_diffuse_resource_by_view.end();) {
+        if(it->second==resource_handle.handle)
+            it=g_legacy_diffuse_resource_by_view.erase(it);
+        else ++it;
+    }
+#endif
 
     g_snapshot_epoch.fetch_add(
         1u,
@@ -928,7 +970,16 @@ void on_init_resource_view(
             resource_handle.handle);
     if (native == g_native_resources.end()) {
         const auto diffuse = g_native_diffuse_resources.find(resource_handle.handle);
-        if (diffuse == g_native_diffuse_resources.end()) return;
+        if (diffuse == g_native_diffuse_resources.end()) {
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+            // Separate legacy resource namespace. Never alias to the
+            // packed-GI probe ordinal or PTDE cube map.
+            if(g_legacy_diffuse_by_resource.find(resource_handle.handle)!=
+               g_legacy_diffuse_by_resource.end())
+                g_legacy_diffuse_resource_by_view[view.handle]=resource_handle.handle;
+#endif
+            return;
+        }
         g_diffuse_by_view[view.handle] = {
             resource_handle.handle, diffuse->second.probe_ordinal};
         return;
@@ -963,7 +1014,13 @@ void on_destroy_resource_view(
 
     const bool spec_removed = g_resource_by_view.erase(view.handle) != 0u;
     const bool diff_removed = g_diffuse_by_view.erase(view.handle) != 0u;
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+    const bool legacy_removed =
+        g_legacy_diffuse_resource_by_view.erase(view.handle)!=0u;
+    if (spec_removed || diff_removed || legacy_removed)
+#else
     if (spec_removed || diff_removed)
+#endif
         g_snapshot_epoch.fetch_add(
             1u,
             std::memory_order_release);
@@ -1853,6 +1910,30 @@ bool envspec_resource_runtime::prepare_native_dsr(
     return true;
 }
 
+
+#if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
+bool envspec_resource_runtime::native_legacy_envdiffuse_for_view(
+    ID3D11ShaderResourceView *stock_view,
+    native_legacy_envdiffuse_identity &out) const noexcept
+{
+    out={};
+    if(stock_view==nullptr) return false;
+    const auto key=static_cast<std::uint64_t>(
+        reinterpret_cast<std::uintptr_t>(stock_view));
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if(g_device==nullptr) return false;
+    const auto view_it=g_legacy_diffuse_resource_by_view.find(key);
+    if(view_it==g_legacy_diffuse_resource_by_view.end())
+        return false;
+    const auto resource_it=g_legacy_diffuse_by_resource.find(view_it->second);
+    if(resource_it==g_legacy_diffuse_by_resource.end())
+        return false;
+    out.map=resource_it->second.map;
+    out.legacy_row=resource_it->second.legacy_row;
+    out.resource_handle=view_it->second;
+    return true;
+}
+#endif
 
 bool envspec_resource_runtime::native_envdiffuse_probe_for_view(
     ID3D11ShaderResourceView *stock_view,
