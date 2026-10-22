@@ -42,7 +42,7 @@ constexpr bool exact_name(const wchar_t *name,std::size_t count,
     if(name==nullptr || expected==nullptr || count==0u || count>32u)
         return false;
     std::size_t n=0u;
-    for(; expected[n]!='\\0';++n) {
+    for(; expected[n]!='\0';++n) {
         if(n>=count || name[n]!=static_cast<wchar_t>(expected[n]))
             return false;
     }
@@ -59,7 +59,7 @@ constexpr bool exact_digest(const std::array<std::uint8_t,32> &digest,
            digest[i]!=static_cast<std::uint8_t>((high<<4)|low))
             return false;
     }
-    return hex[64u]=='\\0';
+    return hex[64u]=='\0';
 }
 // Output remains empty on uncertainty. No fuzzy match, no cross-family alias.
 constexpr bool resolve(const wchar_t *name,std::size_t count,
