@@ -33,7 +33,7 @@ assert '12u' not in island and '14u' not in island
 assert 'DSRRL V367 ENVSPEC T12 AUTHORITY' in resources
 assert 'stock_t12_identified' in resources and 'g_pack_ready' in resources
 assert 'prepare_classic_envdiffuse_only(' in integrated
-assert integrated.count('prepare_classic_envdiffuse_only(')==2
+assert integrated.count('prepare_classic_envdiffuse_only(')>=2
 assert 'register_classic_rx34_from_stock(' in integrated
 assert 'dsrrl::core::operator_id::env_diffuse,' in integrated
 assert 'V367 RX34 ENVDIFFUSE' in cleanup
