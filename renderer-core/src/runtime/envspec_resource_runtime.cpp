@@ -855,6 +855,12 @@ void on_destroy_resource(
     g_native_resources.erase(
         resource_handle.handle);
     g_native_diffuse_resources.erase(resource_handle.handle);
+
+    g_snapshot_epoch.fetch_add(
+        1u,
+        std::memory_order_release);
+    // Keep the V358 protected lifetime-retirement anchor intact.
+    // V371 independent t11 records are retired in the same locked callback.
     g_v371_diffuse_creation_sha.erase(resource_handle.handle);
     g_v371_diffuse_names.erase(resource_handle.handle);
     for(auto it=g_v371_legacy_by_view.begin();
@@ -863,10 +869,6 @@ void on_destroy_resource(
             it=g_v371_legacy_by_view.erase(it);
         else ++it;
     }
-
-    g_snapshot_epoch.fetch_add(
-        1u,
-        std::memory_order_release);
 
     for (auto it =
              g_resource_by_view.begin();
