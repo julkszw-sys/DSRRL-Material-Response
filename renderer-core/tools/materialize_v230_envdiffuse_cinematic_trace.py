@@ -152,6 +152,56 @@ def runtime(s):
                     tex.ArraySize,static_cast<unsigned>(tex.Format),
                     tex.SampleDesc.Count,candidate?1u:0u);
                 reshade::log::message(reshade::log::level::warning,detail);
+#if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
+                // Exact V214 retail source name, scoped to this SAME backing
+                // ID3D11Resource and original device. Never infer from
+                // near-equal SHA, current map, material, or packed GI ordinal.
+                ID3D11Device *native_device=nullptr;
+                diffuse[0]->GetDevice(&native_device);
+                std::array<wchar_t,257> retail_name{};
+                std::size_t retail_length=0u;
+                const auto retail_status=
+                    v214_resource_provenance::instance().snapshot(
+                        reinterpret_cast<std::uintptr_t>(native_device),
+                        reinterpret_cast<std::uintptr_t>(res),
+                        retail_name,retail_length);
+                const auto retail_exact=
+                    retail_status==v214_resource_provenance::status::exact;
+                const auto retail_ambiguous=
+                    retail_status==v214_resource_provenance::status::ambiguous;
+                char printable_name[97]{};
+                if(retail_exact) {
+                    const auto limit=std::min(
+                        retail_length,sizeof(printable_name)-1u);
+                    for(std::size_t i=0u;i<limit;++i) {
+                        const auto c=retail_name[i];
+                        printable_name[i]=(c>=33 && c<=126)
+                            ?static_cast<char>(c):'?';
+                    }
+                }
+                char origin_log[530]{};
+                std::snprintf(origin_log,sizeof(origin_log),
+                    "[DSRRL V359 T11 RETAIL ORIGIN]"
+                    " rx=%u route=%u material_slot=%u"
+                    " srv=%016llx backing=%016llx device=%016llx"
+                    " name_status=%s name=%.96s"
+                    " action=READ_ONLY mapping=UNAUTHORIZED pixels=OPEN",
+                    static_cast<unsigned>(decision.receiver_id),
+                    static_cast<unsigned>(decision.route_index),
+                    static_cast<unsigned>(material.material_slot),
+                    static_cast<unsigned long long>(
+                        reinterpret_cast<std::uintptr_t>(diffuse[0])),
+                    static_cast<unsigned long long>(
+                        reinterpret_cast<std::uintptr_t>(res)),
+                    static_cast<unsigned long long>(
+                        reinterpret_cast<std::uintptr_t>(native_device)),
+                    retail_exact?"EXACT":
+                        retail_ambiguous?"AMBIGUOUS":"ABSENT",
+                    printable_name);
+                reshade::log::message(
+                    reshade::log::level::warning,origin_log);
+                if(native_device!=nullptr) native_device->Release();
+#endif
                 if(res!=nullptr) res->Release();
             }
             for(auto *v:diffuse)
