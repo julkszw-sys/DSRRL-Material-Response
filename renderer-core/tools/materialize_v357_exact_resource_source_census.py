@@ -179,7 +179,60 @@ apply(p,marker,marker+'''
 std::atomic<std::uint32_t> g_v357_unknown_bc6h_census{0u};
 std::atomic<std::uint32_t> g_v357_missing_bc6h_init{0u};
 #endif''',"counter")
-if "const bool spec = is_native_envspec_desc(desc);" in (root/p).read_text("utf8"):
+if "DSRRL_V359_T11_CREATION_SHA_WITNESS" in (root/p).read_text("utf8"):
+    # New V359 read-only t11 witness owns diffuse instrumentation; V357 still
+    # instruments the exact spec-only rejection/producer negative paths.
+    marker='''    if (!extract_tight_bc6h(desc, initial_data, tight)) {
+        if (spec) ++g_native_hash_miss;
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)'''
+    repl='''    if (!extract_tight_bc6h(desc, initial_data, tight)) {
+        if (spec) {
+            ++g_native_hash_miss;
+#if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
+            const auto n=g_v357_missing_bc6h_init.fetch_add(1u,std::memory_order_relaxed);
+            if(n<16u) {
+                char line[320]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V357 BC6H PRODUCER] stage=initial_data_not_extractable"
+                    " resource=%016llx candidate_desc=YES"
+                    " exact_sha=UNAVAILABLE fail_open=1",
+                    static_cast<unsigned long long>(resource_handle.handle));
+                reshade::log::message(reshade::log::level::info,line);
+            }
+#endif
+        }
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)'''
+    apply(p,marker,repl,"producer extraction unknown V359 creation witness")
+    marker='''    if (!probe.has_value()) {
+        if (spec) ++g_native_hash_miss;
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)'''
+    repl='''    if (!probe.has_value()) {
+        if (spec) {
+            ++g_native_hash_miss;
+#if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
+            const auto n=g_v357_unknown_bc6h_census.fetch_add(1u,std::memory_order_relaxed);
+            if(n<96u) {
+                char digest_hex[65]{};
+                constexpr char alphabet[]="0123456789abcdef";
+                for(std::size_t i=0u;i<digest.size();++i) {
+                    digest_hex[i*2u]=alphabet[digest[i]>>4u];
+                    digest_hex[i*2u+1u]=alphabet[digest[i]&15u];
+                }
+                char line[320]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V357 BC6H PRODUCER]"
+                    " stage=sha_not_in_certified_atlas"
+                    " resource=%016llx sha256=%s"
+                    " tight_bytes=%u exact_probe=NONE pixel=OPEN",
+                    static_cast<unsigned long long>(resource_handle.handle),
+                    digest_hex,static_cast<unsigned>(tight.size()));
+                reshade::log::message(reshade::log::level::info,line);
+            }
+#endif
+        }
+#if defined(DSRRL_V359_T11_CREATION_SHA_WITNESS)'''
+    apply(p,marker,repl,"producer SHA unknown V359 creation witness")
+elif "const bool spec = is_native_envspec_desc(desc);" in (root/p).read_text("utf8"):
     # V359 independent EnvDiffuse: preserve exact BC6H negative telemetry for
     # the original EnvSpec producer only. Do not report ambiguous native
     # t11 fingerprints as missing t12; do not weaken any acceptance gate.
