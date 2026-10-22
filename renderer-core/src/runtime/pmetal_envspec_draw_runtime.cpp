@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+#include "dsrrl/operators/env_spec/classic_envdiffuse_rx34_decode_v365.hpp"
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
@@ -279,6 +282,12 @@ release_resources() noexcept
             record.shader->Release();
     }
     replacements_.clear();
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+    if (classic_rx34_shader_ != nullptr) {
+        classic_rx34_shader_->Release();
+        classic_rx34_shader_ = nullptr;
+    }
+#endif
 
     for (auto &[_,shader] :
          lerp_replacements_) {
@@ -403,6 +412,12 @@ on_destroy_device(
             record.shader->Release();
     }
     replacements_.clear();
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+    if (classic_rx34_shader_ != nullptr) {
+        classic_rx34_shader_->Release();
+        classic_rx34_shader_ = nullptr;
+    }
+#endif
 
     for (auto &[_,shader] :
          lerp_replacements_) {
@@ -565,6 +580,124 @@ register_replacement(
     ++replacement_register_ok_;
     return true;
 }
+
+
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+bool pmetal_envspec_draw_runtime::
+register_classic_rx34_from_stock(
+    const void *stock_dxbc, std::size_t stock_size) noexcept
+{
+    using namespace operators::env_spec::classic_envdiffuse_rx34_v365;
+    std::vector<std::uint8_t> candidate;
+    if (materialize(
+            static_cast<const std::uint8_t *>(stock_dxbc),
+            stock_size, candidate) != result::candidate_ready)
+        return false;
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (device_ == nullptr || quarantined_.load())
+        return false;
+    if (classic_rx34_shader_ != nullptr)
+        return true;
+
+    ID3D11PixelShader *shader = nullptr;
+    if (FAILED(device_->CreatePixelShader(
+            candidate.data(), candidate.size(), nullptr, &shader)) ||
+        shader == nullptr)
+        return false;
+    classic_rx34_shader_ = shader;
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL V367 RX34 ENVDIFFUSE] stage=EXACT_STOCK_DXBC_REGISTERED"
+        " t11=PTDE_RGBA_DIV_ALPHA t12=STOCK bind=DRAW_GATED pixel=OPEN");
+    return true;
+}
+
+bool pmetal_envspec_draw_runtime::
+prepare_classic_envdiffuse_only(
+    reshade::api::command_list *cmd_list,
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    pmetal_envspec_receiver_family family,
+    prepared_pmetal_envspec_draw &prepared) noexcept
+{
+    // This is a separate EnvDiffuse consumer, NOT the full P_Metal operator.
+    // No material, PointLight, EnvSpec, b12 or DSR PBL shader tail patches.
+    prepared = {};
+    if (cmd_list == nullptr ||
+        family != pmetal_envspec_receiver_family::stable_hemenv ||
+        !material.valid || !material.owner_tuple_exact ||
+        !material.material_slot_valid ||
+        !decision.active || decision.receiver_id != 34u ||
+        quarantined_.load() ||
+        !core_.features().enabled(core::operator_id::env_diffuse))
+        return false;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (classic_rx34_shader_ == nullptr || device_ == nullptr)
+            return false;
+        classic_rx34_shader_->AddRef();
+        prepared.shader = classic_rx34_shader_;
+    }
+
+    auto *context = reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+    if (context == nullptr) {
+        release(prepared);
+        return false;
+    }
+
+    ID3D11ShaderResourceView *stock_t11[1]{};
+    bool shadow_ready = pixel_srv_shadow_snapshot(
+        cmd_list, 11u, 1u, stock_t11);
+    if (!shadow_ready) {
+        if (stock_t11[0] != nullptr) {
+            stock_t11[0]->Release();
+            stock_t11[0] = nullptr;
+        }
+        context->PSGetShaderResources(11u, 1u, stock_t11);
+    }
+
+    // Both paths are exact-source gated. The 342 GI atlas never aliases a
+    // Classic name/row; Classic requires name+SHA+live native SRV ownership.
+    bool ready = env_resources_.prepare_envdiffuse_bound(
+        stock_t11[0], nullptr, false, prepared.envdiffuse_resources);
+    if (!ready)
+        ready = env_resources_.prepare_classic_envdiffuse_bound(
+            stock_t11[0], nullptr, false, prepared.envdiffuse_resources);
+    if (stock_t11[0] != nullptr)
+        stock_t11[0]->Release();
+
+    if (!ready) {
+        release(prepared);
+        return false;
+    }
+
+    prepared.request.primary = core::operator_id::env_diffuse;
+    prepared.request.receiver_verified = true;
+    prepared.request.material_verified = true;
+    prepared.request.pixel_shader = prepared.shader;
+    prepared.request.replace_pixel_shader = true;
+    prepared.request.srvs[0] = {
+        11u, prepared.envdiffuse_resources.ptde_a
+    };
+    prepared.request.srv_count = 1u;
+    prepared.request.samplers[0] = {
+        11u, prepared.envdiffuse_resources.sampler
+    };
+    prepared.request.sampler_count = 1u;
+    prepared.ready = true;
+
+    static std::atomic_bool logged{false};
+    if (!logged.exchange(true, std::memory_order_relaxed))
+        reshade::log::message(reshade::log::level::info,
+            "[DSRRL V367 RX34 ENVDIFFUSE] stage=PREPARED"
+            " exact_material=1 exact_t11=1 shader=PTDE_RGB_DIV_A"
+            " envspec_t12=STOCK all_other_operators=STOCK"
+            " replay=UNVERIFIED pixel=OPEN");
+    return true;
+}
+#endif
 
 bool pmetal_envspec_draw_runtime::
 register_lerp_replacement(

@@ -75,8 +75,11 @@ inline constexpr std::array<
          draw_mutation_srv | draw_mutation_sampler,
      true, true, true},
     {operator_id::env_diffuse, draw_transaction_mode::draw_required,
-     draw_mutation_constant_buffer | draw_mutation_srv |
-         draw_mutation_sampler,
+     // EnvDiffuse has two validated draw carriers: legacy source+CB and
+     // independent RX34 source+shader. Requiring an unrelated stock-CB
+     // rebind for RX34 creates cross-operator work. Both must bind an
+     // exact SRV+sampler and pass the caller's receiver/material gates.
+     draw_mutation_srv | draw_mutation_sampler,
      draw_mutation_shader | draw_mutation_constant_buffer |
          draw_mutation_srv | draw_mutation_sampler,
      true, false, true},

@@ -1908,6 +1908,38 @@ bool envspec_resource_runtime::prepare_bound(
         }
     }
 
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+    // EnvSpec t12 is a separate resource authority. Distinguish missing
+    // 33,619,968-byte PTDE pack from unmatched native stock SRV/ordinal;
+    // neither condition authorizes a guessed probe or t12 bypass.
+    if (!ready) {
+        static std::atomic_bool first_reject{false};
+        if (!first_reject.exchange(true, std::memory_order_relaxed)) {
+            bool pack=false, sampler=false;
+            {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                pack=g_pack_ready;
+                sampler=g_sampler_ready;
+            }
+            std::uint16_t observed_probe=0u;
+            const bool stock_t12_identified =
+                probe_for_native_view(stock_a, observed_probe);
+            char line[416]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V367 ENVSPEC T12 AUTHORITY]"
+                " ptde_pack=%u sampler=%u stock_t12=%u"
+                " exact_native_id=%u ordinal=%u"
+                " lerp_b_required=%u"
+                " action=STOCK_DSR reason=SEPARATE_AUTHORITY pixel=OPEN",
+                pack?1u:0u,sampler?1u:0u,
+                stock_a!=nullptr?1u:0u,
+                stock_t12_identified?1u:0u,
+                static_cast<unsigned>(observed_probe),
+                probe_b_required?1u:0u);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
     if (!ready ||
         a_native == nullptr ||
         b_native == nullptr ||
