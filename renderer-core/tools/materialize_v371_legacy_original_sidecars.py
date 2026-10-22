@@ -29,7 +29,7 @@ def audit_pack(pack,manifest):
     extracted={}
     for i in range(39):
         name_raw,map_id,row,w,h,mips,fmt,flags,origin,size,sha,pad=RECORD.unpack_from(data,32+i*128)
-        name=name_raw.split(b'\\0',1)[0].decode('ascii')
+        name=name_raw.split(bytes([0]),1)[0].decode('ascii')
         if name in seen or not name.startswith('EnvDif_') or flags!=1 or any(pad):
             raise ValueError('Ambiguous or invalid source metadata '+name)
         seen.add(name)
