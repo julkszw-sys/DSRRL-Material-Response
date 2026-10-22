@@ -1141,6 +1141,9 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::upper_lower,
     dsrrl::core::operator_id::hemdir3,
     dsrrl::core::operator_id::env_spec,
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    dsrrl::core::operator_id::env_diffuse,
+#endif
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::point_light,
