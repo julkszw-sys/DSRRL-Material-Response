@@ -10,6 +10,7 @@ struct hook_status {
     bool provenance_ok = false;
     bool name_hook_armed = false;
     bool clear_hook_armed = false;
+    bool gi_reflection_branch_armed = false; // observational producer only
     bool restore_failed = false;
 };
 

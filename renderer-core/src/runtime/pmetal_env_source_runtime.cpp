@@ -2630,6 +2630,13 @@ void pmetal_env_source_selector_event(
             true,
             std::memory_order_relaxed);
 
+    // Strict synthetic-zero cut: alternate FLVER descriptors are initialized
+    // to zeros at this exact native call site. Reject as SOURCE AUTHORITY,
+    // not as a numerical m10/0 prohibition. Never rewrite legitimate row0.
+    if (pmetal_selector_policy::is_synthetic_zero_descriptor(
+            rva, raw_a, raw_b, beta))
+        return;
+
     const auto endpoints =
         pmetal_selector_policy::select(
             static_cast<std::int16_t>(
