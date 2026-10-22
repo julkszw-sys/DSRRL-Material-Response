@@ -1,0 +1,54 @@
+name: V373 LegacyGI Runtime Census
+on:
+  push:
+    branches: [agent/v373-legacygi-name-sha-census-20261023]
+  pull_request:
+    branches: [agent/v371-v370-independent-legacy-envdiffuse-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-single-addon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v373-legacygi-name-sha-census-20261023
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Verify source routing and draw stage witness
+        shell: pwsh
+        run: |
+          python renderer-core/tools/test_v370_exact_envdiffuse_operator_isolation.py
+          if ($LASTEXITCODE -ne 0) { throw 'V370 source' }
+          python renderer-core/tools/test_v371_independent_legacy_envdiffuse.py
+          if ($LASTEXITCODE -ne 0) { throw 'V371 source' }
+          python renderer-core/tools/test_v372_envdiffuse_draw_witness.py
+          if ($LASTEXITCODE -ne 0) { throw 'V372 inherited source' }
+          python renderer-core/tools/test_v373_legacygi_name_sha_census.py
+          if ($LASTEXITCODE -ne 0) { throw 'V373 source' }
+      - name: Build single native Win64 addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude (Join-Path $PWD.Path '_reshade/include')
+          if ($LASTEXITCODE -ne 0) { throw 'V372 native build' }
+      - name: Verify PE and diagnostic markers
+        shell: pwsh
+        run: |
+          $p='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $p)) { throw 'Missing addon64' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $p))
+          $text=[Text.Encoding]::ASCII.GetString($bytes)
+          if ($bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw 'Invalid PE' }
+          foreach ($mark in @('[DSRRL V370 ED REQUEST]','[DSRRL V372 ED TX]','[DSRRL V371 LEGACY T11 RESOURCE READY]','[DSRRL V372 ED APPEND FAIL]','[DSRRL V373 LEGACY CREATE]','[DSRRL V373 LEGACY T11 CENSUS]')) {
+            if (!$text.Contains($mark)) { throw "Missing marker $mark" }
+          }
+          Get-FileHash $p -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V373-LegacyGI-Create-And-T11-Census-OneAddon-PixelOpen
+          path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error
