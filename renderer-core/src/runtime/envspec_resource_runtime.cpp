@@ -789,8 +789,7 @@ void on_init_resource(
     if (!spec && !diffuse) return;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (device_ptr != g_device ||
-            (diffuse && !g_native_diffuse_atlas_ready)) return;
+        if (device_ptr != g_device) return;
     }
     if (spec) ++g_native_candidates;
     std::vector<std::uint8_t> tight;
@@ -799,14 +798,30 @@ void on_init_resource(
         return;
     }
     const auto digest = hashing::sha256(tight.data(),tight.size());
+    // Creation SHA and TLS source are recorded on the exact native t11 producer.
+    // Neither a matching name alone nor EnvSpec t12 may authorize this path.
+    if(diffuse) {
+        gi_envdif_name_witness::identity witness{};
+        const bool named=gi_envdif_name_witness::capture(witness);
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            if(device_ptr==g_device && g_v371_diffuse_creation_sha.size()<4096u) {
+                g_v371_diffuse_creation_sha[resource_handle.handle]=digest;
+                if(named) {
+                    witness.stage=1u;
+                    v371_record_name_locked(resource_handle.handle,witness);
+                }
+            }
+        } catch(...) {}
+    }
     std::optional<std::uint16_t> probe;
     if (spec) {
         probe = env::legacy_native_probe_for_sha(digest);
     } else {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (device_ptr != g_device || !g_native_diffuse_atlas_ready)
-            return;
-        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
+        if (device_ptr != g_device) return;
+        if (g_native_diffuse_atlas_ready)
+            probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
     }
     if (!probe.has_value()) {
         if (spec) ++g_native_hash_miss;
@@ -814,8 +829,7 @@ void on_init_resource(
     }
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (device_ptr != g_device ||
-            (diffuse && !g_native_diffuse_atlas_ready)) return;
+        if (device_ptr != g_device) return;
         if (spec)
             g_native_resources[resource_handle.handle] = {probe.value()};
         else
@@ -841,6 +855,14 @@ void on_destroy_resource(
     g_native_resources.erase(
         resource_handle.handle);
     g_native_diffuse_resources.erase(resource_handle.handle);
+    g_v371_diffuse_creation_sha.erase(resource_handle.handle);
+    g_v371_diffuse_names.erase(resource_handle.handle);
+    for(auto it=g_v371_legacy_by_view.begin();
+        it!=g_v371_legacy_by_view.end();) {
+        if(it->second.resource_handle==resource_handle.handle)
+            it=g_v371_legacy_by_view.erase(it);
+        else ++it;
+    }
 
     g_snapshot_epoch.fetch_add(
         1u,
@@ -871,6 +893,24 @@ void on_init_resource_view(
     const resource_view_desc &,
     resource_view view)
 {
+    // V371: only the live SRV's actual COM backing can carry a source witness.
+    gi_envdif_name_witness::identity name{};
+    bool exact_backing=false;
+    if(device_ptr!=nullptr && resource_handle.handle!=0u &&
+       view.handle!=0u &&
+       (usage&resource_usage::shader_resource)!=resource_usage::undefined &&
+       device_ptr->get_api()==device_api::d3d11 &&
+       gi_envdif_name_witness::capture(name)) {
+        auto *srv=reinterpret_cast<ID3D11ShaderResourceView *>(
+            static_cast<std::uintptr_t>(view.handle));
+        ID3D11Resource *actual=nullptr;
+        srv->GetResource(&actual);
+        exact_backing=actual!=nullptr &&
+            reinterpret_cast<std::uintptr_t>(actual)==
+                static_cast<std::uintptr_t>(resource_handle.handle);
+        if(actual)actual->Release();
+    }
+
     if (device_ptr == nullptr ||
         resource_handle.handle == 0u ||
         view.handle == 0u ||
@@ -884,6 +924,17 @@ void on_init_resource_view(
 
     if (device_ptr != g_device)
         return;
+
+    if(exact_backing &&
+       g_v371_diffuse_creation_sha.count(resource_handle.handle)!=0u) {
+        name.stage=2u;
+        v371_record_name_locked(resource_handle.handle,name);
+    }
+    const auto *legacy=v371_exact_resource_locked(resource_handle.handle);
+    if(legacy!=nullptr) {
+        g_v371_legacy_by_view[view.handle]={
+            resource_handle.handle,legacy->selector};
+    }
 
     const auto native =
         g_native_resources.find(
@@ -925,7 +976,8 @@ void on_destroy_resource_view(
 
     const bool spec_removed = g_resource_by_view.erase(view.handle) != 0u;
     const bool diff_removed = g_diffuse_by_view.erase(view.handle) != 0u;
-    if (spec_removed || diff_removed)
+    const bool legacy_removed=g_v371_legacy_by_view.erase(view.handle)!=0u;
+    if (spec_removed || diff_removed || legacy_removed)
         g_snapshot_epoch.fetch_add(
             1u,
             std::memory_order_release);
