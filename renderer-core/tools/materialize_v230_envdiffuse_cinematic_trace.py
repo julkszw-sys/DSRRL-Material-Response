@@ -117,16 +117,40 @@ def runtime(s):
                 diffuse[0]->GetResource(&res);
                 D3D11_RESOURCE_DIMENSION dim=D3D11_RESOURCE_DIMENSION_UNKNOWN;
                 if(res!=nullptr) res->GetType(&dim);
-                char detail[300]{};
+                D3D11_TEXTURE2D_DESC tex{};
+                bool tex2d=false;
+                if(res!=nullptr && dim==D3D11_RESOURCE_DIMENSION_TEXTURE2D) {
+                    ID3D11Texture2D *texture=nullptr;
+                    if(SUCCEEDED(res->QueryInterface(
+                        __uuidof(ID3D11Texture2D),
+                        reinterpret_cast<void **>(&texture))) && texture!=nullptr) {
+                        texture->GetDesc(&tex);
+                        tex2d=true;
+                        texture->Release();
+                    }
+                }
+                const bool candidate=tex2d && tex.Width==64u && tex.Height==64u &&
+                    tex.MipLevels==1u && tex.ArraySize==6u &&
+                    tex.SampleDesc.Count==1u &&
+                    (tex.Format==DXGI_FORMAT_BC6H_TYPELESS ||
+                     tex.Format==DXGI_FORMAT_BC6H_UF16 ||
+                     tex.Format==DXGI_FORMAT_BC6H_SF16);
+                char detail[800]{};
                 std::snprintf(detail,sizeof(detail),
                     "[DSRRL V359 T11 BOUND DESC] rx=%u route=%u"
                     " srv_dim=%u srv_fmt=%u resource_dim=%u"
-                    " has_resource=%u action=READ_ONLY",
+                    " backing=%016llx tex2d=%u w=%u h=%u mips=%u"
+                    " array=%u tex_fmt=%u sample_count=%u"
+                    " create_desc_candidate=%u action=READ_ONLY",
                     static_cast<unsigned>(decision.receiver_id),
                     static_cast<unsigned>(decision.route_index),
                     static_cast<unsigned>(vd.ViewDimension),
                     static_cast<unsigned>(vd.Format),
-                    static_cast<unsigned>(dim),res!=nullptr?1u:0u);
+                    static_cast<unsigned>(dim),
+                    static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(res)),
+                    tex2d?1u:0u,tex.Width,tex.Height,tex.MipLevels,
+                    tex.ArraySize,static_cast<unsigned>(tex.Format),
+                    tex.SampleDesc.Count,candidate?1u:0u);
                 reshade::log::message(reshade::log::level::warning,detail);
                 if(res!=nullptr) res->Release();
             }
