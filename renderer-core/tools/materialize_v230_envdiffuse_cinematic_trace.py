@@ -117,6 +117,23 @@ def runtime(s):
                 native_legacy_envdiffuse_identity legacy_identity{};
                 if(env_resources_.native_legacy_envdiffuse_for_view(
                        diffuse[0],legacy_identity)) {
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+                    char ptde_name[40]{};
+                    std::snprintf(ptde_name,sizeof(ptde_name),
+                        "EnvDif_m%u_%03u",
+                        static_cast<unsigned>(legacy_identity.map),
+                        static_cast<unsigned>(legacy_identity.legacy_row));
+                    const bool candidate=env_resources_.stage_ptde_classic_candidate(ptde_name);
+                    char asset_line[285]{};
+                    std::snprintf(asset_line,sizeof(asset_line),
+                        "[DSRRL V361 CLASSIC PTDE CANDIDATE]"
+                        " rx=%u route=%u ptde_name=%s"
+                        " candidate=%s bind=NO t12=REJECTED pixels=OPEN",
+                        static_cast<unsigned>(decision.receiver_id),
+                        static_cast<unsigned>(decision.route_index),
+                        ptde_name,candidate?"GPU_READY":"NOT_READY");
+                    reshade::log::message(reshade::log::level::warning,asset_line);
+#endif
                     char legacy_line[330]{};
                     std::snprintf(legacy_line,sizeof(legacy_line),
                         "[DSRRL V360 LEGACY ENVDIF ROUTED]"
