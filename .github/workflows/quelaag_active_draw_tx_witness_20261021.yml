@@ -74,6 +74,7 @@ jobs:
           if (!$data.Contains('[DSRRL V360 LEGACY ENVDIF ROUTED]')) { throw 'Legacy native resource registry missing in PE' }
           if (!$data.Contains('[DSRRL V362 LEGACY T11 REGISTER]')) { throw 'Exact name + SHA registration witness missing in PE' }
           if (!$data.Contains('[DSRRL V365 CLASSIC RX34 SHADER ISLAND]')) { throw 'V365 isolated DXBC materialization marker absent' }
+          if (!$data.Contains('V366 CLASSIC PTDE T11')) { throw 'V366 PE check' }
           Get-FileHash $out -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
