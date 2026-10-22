@@ -150,7 +150,7 @@ else:
                 v359_source_ordinal,v359_source_map);
     #endif
     #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)""","exact scoped producer")
-
+    
 replace(p,"""            item.probe=probe.has_value() ? probe.value() : 0u;
             g_v358_lifetime_probes[resource_handle.handle]=item;""",
 """            item.probe=probe.has_value() ? probe.value() : 0u;
