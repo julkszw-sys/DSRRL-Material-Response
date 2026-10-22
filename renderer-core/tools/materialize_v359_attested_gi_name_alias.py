@@ -110,11 +110,13 @@ replace(p,"        g_v358_lifetime_probes.clear();",
         g_v359_map_conflict = {};
 #endif''',"reset per device")
 
-replace(p,"""        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
-    }
-#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)""",
-"""        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
-    }
+if "DSRRL_V359_T11_CREATION_SHA_WITNESS" in (root/p).read_text("utf8"):
+    # V359 creation telemetry restructures the diffuse digest resolution.
+    # Keep GI name provenance at the same semantic cut before V358 lifetime census.
+    replace(p,"""    }
+#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
+    if (spec) {""",
+    """    }
 #if defined(DSRRL_V359_ATTESTED_GI_NAME_ALIAS)
     std::uint16_t v359_source_ordinal=0u;
     std::uint8_t v359_source_map=0u;
@@ -127,7 +129,27 @@ replace(p,"""        probe = env::unique_native_diffuse_probe(g_native_diffuse_h
             v359_name,v359_name_len,
             v359_source_ordinal,v359_source_map);
 #endif
-#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)""","exact scoped producer")
+#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
+    if (spec) {""","exact scoped producer V359 t11 creation witness")
+else:
+    replace(p,"""        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
+        }
+    #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)""",
+    """        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
+        }
+    #if defined(DSRRL_V359_ATTESTED_GI_NAME_ALIAS)
+        std::uint16_t v359_source_ordinal=0u;
+        std::uint8_t v359_source_map=0u;
+        const wchar_t *v359_name=nullptr;
+        std::size_t v359_name_len=0u;
+        const bool v359_source_exact=spec &&
+            texture_identity_transport::snapshot_raw(
+                v359_name,v359_name_len) &&
+            v359_match_original_gi_name(
+                v359_name,v359_name_len,
+                v359_source_ordinal,v359_source_map);
+    #endif
+    #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)""","exact scoped producer")
 
 replace(p,"""            item.probe=probe.has_value() ? probe.value() : 0u;
             g_v358_lifetime_probes[resource_handle.handle]=item;""",
