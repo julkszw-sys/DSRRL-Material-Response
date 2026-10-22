@@ -21,7 +21,7 @@ assert "register_classic_rx33_from_stock(" in runtime
 assert "decision.receiver_id != 33u && decision.receiver_id != 34u" in runtime
 assert "prepare_envdiffuse_bound(" in runtime
 assert "prepare_classic_envdiffuse_bound(" in runtime
-source=island=runtime.split("prepare_classic_envdiffuse_only(",1)[1].split("\n#endif",1)[0]
+source=island=runtime.split("prepare_classic_envdiffuse_only(",1)[1].split("register_lerp_replacement(",1)[0]
 assert "env_resources_.prepare_bound(" not in island
 assert "constant_buffers[0]" not in island
 assert "11u, prepared.envdiffuse_resources.ptde_a" in island
