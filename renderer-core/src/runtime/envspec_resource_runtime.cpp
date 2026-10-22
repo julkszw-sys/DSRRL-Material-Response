@@ -894,6 +894,12 @@ void on_destroy_resource(
     // V371 independent t11 records are retired in the same locked callback.
     g_v371_diffuse_creation_sha.erase(resource_handle.handle);
     g_v371_diffuse_names.erase(resource_handle.handle);
+    for(auto it=g_v373_census_by_view.begin();
+        it!=g_v373_census_by_view.end();) {
+        if(it->second.resource_handle==resource_handle.handle)
+            it=g_v373_census_by_view.erase(it);
+        else ++it;
+    }
     for(auto it=g_v371_legacy_by_view.begin();
         it!=g_v371_legacy_by_view.end();) {
         if(it->second.resource_handle==resource_handle.handle)
@@ -1009,7 +1015,8 @@ void on_destroy_resource_view(
     const bool spec_removed = g_resource_by_view.erase(view.handle) != 0u;
     const bool diff_removed = g_diffuse_by_view.erase(view.handle) != 0u;
     const bool legacy_removed=g_v371_legacy_by_view.erase(view.handle)!=0u;
-    if (spec_removed || diff_removed || legacy_removed)
+    const bool census_removed=g_v373_census_by_view.erase(view.handle)!=0u;
+    if (spec_removed || diff_removed || legacy_removed || census_removed)
         g_snapshot_epoch.fetch_add(
             1u,
             std::memory_order_release);
