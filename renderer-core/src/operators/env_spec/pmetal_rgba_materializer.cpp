@@ -1503,7 +1503,8 @@ bool add_b12_rdef(
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool apply_exact_ptde_envdiffuse_consumer(
-    std::vector<std::uint8_t> &bytes) noexcept
+    std::vector<std::uint8_t> &bytes,
+    bool independent=false) noexcept
 {
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
@@ -1642,7 +1643,12 @@ bool apply_exact_ptde_envdiffuse_consumer(
     // Keep the exact coordinate/resource/sampler operands but capture all four
     // filtered channels in r12 so alpha survives until the post-filter divide.
     ptde_sample[3] = 0x001000f2u;
-    ptde_sample[4] = 12u;
+    ptde_sample[4] = independent ? 13u : 12u;
+    // PR484 exact PTDE filtered RGBA: alpha must occupy .x, RGB .yzw.
+    if(independent) {
+        if(ptde_sample[7]!=0x00107e46u) return false;
+        ptde_sample[7]=0x00107936u;
+    }
 
     const std::array<std::uint32_t,7>
         decode_rgb_over_alpha{{
@@ -1660,6 +1666,14 @@ bool apply_exact_ptde_envdiffuse_consumer(
             0x00208246u,12u,3u
         }};
 
+    // Original 29-DWORD PTDE EnvDiffuse equation is unchanged. Only its
+    // scratch destination is moved to a separately declared fresh r13.
+    auto decode = decode_rgb_over_alpha;
+    auto endpoint = apply_ptde_endpoint;
+    if(independent) {
+        decode[2]=13u; decode[4]=13u; decode[6]=13u;
+        endpoint[4]=13u;
+    }
     std::size_t out = source_word;
     std::copy(
         ptde_sample.begin(),
@@ -1670,20 +1684,20 @@ bool apply_exact_ptde_envdiffuse_consumer(
     out += ptde_sample.size();
 
     std::copy(
-        decode_rgb_over_alpha.begin(),
-        decode_rgb_over_alpha.end(),
+        decode.begin(),
+        decode.end(),
         words.begin() +
             static_cast<std::ptrdiff_t>(
                 out));
-    out += decode_rgb_over_alpha.size();
+    out += decode.size();
 
     std::copy(
-        apply_ptde_endpoint.begin(),
-        apply_ptde_endpoint.end(),
+        endpoint.begin(),
+        endpoint.end(),
         words.begin() +
             static_cast<std::ptrdiff_t>(
                 out));
-    out += apply_ptde_endpoint.size();
+    out += endpoint.size();
 
     words[out++] = 0x0100003au;
 
@@ -4589,6 +4603,72 @@ bool final_postcondition(
 }
 
 } // namespace
+
+// V370: surgical extraction of the ORIGINAL 29-DWORD PTDE EnvDiffuse
+// consumer. No Build131, no EnvSpec t12/t14, no MR/SpecRGB/PBL modification.
+// Only a fresh scratch temp and b12 declaration transport c86 independently.
+bool materialize_ptde_envdiffuse_stable_only(
+    const std::uint8_t *stock, std::size_t n,
+    std::vector<std::uint8_t> &out, std::uint32_t &rx) noexcept
+{
+#if !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    (void)stock; (void)n; (void)rx; out.clear(); return false;
+#else
+    out.clear(); rx=0u;
+    if(stock==nullptr || n==0u) return false;
+    const auto digest=hashing::sha256(stock,n);
+    const pmetal_rgba_authority::entry *auth=nullptr;
+    for(const auto &entry : pmetal_rgba_authority::k_entries) {
+        if(!hashing::matches_hex(digest,entry.stock_sha256))continue;
+        if(auth!=nullptr) return false;
+        auth=&entry;
+    }
+    if(auth==nullptr || auth->receiver_id<33u || auth->receiver_id>35u)
+        return false;
+    std::vector<std::uint8_t> base;
+    try { base.assign(stock,stock+n); } catch (...) { return false; }
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> ins;
+    std::size_t code_i=0u;
+    if(!parse_dxbc(base.data(),base.size(),chunks,code_i) ||
+       !extract_words(chunks,code_i,words) || !decode(words,ins))
+       return false;
+    std::size_t temps=0u,temp_hits=0u,cb12_hits=0u,first_exec=0u;
+    for(const auto &in : ins) {
+        if(in.opcode==0x68u && in.length==2u) {
+            if(words[in.offset]!=0x02000068u || words[in.offset+1u]!=13u)
+                return false;
+            temps=in.offset; ++temp_hits;
+        }
+        if(in.opcode==0x59u && in.length==4u &&
+           words[in.offset+2u]==12u)++cb12_hits;
+        if(first_exec==0u && in.opcode<0x50u && in.opcode!=0x00u)
+            first_exec=in.offset;
+    }
+    if(temp_hits!=1u || cb12_hits!=0u || temps<=2u) return false;
+    words[temps+1u]=14u; // r13 was never referenced by the stock dcl_temps 13
+    // Exact SM5 dcl_constantBuffer cb12[4] (original full island ABI).
+    constexpr std::array<std::uint32_t,4> k_b12_decl{{
+        0x04000059u,0x00208e46u,12u,4u
+    }};
+    try {words.insert(words.begin()+static_cast<std::ptrdiff_t>(temps),
+                      k_b12_decl.begin(),k_b12_decl.end());}
+    catch(...) {return false;}
+    words[1]=static_cast<std::uint32_t>(words.size());
+    std::vector<std::uint8_t> decl;
+    if(!rebuild(base.data(),base.size(),std::move(chunks),code_i,words,decl))
+        return false;
+    // The same old shader instruction source patch; no alternate formula.
+    if(!apply_exact_ptde_envdiffuse_consumer(decl,true) ||
+       !add_b12_rdef(decl))
+        return false;
+    // Compile/verification is performed on an exact private shader only.
+    out=std::move(decl);
+    rx=auth->receiver_id;
+    return true;
+#endif
+}
 
 pmetal_rgba_materialize_outcome
 materialize_pmetal_rgba_receiver(
