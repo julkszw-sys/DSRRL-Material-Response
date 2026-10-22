@@ -38,7 +38,16 @@ assert '[DSRRL V365 CLASSIC RX34 SHADER ISLAND]' in integrated
 assert 'stage=EXACT_SOURCE_CREATED' in integrated
 assert 'classic_envdiffuse_rx34_v365::materialize(' in integrated
 assert 'shader_bind=NO pixel=OPEN' in integrated
-v365_live=integrated.split('// The live integrated on_create_pipeline callback sees',1)[1].split('// Close the Subsurface creation-order gap',1)[0]
+# Critical active-path regression: physical cut disables drawtime islands;
+# this shader construction must occur in the reachable create-time path.
+live_fn=integrated.split(
+    'bool on_create_pipeline(\\n    reshade::api::device *device,',1)[1]
+pre_early=live_fn.split('if (!k_drawtime_islands_runtime_enabled)',1)[0]
+assert '#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)' in pre_early
+assert 'classic_envdiffuse_rx34_v365::materialize(' in pre_early
+assert 'stage=EXACT_SOURCE_CREATED' in pre_early
+assert 'shader_bind=NO pixel=OPEN' in pre_early
+v365_live=pre_early
 assert 'g_core.features().enabled' not in v365_live
 assert 'pixel_shader->code =' not in v365_live
 assert 'CreatePixelShader(' not in v365_live
