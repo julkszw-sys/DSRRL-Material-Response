@@ -4158,6 +4158,13 @@ bool on_create_pipeline(
         if(v365_result==
             dsrrl::operators::env_spec::
                 classic_envdiffuse_rx34_v365::result::candidate_ready) {
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+            // Never replace this shared receiver globally. Create a private
+            // exact-shader object for the material+resource gated draw replay.
+            g_pmetal_envspec.register_classic_rx34_from_stock(
+                v365_pixel_shader->code,
+                v365_pixel_shader->code_size);
+#endif
             // One log per process, even if the engine recreates RX34
             // pipelines. Production INFO cleanup preserves this exact
             // construction witness; all other INFO observers remain cut.
@@ -6212,6 +6219,21 @@ bool prepare_island_batch(
                 material, decision,
                 static_cast<std::uint32_t>(envspec_family));
 #endif
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+            // EnvSpec t12/t14 remains stock if its separate exact source
+            // rejects. The independent RX34 t11 island may still be proven
+            // from its own material+SRV identity and shader checksum.
+            if (g_pmetal_envspec.prepare_classic_envdiffuse_only(
+                    cmd_list, material, decision, envspec_family,
+                    prepared.envspec)) {
+                prepared.envspec_in_batch = true;
+                if (dsrrl::runtime::append_island_draw_request(
+                        prepared.batch, prepared.envspec.request) ==
+                    dsrrl::runtime::island_draw_batch_result::ready)
+                    return true;
+                release_prepared_island_batch(prepared);
+            }
+#endif
             return false;
         }
 
@@ -6260,6 +6282,25 @@ bool prepare_island_batch(
 #endif
         return true;
     }
+
+#if defined(DSRRL_V367_INDEPENDENT_CLASSIC_RX34)
+    // Non-P_Metal materials share RX34. Admit the independent t11 bridge
+    // only with exact MTD/FLVER ownership and live stock t11 identity;
+    // the DXBC and all other operators remain stock DSR.
+    if (!hemenvlerp_bound &&
+        g_pmetal_envspec.prepare_classic_envdiffuse_only(
+            cmd_list, material, decision,
+            dsrrl::runtime::pmetal_envspec_receiver_family::stable_hemenv,
+            prepared.envspec)) {
+        prepared.envspec_in_batch = true;
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch, prepared.envspec.request) ==
+            dsrrl::runtime::island_draw_batch_result::ready)
+            return true;
+        release_prepared_island_batch(prepared);
+        return false;
+    }
+#endif
 
     // HemEnvLerp is a distinct executable consumer and must use its own
     // replacement shader namespace. Build the draw from the base t1 consumer
