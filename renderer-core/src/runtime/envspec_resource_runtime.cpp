@@ -2039,6 +2039,51 @@ bool envspec_resource_runtime::prepare_envdiffuse_bound(
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (g_device == nullptr) return false;
+        // Post-COM t11 witness: source identity is revalidated on the
+        // currently bound SRV. Unapproved rows remain STOCK_DSR, always.
+        const auto ci=g_v373_census_by_view.find(
+            static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(stock_t11)));
+        if(ci!=g_v373_census_by_view.end()) {
+            const auto &observed=ci->second;
+            const unsigned ix=observed.probe_ordinal;
+            const auto ni=g_v371_diffuse_names.find(observed.resource_handle);
+            const auto si=g_v371_diffuse_creation_sha.find(observed.resource_handle);
+            if(ix<v373_legacygi::k_candidates.size() &&
+               ni!=g_v371_diffuse_names.end() &&
+               si!=g_v371_diffuse_creation_sha.end() &&
+               !ni->second.conflicting &&
+               v373_legacygi::find_exact(ni->second.name.data(),
+                                          si->second)==static_cast<int>(ix)) {
+                ID3D11Resource *backing=nullptr;
+                ID3D11Device *native_device=nullptr;
+                stock_t11->GetResource(&backing);
+                stock_t11->GetDevice(&native_device);
+                const bool same=backing!=nullptr && native_device!=nullptr &&
+                    reinterpret_cast<std::uintptr_t>(backing)==
+                        static_cast<std::uintptr_t>(observed.resource_handle) &&
+                    reinterpret_cast<std::uintptr_t>(native_device)==
+                        static_cast<std::uintptr_t>(g_device->get_native());
+                if(backing)backing->Release();
+                if(native_device)native_device->Release();
+                if(same) {
+                    const auto bit=1u<<ix;
+                    if((g_v373_bound_logged.fetch_or(bit,
+                             std::memory_order_relaxed)&bit)==0u) {
+                        char line[310]{};
+                        std::snprintf(line,sizeof(line),
+                            "[DSRRL V373 LEGACY T11 CENSUS] name=%s"
+                            " ordinal=%u name_sha=PASS com=PASS stage=%u"
+                            " previously_authorized=%u action=%s pixel=OPEN",
+                            v373_legacygi::k_candidates[ix].name,ix,
+                            ni->second.stage,
+                            v373_legacygi::k_candidates[ix].previously_authorized?1u:0u,
+                            v373_legacygi::k_candidates[ix].previously_authorized
+                                ? "V371_RESOLVER" : "FAIL_OPEN_STOCK_DSR");
+                        reshade::log::message(reshade::log::level::warning,line);
+                    }
+                }
+            }
+        }
         const auto resolve = [](ID3D11ShaderResourceView *view,
                                 std::uint16_t &id) noexcept -> bool {
             if (view == nullptr) return false;
