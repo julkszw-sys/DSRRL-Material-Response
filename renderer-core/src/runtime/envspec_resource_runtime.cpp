@@ -1442,7 +1442,7 @@ bool get_v371_ptde_legacy_envdiffuse_cube(
                         " envspec=UNCHANGED pixel=OPEN",
                         entry->dsr_name,
                         static_cast<unsigned>(selector),entry->edge);
-                    reshade::log::message(reshade::log::level::info,line);
+                    reshade::log::message(reshade::log::level::warning,line);
                 }
             } else {
                 still_alive=false; // discard duplicate cube, return existing
