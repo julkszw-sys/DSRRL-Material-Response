@@ -1,0 +1,129 @@
+{
+  "schema": "dsrrl.runtime_v2.performance_bisect_ledger.v1",
+  "date": "2026-10-01",
+  "source_of_truth_revision": 10472,
+  "purpose": "Prevent repeated Runtime-v2 performance A/B loops and preserve valid versus rejected lineage.",
+  "current_narrow_scope": "FLVER selector processing interacting with support-populated FLVER/MTD state",
+  "baseline": {
+    "pr": 152,
+    "head": "900ce09a270f8e70477291c3691acff3507c2d31",
+    "runtime_result": "5-10 FPS"
+  },
+  "tests": [
+    {
+      "id": "PR150_ADDON_LOADED_ONLY",
+      "result": "~60 FPS",
+      "status": "VALID",
+      "verdict": "addon registration alone not sufficient"
+    },
+    {
+      "id": "PR150_DRAW_CALLBACK_ONLY",
+      "result": "~60 FPS",
+      "status": "VALID",
+      "verdict": "empty draw callback registration alone not sufficient"
+    },
+    {
+      "id": "PR150_TRANSPORT_ONLY",
+      "result": "slow",
+      "status": "VALID",
+      "verdict": "trigger remains in non-draw/dynamic transport layer"
+    },
+    {
+      "id": "PR157_UL_H3_SUBSURFACE_PHYSICAL_CUT",
+      "result": "slow",
+      "status": "VALID",
+      "verdict": "U/L + HemDir3 + Subsurface not dominant"
+    },
+    {
+      "id": "PR158_PLUS_POINTLIGHT_BYPASS",
+      "result": "slow",
+      "status": "VALID",
+      "verdict": "PointLight not dominant; replicates PR148"
+    },
+    {
+      "id": "PR159_FLVER_PLUS_TEXTURE_IDENTITY_BYPASS",
+      "result": "~60 FPS",
+      "status": "VALID",
+      "verdict": "identity layer implicated"
+    },
+    {
+      "id": "PR160_RESOURCE_LIFECYCLE_BYPASS",
+      "result": "drops remain",
+      "status": "VALID",
+      "verdict": "MaterialResource/EnvSpec lifecycle not sufficient"
+    },
+    {
+      "id": "PR161_FLVER_IDENTITY_BYPASS_ONLY",
+      "result": "~60 FPS",
+      "status": "VALID",
+      "verdict": "FLVER identity transport dominant within identity layer"
+    },
+    {
+      "id": "PR162_TEXTURE_IDENTITY_BYPASS_ONLY",
+      "result": "drops remain",
+      "status": "VALID",
+      "verdict": "texture identity not dominant"
+    },
+    {
+      "id": "PR163_SELECTOR_BYPASS_SUPPORT_ON",
+      "result": "~60 FPS",
+      "status": "VALID",
+      "verdict": "support hooks alone not sufficient"
+    },
+    {
+      "id": "PR164_SELECTOR_ONLY_SUPPORT_OFF",
+      "result": "~60 FPS",
+      "status": "VALID",
+      "verdict": "selector alone not sufficient"
+    }
+  ],
+  "rejected_history": [
+    {
+      "id": "PR148_TRANSACTION_REPLAY_LOCALIZATION",
+      "status": "REJECTED",
+      "reason": "Relied on initially misreported EMPTY_DRAW_CALLBACK / TRANSPORT_ONLY / NO_REPLAY ~=60 FPS results. PR149 corrected retest found those broad profiles slow."
+    },
+    {
+      "id": "PR148_STATE_TRANSACTION_RAW_REPLAY_SUFFICIENCY",
+      "status": "REJECTED",
+      "reason": "Same corrected-runtime contradiction as above."
+    }
+  ],
+  "do_not_repeat_without_source_semantic_change": [
+    "ADDON_LOADED_ONLY",
+    "DRAW_CALLBACK_ONLY",
+    "POINTLIGHT_ONLY_BYPASS",
+    "UL_H3_SUBSURFACE_PHYSICAL_CUT",
+    "IDENTITY_VS_RESOURCE_SPLIT",
+    "FLVER_VS_TEXTURE_SPLIT",
+    "SELECTOR_VS_SUPPORT_SPLIT",
+    "OLD_REPLAY_NO_REPLAY_LOCALIZATION"
+  ],
+  "current_conclusion": {
+    "confirmed": [
+      "Broad operator islands are not the dominant performance cause.",
+      "FLVER identity transport is the dominant identity-layer source.",
+      "The regression requires selector processing AND support-populated state; either side alone runs at approximately 60 FPS."
+    ],
+    "not_yet_proven": [
+      "Which support-produced state is the trigger: FLVER parse identity, runtime MTD state, destructor/lifetime interaction, or a specific join/cache miss path.",
+      "Pixel behavior of any performance diagnostic."
+    ]
+  },
+  "next_engineering_action": {
+    "action": "Redesign FLVER owner/material transport instead of continuing broad A/B.",
+    "architecture": [
+      "Precompute exact owner/material identity outside selector hot path.",
+      "Use immutable/prevalidated per-model or per-model-slot metadata derived from exact FLVER authority.",
+      "Selector should perform only bounded O(1) lookup plus publish/fail-open.",
+      "No SHA/MTD join, global-map fallback, or repeated authentication reconstruction on selector hot path.",
+      "After implementation, run one validation comparison against the known slow baseline and known fast FLVER-bypass reference."
+    ]
+  },
+  "supersedes": "Ad-hoc Runtime-v2 performance bisect planning before revision 10472.",
+  "abandoned_unmodified_branches": [
+    "runtime-v2/bisect-flver-selector-plus-parser-20261001",
+    "runtime-v2/bisect-flver-selector-plus-mtd-20261001"
+  ],
+  "abandoned_note": "Branches were created immediately before the bisect freeze but contain no intended new runtime experiment and must not be treated as authorized next tests."
+}
