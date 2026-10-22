@@ -22,6 +22,7 @@ jobs:
           python3 renderer-core/tools/test_v362_legacy_exact_terminators.py
           python3 renderer-core/tools/test_v364_classic_resource_contract.py
           python3 renderer-core/tools/test_v365_standalone_rx34_decode.py
+          python3 renderer-core/tools/test_v367_independent_envdiffuse_t12_contract.py
           g++ -std=c++17 -O2 -Wall -Wextra -Werror -Irenderer-core/include renderer-core/tests/test_v365_rx34_classic_decode_contract.cpp -o /tmp/test_v365_rx34
           /tmp/test_v365_rx34
       - name: Compile and test independent stock EnvDiffuse identity resolver
@@ -58,6 +59,7 @@ jobs:
           python renderer-core/tools/test_v362_legacy_exact_terminators.py
           python renderer-core/tools/test_v364_classic_resource_contract.py
           python renderer-core/tools/test_v365_standalone_rx34_decode.py
+          python renderer-core/tools/test_v367_independent_envdiffuse_t12_contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Active transaction source test failed' }
           ./renderer-core/tools/build_v230_envdiffuse_cinematic_trace.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - name: Verify read-only t11 native descriptor marker in integrated PE
