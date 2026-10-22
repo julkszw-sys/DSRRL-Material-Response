@@ -1,4 +1,4 @@
-name: V365 independent RX34 Classic RGB/A shader island
+name: V366 v230 profile Classic PTDE EnvDiffuse
 on:
   push:
     branches: [agent/v366-v230-islands-pointlight-off-classic-ptde-t11-20261022]
@@ -77,6 +77,6 @@ jobs:
           Get-FileHash $out -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V365-RX34-Standalone-Classic-Island-OneAddon
+          name: DSRRL-V366-Classic-T11-OneAddon
           path: out-v230-release/DSRRL_v230_PTDE_EnvDiffuse_Quelaag_Cutscene_EDC.addon64
           if-no-files-found: error
