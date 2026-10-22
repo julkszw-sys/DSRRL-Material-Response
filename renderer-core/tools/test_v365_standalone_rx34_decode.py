@@ -41,7 +41,7 @@ assert 'shader_bind=NO pixel=OPEN' in integrated
 # Critical active-path regression: physical cut disables drawtime islands;
 # this shader construction must occur in the reachable create-time path.
 live_fn=integrated.split(
-    'bool on_create_pipeline(\\n    reshade::api::device *device,',1)[1]
+    'bool on_create_pipeline(\n    reshade::api::device *device,',1)[1]
 pre_early=live_fn.split('if (!k_drawtime_islands_runtime_enabled)',1)[0]
 assert '#if defined(DSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC)' in pre_early
 assert 'classic_envdiffuse_rx34_v365::materialize(' in pre_early
