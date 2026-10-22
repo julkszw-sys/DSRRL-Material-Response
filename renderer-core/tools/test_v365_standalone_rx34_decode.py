@@ -7,6 +7,7 @@ materializer=(r/'src/operators/env_spec/pmetal_rgba_materializer.cpp').read_text
 runtime=(r/'src/runtime/pmetal_envspec_draw_runtime.cpp').read_text('utf8')
 decl=(r/'include/dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp').read_text('utf8')
 build=(r/'tools/build_v230_envdiffuse_cinematic_trace.ps1').read_text('utf8')
+integrated=(r/'integrated/integrated_addon.cpp').read_text('utf8')
 for key in (
     'k_stock_bytes=19556u','k_candidate_bytes=k_stock_bytes+48u',
     '0xd6,0x03,0x8d,0xe4','k_dsr_t11_sample','k_dsr_source',
@@ -31,5 +32,13 @@ assert 'outcome.v365_classic_rx34_standalone_candidate_ready' in runtime
 assert '[DSRRL V365 CLASSIC RX34 SHADER ISLAND]' in runtime
 assert 'material_authority=OPEN bind=NO pixels=OPEN' in runtime
 assert 'PSSetShaderResources(' not in runtime.split('if(outcome.receiver_id==34u &&',1)[1].split('// Final Renderer Edition policy',1)[0]
+assert '[DSRRL V365 CLASSIC RX34 SHADER ISLAND]' in integrated
+assert 'stage=EXACT_SOURCE_CREATED' in integrated
+assert 'classic_envdiffuse_rx34_v365::materialize(' in integrated
+assert 'shader_bind=NO pixel=OPEN' in integrated
+v365_live=integrated.split('// The live integrated on_create_pipeline callback sees',1)[1].split('// Close the Subsurface creation-order gap',1)[0]
+assert 'g_core.features().enabled' not in v365_live
+assert 'pixel_shader->code =' not in v365_live
+assert 'CreatePixelShader(' not in v365_live
 assert '/DDSRRL_V365_CLASSIC_RX34_STANDALONE_DXBC' in build
 print('V365_STANDALONE_RX34_CLASSIC_RGB_DIV_ALPHA_SOURCE_PASS')
