@@ -359,7 +359,7 @@ bool load_envdiffuse_pack(
 {
     out.clear();
 
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG) && !defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
     return false;
 #else
     try {
