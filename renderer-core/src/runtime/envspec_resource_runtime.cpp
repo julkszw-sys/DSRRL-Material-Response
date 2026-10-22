@@ -7,6 +7,9 @@
 
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+#include "dsrrl/operators/env_spec/ptde_classic_envdiffuse_sidecar_reader_v361.hpp"
+#endif
 #if defined(DSRRL_V359_LEGACY_ENVDIF_ID_REGISTRY)
 #include "dsrrl/operators/env_spec/legacy_envdiffuse_verified_identity_v360.hpp"
 #endif
@@ -84,6 +87,13 @@ std::unordered_map<std::uint32_t,rgba_cube>
     g_ptde_cubes;
 std::unordered_map<std::uint16_t,rgba_cube>
     g_ptde_envdiffuse_cubes;
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+namespace classic=env::classic_envdiffuse_sidecar_v1;
+classic::source_index g_ptde_classic_rows{};
+std::vector<std::uint8_t> g_ptde_classic_pack;
+std::unordered_map<std::uint16_t,rgba_cube> g_ptde_classic_cubes;
+bool g_ptde_classic_ready=false;
+#endif
 
 device *g_device = nullptr;
 std::vector<std::uint8_t> g_pack;
@@ -368,6 +378,36 @@ bool load_envdiffuse_pack(
 #endif
 }
 
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+// Validates every DDS and the entire fixed sidecar before admitting ANY asset.
+// Never uses the 342 packed-GI index or guesses a missing classic resource.
+bool load_ptde_classic_pack(std::vector<std::uint8_t> &bytes,
+                            classic::source_index &rows) noexcept
+{
+    bytes.clear(); rows={};
+    try {
+        const auto root=process_dir();
+        if(root.empty()) return false;
+        const auto path=root/std::filesystem::path(classic::k_relative_path);
+        std::error_code ec;
+        const auto size=std::filesystem::file_size(path,ec);
+        if(ec || size!=classic::k_file_bytes) return false;
+        std::ifstream stream(path,std::ios::binary);
+        if(!stream) return false;
+        std::vector<std::uint8_t> pending(static_cast<std::size_t>(size));
+        if(!stream.read(reinterpret_cast<char *>(pending.data()),
+                        static_cast<std::streamsize>(pending.size())))
+            return false;
+        if(!classic::validate(pending.data(),pending.size(),rows))
+            return false;
+        bytes=std::move(pending);
+        return true;
+    } catch (...) {
+        bytes.clear(); rows={}; return false;
+    }
+}
+#endif
+
 bool is_native_envspec_desc(
     const resource_desc &desc) noexcept
 {
@@ -501,6 +541,9 @@ void release_carrier(
         std::uint16_t,
         rgba_cube> envdiffuse_cubes;
     sampler sampler_to_destroy{};
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+    std::unordered_map<std::uint16_t,rgba_cube> classic_cubes;
+#endif
 
     {
         std::lock_guard<std::mutex> lock(
@@ -516,6 +559,12 @@ void release_carrier(
         cubes.swap(g_ptde_cubes);
         envdiffuse_cubes.swap(
             g_ptde_envdiffuse_cubes);
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+        classic_cubes.swap(g_ptde_classic_cubes);
+        g_ptde_classic_pack.clear();
+        g_ptde_classic_rows={};
+        g_ptde_classic_ready=false;
+#endif
         sampler_to_destroy =
             g_sampler;
         g_sampler = {};
@@ -556,6 +605,12 @@ void release_carrier(
                 cube.texture);
     }
 
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+    for (const auto &[_,cube] : classic_cubes) {
+        if (cube.view.handle != 0u) device_ptr->destroy_resource_view(cube.view);
+        if (cube.texture.handle != 0u) device_ptr->destroy_resource(cube.texture);
+    }
+#endif
     if (sampler_to_destroy.handle != 0u)
         device_ptr->destroy_sampler(
             sampler_to_destroy);
@@ -597,6 +652,9 @@ void on_init_device(
             k_ptde_slots);
         g_ptde_envdiffuse_cubes.reserve(
             env::k_legacy_envspec_probe_count);
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+        g_ptde_classic_cubes.reserve(classic::k_records);
+#endif
     }
 
     env::native_diffuse_hash_atlas native_diffuse_atlas{};
@@ -610,6 +668,12 @@ void on_init_device(
     const bool envdiffuse_pack_ready =
         load_envdiffuse_pack(
             envdiffuse_pack);
+
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+    std::vector<std::uint8_t> classic_pack;
+    classic::source_index classic_rows{};
+    const bool classic_ready=load_ptde_classic_pack(classic_pack,classic_rows);
+#endif
 
     sampler_desc desc{};
     desc.filter =
@@ -653,6 +717,11 @@ void on_init_device(
                 std::move(envdiffuse_pack);
             g_envdiffuse_pack_ready =
                 envdiffuse_pack_ready;
+#if defined(DSRRL_V361_CLASSIC_ENVDIFFUSE_READER)
+            g_ptde_classic_pack=std::move(classic_pack);
+            g_ptde_classic_rows=classic_rows;
+            g_ptde_classic_ready=classic_ready;
+#endif
             g_sampler = created_sampler;
             g_sampler_ready = sampler_ready;
             adopted = true;
