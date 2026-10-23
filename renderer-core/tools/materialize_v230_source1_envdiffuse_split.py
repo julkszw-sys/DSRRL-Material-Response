@@ -32,13 +32,73 @@ patch(M,
     bool envspec_only,
     bool with_ptde_envdiffuse) noexcept
 {''')
+# Try the PTDE t11 rewrite before the V13 EnvSpec rewrite, then verify that
+# it survives. If the source window is absent at that cut, the original
+# strict post-V13 path remains available; both require final DXBC validation.
+patch(M,
+'''        if (compose_upper_lower ||
+            !apply_v13_native_dsr_no_tail(base,*authority) ||''',
+'''#if defined(DSRRL_V230_ENV_DIFFUSE_SPLIT) && defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+        bool ptde_envdiffuse_before_v13 = false;
+        if (with_ptde_envdiffuse) {
+            auto candidate = base;
+            if (apply_exact_ptde_envdiffuse_consumer(candidate)) {
+                base = std::move(candidate);
+                ptde_envdiffuse_before_v13 = true;
+            }
+        }
+#endif
+        if (compose_upper_lower ||
+            !apply_v13_native_dsr_no_tail(base,*authority) ||''')
+
+patch(M,
+'''bool apply_exact_ptde_envdiffuse_consumer(
+    std::vector<std::uint8_t> &bytes) noexcept''',
+'''bool has_exact_ptde_envdiffuse_consumer(
+    const std::vector<std::uint8_t> &bytes) noexcept
+{
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> ins;
+    std::size_t index=0;
+    if(!parse_dxbc(bytes.data(),bytes.size(),chunks,index) ||
+       !extract_words(chunks,index,words) || !decode(words,ins))
+        return false;
+    std::size_t hits=0;
+    for(std::size_t i=0;i+2<ins.size();++i) {
+        const auto &a=ins[i], &b=ins[i+1], &c=ins[i+2];
+        if(a.opcode<0x45u || a.opcode>0x4au ||
+           a.length!=13u || a.offset+12u>=words.size() ||
+           words[a.offset+8u]!=11u || words[a.offset+10u]!=11u)
+            continue;
+        if(words[a.offset+3u]!=0x001000f2u ||
+           words[a.offset+4u]!=12u ||
+           b.offset!=a.offset+13u || b.opcode!=0x0eu ||
+           b.length!=7u || c.offset!=b.offset+7u ||
+           c.opcode!=0x38u || c.length!=8u ||
+           words[c.offset+6u]!=12u || words[c.offset+7u]!=3u)
+            return false;
+        ++hits;
+    }
+    return hits==1u;
+}
+
+bool apply_exact_ptde_envdiffuse_consumer(
+    std::vector<std::uint8_t> &bytes) noexcept''')
+
 patch(M,
 '''        outcome.spec_rgb_consumer=false;
         outcome.envdiffuse_linear_consumer_diag=false;
         output=std::move(base);''',
 '''#if defined(DSRRL_V230_ENV_DIFFUSE_SPLIT) && defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-        if(with_ptde_envdiffuse &&
+        if(with_ptde_envdiffuse && !ptde_envdiffuse_before_v13 &&
            !apply_exact_ptde_envdiffuse_consumer(base)) {
+            outcome.result=pmetal_rgba_materialize_result::fail_postcondition;
+            return outcome;
+        }
+        if(with_ptde_envdiffuse && !has_exact_ptde_envdiffuse_consumer(base)) {
+            // Never expose a PTDE-labelled shader whose EnvDiffuse consumer
+            // was overwritten by the native EnvSpec rewrite.
             outcome.result=pmetal_rgba_materialize_result::fail_postcondition;
             return outcome;
         }
