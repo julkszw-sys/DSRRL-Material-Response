@@ -25,10 +25,12 @@ patch(p,'#include <optional>',
 #include <cstdio>
 #include <reshade.hpp>
 #endif''')
-patch(p,'''    telemetry::hot_count(g_selector_events);
-
-    const bool exact_runtime_material =''',
-'''    telemetry::hot_count(g_selector_events);
+patch(p,'''bool material_owner_selection_publish(
+    const operators::material_response::material_identity &identity) noexcept
+{''',
+'''bool material_owner_selection_publish(
+    const operators::material_response::material_identity &identity) noexcept
+{
 #if defined(DSRRL_V230_RESOURCE_CUT_V2)
     if ((identity.route_index == 229u || identity.route_index == 5u) &&
         identity.material_slot_valid && identity.material_slot == 0u) {
@@ -51,7 +53,7 @@ patch(p,'''    telemetry::hot_count(g_selector_events);
     }
 #endif
 
-    const bool exact_runtime_material =''')
+''')
 
 # This observer runs inside the real texture-name creation callback and
 # records whether HD_M/HD_F_9360 textures are ever named, and whether the
