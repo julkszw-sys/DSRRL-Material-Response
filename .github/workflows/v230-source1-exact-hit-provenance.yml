@@ -1,0 +1,54 @@
+name: V230 source1 exact-hit provenance
+on:
+  push:
+    branches: [diagnostic/v230-source1-exact-hit-provenance-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify provenance overlay without altering runtime
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_exact_hit_provenance.py
+          python3 -m py_compile renderer-core/tools/enable_v230_source1_provenance_ci.py
+          python3 renderer-core/tools/enable_v230_source1_provenance_ci.py
+          grep -F 'DSRRL_V230_SOURCE1_EXACT_PROVENANCE' renderer-core/tools/build_v230_production.ps1
+  build:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Prepare exact-producer provenance only in CI workspace
+        shell: pwsh
+        run: python renderer-core/tools/enable_v230_source1_provenance_ci.py
+      - name: Build pinned v230 single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Check native provenance marker and PE
+        shell: pwsh
+        run: |
+          $src='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $src)) { throw 'Addon not built' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $src))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'PE validation failed' }
+          $raw=[Text.Encoding]::ASCII.GetString($bytes)
+          foreach($marker in @('[DSRRL SOURCE1 HIT]','[DSRRL SOURCE1]','[DSRRL V230 CUTSCENE]')) {
+            if (!$raw.Contains($marker)) { throw "Missing native marker: $marker" }
+          }
+          $dest='out-v230-release/DSRRL_V230_SOURCE1_EXACT_HIT_PROVENANCE.addon64'
+          Copy-Item $src $dest
+          Get-FileHash $dest -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-v230-SOURCE1-EXACT-HIT-PROVENANCE
+          path: out-v230-release/DSRRL_V230_SOURCE1_EXACT_HIT_PROVENANCE.addon64
+          if-no-files-found: error
