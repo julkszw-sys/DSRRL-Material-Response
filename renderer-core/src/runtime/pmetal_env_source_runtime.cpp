@@ -1882,6 +1882,7 @@ void publish_hook_source(
     const f4 &b,
     const f4 &envdiffuse_a,
     const f4 &envdiffuse_b,
+    bool envdiffuse_valid,
     float beta,
     std::uint64_t bank_a,
     std::uint64_t bank_b,
@@ -1908,7 +1909,7 @@ void publish_hook_source(
         envdiffuse_b.y,
         envdiffuse_b.z
     };
-    next.envdiffuse_linear_valid = true;
+    next.envdiffuse_linear_valid = envdiffuse_valid;
     next.beta =
         std::clamp(
             beta,
@@ -2187,12 +2188,14 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    // EnvSpec source publication is independent of optional EnvDiffuse.
+    if (donor_ok)
         publish_hook_source(
             donor,
             donor,
             envdiffuse_a,
             envdiffuse_b,
+            envdiffuse_ok,
             0.0f,
             bank,
             bank,
@@ -2289,12 +2292,14 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    // EnvSpec source publication is independent of optional EnvDiffuse.
+    if (donor_ok)
         publish_hook_source(
             a,
             b,
             envdiffuse_a,
             envdiffuse_b,
+            envdiffuse_ok,
             endpoints.beta,
             bank_a,
             bank_b,
