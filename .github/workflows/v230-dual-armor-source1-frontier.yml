@@ -60,10 +60,10 @@ jobs:
           $hook='$temp=Join-Path $PSScriptRoot'
           if (!$s.Contains($hook)) { throw 'Build finalization hook absent' }
           $late=@'
-$native='cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated'
-if (!$script:base.Contains($native)) { throw 'Missing generated build command' }
-$script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`n"+$native)
-'@
+          $native='cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated'
+          if (!$script:base.Contains($native)) { throw 'Missing generated build command' }
+          $script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`n"+$native)
+          '@
           $s=$s.Replace($hook,$late+$hook)
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
       - name: Build single addon (V13 source routes plus repaired Source1)
