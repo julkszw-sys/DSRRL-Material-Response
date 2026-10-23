@@ -260,9 +260,7 @@ def edit_all(name, old, new, expected):
 
 edit_all("integrated",
      """    if (direct_current_native)
-        g_raw_draw_replay_recursing = false;
-
-#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)""",
+        g_raw_draw_replay_recursing = false;""",
      """    if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
@@ -272,8 +270,6 @@ edit_all("integrated",
         prepared.envspec_in_batch ? &prepared.envspec : nullptr,
         cmd_list, "post_dispatch",
         dsrrl::runtime::draw_tx_issued(dispatch.transaction));
-#endif
-
-#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)""", 2)
+#endif""", 2)
 
 print("V230_CUTSCENE_TRACE_OVERLAY_PASS source_kind+exact c86+GI ordinal+post_draw")
