@@ -55,3 +55,7 @@ one('''    // std::wstring move is noexcept: do not introduce allocations or''',
 
 p.write_text(s,"utf-8")
 print("V13_TARGET_LOADER_CLOSURE_PASS actual DDS acquisition aligned to source-certified V13 hash tables")
+
+# Separate view-cache safety overlay: no new receiver/MTD authorizations.
+import runpy
+runpy.run_path('renderer-core/tools/materialize_v230_sidecar_cache_safety.py')
