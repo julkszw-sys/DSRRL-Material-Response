@@ -62,7 +62,7 @@ jobs:
           $late=@'
           $native='cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated'
           if (!$script:base.Contains($native)) { throw 'Missing generated build command' }
-          $script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`n"+$native)
+          $script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`npython renderer-core/tools/generate_runtime_v2_physical_cut.py --input renderer-core/integrated/integrated_addon.cpp --output build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp`nif (`$LASTEXITCODE -ne 0) { throw 'Physical cut refresh failed' }`n"+$native)
           '@
           $s=$s.Replace($hook,$late+[Environment]::NewLine+$hook)
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
