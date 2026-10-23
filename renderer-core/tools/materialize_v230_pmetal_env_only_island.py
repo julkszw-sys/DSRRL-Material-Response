@@ -164,7 +164,14 @@ patch(c,
 '''#if defined(DSRRL_V230_PMETAL_ENV_ONLY_ISLAND)
             shader = env_only ? found->second.env_only_shader :
                 found->second.shader;
-            if(shader==nullptr) return false;
+            if(shader==nullptr) {
+                telemetry::hot_count(replacement_register_fail_);
+                effect_fail(effect_fail_mask_,k_effect_fail_replacement);
+                log_prepare_stage_once(
+                    1u<<7u,"env_only_variant_absent",
+                    material,decision,family);
+                return false; // draw-local fail-open
+            }
 #else
             shader = found->second.shader;
 #endif
@@ -269,11 +276,27 @@ inject(i,"                    ++g_envspec_payload_materialize_ok;",
                         materialize_pmetal_rgba_receiver(
                             g_core.features(),source,pixel_shader->code_size,
                             false,alt_bytes,true);
-                    if(alt.result == dsrrl::operators::env_spec::
-                           pmetal_rgba_materialize_result::applied &&
-                       !alt.spec_rgb_consumer)
+                    const bool no_t10_compiled =
+                        alt.result == dsrrl::operators::env_spec::
+                            pmetal_rgba_materialize_result::applied &&
+                        !alt.spec_rgb_consumer;
+                    const bool no_t10_registered =
+                        no_t10_compiled &&
                         g_pmetal_envspec.register_envspec_only_replacement(
                             alt,alt_bytes.data(),alt_bytes.size());
+                    static std::atomic<std::uint32_t> alt_witness{0u};
+                    const auto wn=alt_witness.fetch_add(
+                        1u,std::memory_order_relaxed)+1u;
+                    if(wn<=12u) {
+                        char line[220]{};
+                        std::snprintf(line,sizeof(line),
+                            "[DSRRL ENV ONLY CREATE] n=%u full_rx=%u alt_rx=%u alt_result=%u no_t10=%u registered=%u dxbc_bytes=%llu",
+                            wn,outcome.receiver_id,alt.receiver_id,
+                            static_cast<unsigned>(alt.result),
+                            no_t10_compiled?1u:0u,no_t10_registered?1u:0u,
+                            (unsigned long long)alt_bytes.size());
+                        reshade::log::message(reshade::log::level::warning,line);
+                    }
 #endif
 ''')
 # Reconciles mutable resource status required by existing post-prepare resnapshot.
