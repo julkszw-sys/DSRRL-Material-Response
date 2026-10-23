@@ -54,10 +54,9 @@ std::uint32_t v230_cutscene_source_path() noexcept
 void pmetal_env_source_cache_invalidate() noexcept""")
 
 edit("source_cpp",
-     "pmetal_envspec_source &out) const noexcept\n{\n    out = {};",
+     "pmetal_envspec_source &out) const noexcept\n{",
      """pmetal_envspec_source &out) const noexcept
 {
-    out = {};
 #if defined(DSRRL_V230_CUTSCENE_TRACE)
     g_v230_cutscene_source_path = 0u;
 #endif""")
