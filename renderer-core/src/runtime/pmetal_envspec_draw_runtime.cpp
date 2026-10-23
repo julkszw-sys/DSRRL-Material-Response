@@ -1227,11 +1227,11 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
     effect_latch(effect_replacement_ready_);
 
-    const bool probe_b_required =
-        family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp ||
-        source.beta != 0.0f;
+    // For beta == 0, lerp(A, B, beta) == A. Bind B=A (including t14)
+    // instead of rejecting the draw because the unconsumed B probe is absent.
+    // The shader still receives a valid second SRV; nonzero blends retain
+    // exact two-endpoint assignment and content validation.
+    const bool probe_b_required = source.beta != 0.0f;
 
     ID3D11ShaderResourceView *shadow_env[3]{};
     const bool shadow_env_ready =
@@ -1656,9 +1656,8 @@ bool pmetal_envspec_draw_runtime::prepare(
     // probe ordinal and never derives assignment from DSR t11 content.
     const bool ptde_envdiffuse_b_required =
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp;
+        family == pmetal_envspec_receiver_family::hemenvlerp &&
+        source.beta != 0.0f;
 #else
         false;
 #endif
