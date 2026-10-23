@@ -1,7 +1,7 @@
 name: V230 exact V359 production candidate single addon
 on:
   push:
-    branches: [release/v2.3.0-v359-prep]
+    branches: [release/v2.3.0-v359-prep, fix/v230-minimal-per-resource-gates-20261024]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +13,8 @@ jobs:
       - name: Static source and optimizer contract
         shell: bash
         run: |
-          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py renderer-core/tools/test_v230_minimal_resource_gates.py
+          python3 renderer-core/tools/test_v230_minimal_resource_gates.py
           python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
           python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
           python3 renderer-core/tools/test_v351_fallback_census.py --output v230_fallback_census.json
