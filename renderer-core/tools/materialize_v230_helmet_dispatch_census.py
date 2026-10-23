@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owner-first Standard Helm witness at the actual integrated draw dispatch.
+"""Owner-first all-material draw witness at the actual integrated draw dispatch.
 
 Must run after materialize_v230_cutscene_trace.py. No authorization,
 shader, resource, constant buffer or replay state is changed.
@@ -19,14 +19,9 @@ void v230_helmet_draw_witness(
     const dsrrl::operators::material_response::decision &decision) noexcept
 {
     namespace mr=dsrrl::operators::material_response;
-    if (!material.valid) return;
-    const bool route_candidate =
-        material.route_index == 229u || material.route_index == 5u ||
-        decision.route_index == 229u || decision.route_index == 5u;
-    const bool semantic_candidate =
-        material.semantic_name_hash == mr::mtd_semantic_hash("C_Metal[DSB].mtd") ||
-        material.semantic_name_hash == mr::mtd_semantic_hash("P_Metal[DSB]_Edge.mtd");
-    if (!route_candidate && !semantic_candidate) return;
+    // Capture any receiver/material tuple, including invalid ones. Never authorize.
+    const bool rejected = !material.valid ||
+        !material.owner_tuple_exact || !decision.active;
 
     // Per-identity de-duplication, not a single early session-wide burst.
     // A visible helmet encountered later in the session can still be sampled.
@@ -37,15 +32,15 @@ void v230_helmet_draw_witness(
         fingerprint=(fingerprint^byte)*1099511628211ull;
     fingerprint=(fingerprint^material.material_slot)*1099511628211ull;
     fingerprint=(fingerprint^decision.receiver_id)*1099511628211ull;
-    static std::array<std::atomic<std::uint64_t>,4096> last_seen{};
+    static std::array<std::atomic<std::uint64_t>,16384> last_seen{};
     static std::atomic<std::uint32_t> total{0u};
     const auto now=static_cast<std::uint64_t>(GetTickCount64());
     auto &prev=last_seen[fingerprint%last_seen.size()];
     auto old=prev.load(std::memory_order_relaxed);
-    if(now>=old && now-old<4000u) return;
+    if(now>=old && now-old<12000u) return;
     if(!prev.compare_exchange_strong(old,now,std::memory_order_relaxed))return;
     const auto count=total.fetch_add(1u,std::memory_order_relaxed)+1u;
-    if(count>600u) return;
+    if(count>3500u) return;
 
     auto hex=[](const std::array<std::uint8_t,32> &sha,char (&out)[65]) noexcept {
         constexpr char digits[]="0123456789abcdef";
@@ -58,13 +53,14 @@ void v230_helmet_draw_witness(
     char flver[65]{},mtd[65]{};
     hex(material.flver_sha256,flver);
     hex(material.raw_mtd_sha256,mtd);
-    char b[510]{};
+    char b[580]{};
     std::snprintf(b,sizeof(b),
-       "[DSRRL HELM DRAW CUT] n=%u rx=%u route=%u decision_route=%u slot=%u valid=%u owner=%u actual=%u active=%u namehash=%016llx flver=%s mtd=%s",
-       count,decision.receiver_id,material.route_index,decision.route_index,
-       material.material_slot,material.valid?1u:0u,
-       material.owner_tuple_exact?1u:0u,material.actual_material_exact?1u:0u,
-       decision.active?1u:0u,
+       "[DSRRL EQUIPMENT ROUTE CENSUS] n=%u candidate=%s rx=%u reason=%u route=%u decision_route=%u slot=%u slotvalid=%u valid=%u owner=%u actual=%u active=%u namehash=%016llx flver=%s mtd=%s",
+       count,rejected?"rejected":"eligible",decision.receiver_id,
+       static_cast<unsigned>(decision.reason),material.route_index,decision.route_index,
+       material.material_slot,material.material_slot_valid?1u:0u,
+       material.valid?1u:0u,material.owner_tuple_exact?1u:0u,
+       material.actual_material_exact?1u:0u,decision.active?1u:0u,
        static_cast<unsigned long long>(material.semantic_name_hash),flver,mtd);
     reshade::log::message(reshade::log::level::warning,b);
 }
