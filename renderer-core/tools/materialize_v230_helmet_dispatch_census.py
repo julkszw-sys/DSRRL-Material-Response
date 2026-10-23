@@ -84,6 +84,6 @@ s=s.replace(needle,"""#if defined(DSRRL_V230_CUTSCENE_TRACE)
 denied='v230_cutscene_emit(material, decision, nullptr, cmd_list,'
 assert s.count(denied)==1,f"EARLY_MATERIAL_DENIAL_CUT_DRIFT {s.count(denied)}"
 s=s.replace(denied,
-    'v230_helmet_draw_witness(material,decision);\\n            '+denied,1)
+    'v230_helmet_draw_witness(material,decision);\n            '+denied,1)
 p.write_text(s,encoding="utf-8")
 print("EQUIPMENT_CENSUS_PASS both draw sites plus early atomic deny; read-only, all material identities")
