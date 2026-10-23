@@ -1333,33 +1333,28 @@ void on_init_resource_view(
             logical_name_raw,
             logical_name_length);
 
-    const bool subsurface_body_spec =
-        exact_subsurface_body_spec_hash(
-            logical_hash);
-    const bool spec_member =
-        spec_equipment_allowed(
-            logical_hash) ||
-        subsurface_body_spec;
-    const bool diffuse_member =
-        generated::diffuse_name_hash_allowed_v12(
-            logical_hash);
-    const bool normal_member =
-        generated::normal_name_hash_allowed_v12(
-            logical_hash);
-
-    if (!spec_member &&
-        !diffuse_member &&
-        !normal_member)
-        return;
-
+    // Resource-only replacements are selected by a live stock texture name
+    // and presence of its own user DDS, never by another texture's identity.
+    // SpecRGB retains the separate equipment consumer/owner allowlist.
     std::wstring logical_name;
+    bool diffuse_member = false;
+    bool normal_member = false;
     try {
-        logical_name.assign(
-            logical_name_raw,
-            logical_name_length);
+        logical_name.assign(logical_name_raw, logical_name_length);
+        std::error_code diffuse_ec, normal_ec;
+        diffuse_member = std::filesystem::is_regular_file(
+            sidecar_path(asset_class::diffuse, logical_name), diffuse_ec) &&
+            !diffuse_ec;
+        normal_member = std::filesystem::is_regular_file(
+            sidecar_path(asset_class::normal, logical_name), normal_ec) &&
+            !normal_ec;
     } catch (...) {
         return;
     }
+    const bool spec_member = spec_equipment_allowed(logical_hash) ||
+        exact_subsurface_body_spec_hash(logical_hash);
+    if (!spec_member && !diffuse_member && !normal_member)
+        return;
 
     auto *native_device =
         reinterpret_cast<ID3D11Device *>(
@@ -1384,9 +1379,7 @@ void on_init_resource_view(
             set.shared_mask |= 1u;
     }
 
-    if (generated::
-        diffuse_target_hash_allowed_v12(
-            logical_hash)) {
+    if (diffuse_member) {
         const auto loaded =
             acquire_sidecar(
                 native_device,
@@ -1398,9 +1391,7 @@ void on_init_resource_view(
             set.shared_mask |= 2u;
     }
 
-    if (generated::
-        normal_target_hash_allowed_v12(
-            logical_hash)) {
+    if (normal_member) {
         const auto loaded =
             acquire_sidecar(
                 native_device,
