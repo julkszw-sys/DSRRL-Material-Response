@@ -81,3 +81,15 @@ assert "full_material_response_ready &&" in spec_region
 assert "spec_equipment_allowed(" in spec_region
 assert "stock_t1_preserved =" in spec_region
 assert "native_t10_transport_ready =" in spec_region
+
+# Exact zero-beta two-endpoint reduction, NOT an approximate beta threshold.
+# The physical shader still receives B SRV, but it is an alias of A.
+assert "const bool probe_b_required = source.beta != 0.0f;" in composed
+assert "source.beta != 0.0f;" in composed.split("const bool ptde_envdiffuse_b_required =",1)[1].split("#else",1)[0]
+assert "if (envdiffuse_ok && endpoints.beta == 0.0f)" in producer
+assert "envdiffuse_b = envdiffuse_a;" in producer
+assert "if (probe_b_required &&" in stable
+assert "b_view = a_view;" in stable
+assert "prepared.ptde_b = b_native;" in stable
+for a,b in ((0.0,0.75),(0.91,0.02),(-0.3,0.8)):
+    assert a + 0.0 * (b-a) == a
