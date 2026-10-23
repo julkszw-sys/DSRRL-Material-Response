@@ -65,7 +65,7 @@ for spec in corpus:
         candidate_triples.add((fnv(diffuse),fnv(spec),fnv(normal)))
 newpairs=sorted(candidate_pairs-original_pairs)
 newtriples=sorted(candidate_triples-original_triples)
-if not newpairs and not newtriples: fail('No missing PTDE armor material tuples; invalid input or already patched')
+if len(newpairs)!=34 or len(newtriples)!=1: fail(f'Expected audited resource-routing delta 34 pairs / 1 triple, got {len(newpairs)} / {len(newtriples)}')
 # No candidate may authorize a different DSR spec than an attested stock logical id.
 allowed_diffuse=sorted(set(b for _,b in newpairs))
 allowed_normal=sorted(set(c for _,_,c in newtriples))
