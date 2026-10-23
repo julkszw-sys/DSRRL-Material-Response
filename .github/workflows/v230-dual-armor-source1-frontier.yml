@@ -18,6 +18,7 @@ jobs:
           python3 -m py_compile renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
           python3 -m py_compile renderer-core/tools/materialize_v230_rx34_frontier.py
           python3 -m py_compile renderer-core/tools/materialize_v230_dual_frontier.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_resource_cut_v2.py
           python3 -m py_compile renderer-core/tools/materialize_v230_source1_repair.py
           python3 -m py_compile renderer-core/tools/materialize_v230_source1_exact_hit_provenance.py
           python3 renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
