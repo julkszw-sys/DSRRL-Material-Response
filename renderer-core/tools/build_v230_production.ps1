@@ -10,7 +10,7 @@ Once 'v350_rc2_gpu_resident_pointlight_off' 'v230_production'
 Once 'build-v350-gpu-resident-pointlight-off-rc2' 'build-v230-release'
 Once 'out-v350-gpu-resident-pointlight-off-rc2' 'out-v230-release'
 Once 'DSRRL_V350_GPU_RESIDENT_POINTLIGHT_OFF_RC2.addon64' 'DSRRL_Restored_Lighting_v2.3.0.addon64'
-Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V230_CUTSCENE_TRACE /DDSRRL_V230_SOURCE1_REPAIR /DDSRRL_V230_PRODUCTION /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS'
+Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V230_CUTSCENE_TRACE /DDSRRL_V230_SOURCE1_REPAIR /DDSRRL_V230_PRODUCTION /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS /DDSRRL_V230_PMETAL_ENV_ONLY_ISLAND'
 Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF'
 Once 'cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated' @'
 python renderer-core/tools/audit_active_islands_hotpath.py --source-dir renderer-core
@@ -28,6 +28,22 @@ python renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
 if ($LASTEXITCODE -ne 0) { throw 'PTDE armor V13 pair/triple supplement failed' }
 python renderer-core/tools/materialize_v230_rx34_frontier.py
 if ($LASTEXITCODE -ne 0) { throw 'source1 RX34 failure frontier overlay failed' }
+python renderer-core/tools/materialize_v230_dual_frontier.py
+if ($LASTEXITCODE -ne 0) { throw 'dual source1/armor resource diagnostic overlay failed' }
+python renderer-core/tools/materialize_v230_resource_cut_v2.py
+if ($LASTEXITCODE -ne 0) { throw 'source1 SRV + equipped helmet upstream cut overlay failed' }
+python renderer-core/tools/materialize_v230_v13_target_loader_closure.py
+if ($LASTEXITCODE -ne 0) { throw 'V13 actual Diffuse/Normal DDS loader closure failed' }
+python renderer-core/tools/materialize_v230_stock_identity_transport_v2.py
+if ($LASTEXITCODE -ne 0) { throw 'Stock texture identity integration failed' }
+python renderer-core/tools/materialize_v230_helmet_dispatch_census.py
+if ($LASTEXITCODE -ne 0) { throw 'equipped helmet two-draw dispatch census failed' }
+python renderer-core/tools/materialize_v230_source_join_cause.py
+if ($LASTEXITCODE -ne 0) { throw 'Source1 producer/draw join witness source drift' }
+python renderer-core/tools/materialize_v230_source1_exact_sidecar_origin.py
+if ($LASTEXITCODE -ne 0) { throw 'Source1 origin witness failed' }
+python renderer-core/tools/materialize_v230_pmetal_env_only_island.py
+if ($LASTEXITCODE -ne 0) { throw 'P_Metal independent EnvSpec shader materialization failed' }
 cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated
 '@
 

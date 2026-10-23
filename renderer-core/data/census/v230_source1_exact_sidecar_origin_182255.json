@@ -1,0 +1,67 @@
+{
+  "log": "ReShade(20261023-182255).log",
+  "log_sha256": "b0d55476292b89e87bd8a524ccdcf5a4a6879d8fa2093c151263811912892ffc",
+  "binary": "DSRRL_V230_SOURCE1_SIDECAR_ORIGIN.addon64",
+  "source1_owner": {
+    "receiver": "RX34",
+    "route": 345,
+    "slot": 2,
+    "flver_prefix": "3a82e4f6",
+    "mtd_prefix": "ece70f36"
+  },
+  "source1_runtime": {
+    "source1_hits_log_entries": 42,
+    "source1_exact_total_by_16k_reads": 155,
+    "rx34_frontier": 26,
+    "source1_cut_samples": 20,
+    "stockmask": 7,
+    "hashmask": 7,
+    "sidemask": 0,
+    "source1_spec_decision_samples": 18,
+    "spec_reason": 4
+  },
+  "sidecar_origin": [
+    {
+      "class": "Diffuse",
+      "hash": "07897dbf4ed2fd72",
+      "name": "c2500_WP_A_0200",
+      "target_gate": 0,
+      "exact_dds_exists": 0,
+      "io_error": 1
+    },
+    {
+      "class": "Normals",
+      "hash": "236af42eb0a2d37b",
+      "name": "c2500_WP_A_0200_n",
+      "target_gate": 0,
+      "exact_dds_exists": 0,
+      "io_error": 1
+    },
+    {
+      "class": "Specular",
+      "hash": "236adf2eb0a2afcc",
+      "name": "c2500_WP_A_0200_s",
+      "target_gate": 0,
+      "exact_dds_exists": 0,
+      "io_error": 1
+    }
+  ],
+  "controls": {
+    "v13_20_samples_masks": "7,7,7",
+    "v13_prepared_triple": true
+  },
+  "verified_first_denial": "No certified Source1 PTDE companion; both class allowlist and expected same-name DDS absent",
+  "not_proven": [
+    "PTDE asset physically absent from all archives",
+    "WP_A_0200_s and c2500_WP_A_0200_s homologous",
+    "PTDE specular pixel equivalence"
+  ],
+  "asset_inventory_notes": "Oct 10 sidecar 1295 corpus is equipment prefixes am bd lg hd wp. Its existing wp_a_0200_s is a distinct FNV identity (ba22929ea2ca27ff) not the Source1 c2500 specular (236adf2eb0a2afcc). Uploaded sidecarnew_v5.zip contains mapping CSV but no c2500 references; DSR FINAL EVIDENCE archives are DSR assets not attested PTDE c2500 DDS.",
+  "next_step": "Exact PTDE c2500 asset extraction + verified SHA/provenance; per-Source1 material owner attested replacement only. Fail-open otherwise.",
+  "status": {
+    "construction": "PASS",
+    "runtime": "SOURCE1_HIT_AND_STOCK_HASH_CONFIRMED",
+    "bridge_activation": "BLOCKED_NO_COMPANION",
+    "pixels": "OPEN"
+  }
+}
