@@ -20,6 +20,7 @@ jobs:
           python3 -m py_compile renderer-core/tools/materialize_v230_dual_frontier.py
           python3 -m py_compile renderer-core/tools/materialize_v230_resource_cut_v2.py
           python3 -m py_compile renderer-core/tools/materialize_v230_v13_target_loader_closure.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_stock_identity_transport_v2.py
           python3 -m py_compile renderer-core/tools/materialize_v230_helmet_dispatch_census.py
           python3 -m py_compile renderer-core/tools/materialize_v230_source1_repair.py
           python3 -m py_compile renderer-core/tools/materialize_v230_source1_exact_hit_provenance.py
@@ -52,7 +53,7 @@ jobs:
           $s=[IO.File]::ReadAllText($p)
           $old='/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE '
           if (!$s.Contains($old)) { throw 'Expected source1 flags absent' }
-          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 ')
+          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 /DDSRRL_V230_UNGATED_STOCK_IDENTITY ')
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
       - name: Build single addon (V13 source routes plus repaired Source1)
         shell: pwsh
@@ -65,14 +66,14 @@ jobs:
           $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
           if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'Invalid PE'}
           $s=[Text.Encoding]::ASCII.GetString($b)
-          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]')) {
+          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]','[DSRRL STOCK IDENTITY ONLY]')) {
             if (!$s.Contains($mark)) {throw "Missing diagnostic marker $mark"}
           }
-          $dest='out-v230-release/DSRRL_V230_RESOURCE_CUT_V2.addon64'
+          $dest='out-v230-release/DSRRL_V230_STOCK_IDENTITY_SEPARATION.addon64'
           Copy-Item $src $dest
           Get-FileHash $dest -Algorithm SHA256
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v230-RESOURCE-CUT-V2-ARMOR-SOURCE1
-          path: out-v230-release/DSRRL_V230_RESOURCE_CUT_V2.addon64
+          name: DSRRL-v230-STOCK-IDENTITY-SEPARATION
+          path: out-v230-release/DSRRL_V230_STOCK_IDENTITY_SEPARATION.addon64
           if-no-files-found: error
