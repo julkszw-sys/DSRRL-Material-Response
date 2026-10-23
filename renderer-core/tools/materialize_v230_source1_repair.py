@@ -101,15 +101,30 @@ swap("""    if (pmetal_producer_state_latest(
             material,
             epoch,
             out)) {
+#if defined(DSRRL_V230_CUTSCENE_TRACE)
+        g_v230_cutscene_source_path = 1u;
+#endif
         telemetry::hot_count(""",
-"""    if (pmetal_producer_state_latest(material,epoch,out)) {
+"""    if (pmetal_producer_state_latest(
+            material,
+            epoch,
+            out)) {
+#if defined(DSRRL_V230_CUTSCENE_TRACE)
+        g_v230_cutscene_source_path = 1u;
+#endif
 #if defined(DSRRL_V230_SOURCE1_REPAIR)
         g_source1_exact.fetch_add(1u,std::memory_order_relaxed);
 #endif
         telemetry::hot_count(""")
 swap("""    if (latest_hook_source(out)) {
+#if defined(DSRRL_V230_CUTSCENE_TRACE)
+        g_v230_cutscene_source_path = 2u;
+#endif
         telemetry::hot_count(""",
 """    if (latest_hook_source(out)) {
+#if defined(DSRRL_V230_CUTSCENE_TRACE)
+        g_v230_cutscene_source_path = 2u;
+#endif
 #if defined(DSRRL_V230_SOURCE1_REPAIR)
         g_source1_hook.fetch_add(1u,std::memory_order_relaxed);
 #endif
