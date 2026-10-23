@@ -167,8 +167,10 @@ patch(RTC,
 '''(env_only ? (use_ptde_envdiffuse_island ? envdiff_owner : 0u) :
                     (spec_owner | envdiff_owner))''')
 patch(RTC,
-'''mr_owner | (env_only ? 0u : envdiff_owner)''',
-'''mr_owner | ((env_only && !use_ptde_envdiffuse_island) ? 0u : envdiff_owner)''')
+'''prepared.request.additional_constant_buffer_owners =
+        mr_owner | (env_only ? 0u : envdiff_owner);''',
+'''prepared.request.additional_constant_buffer_owners =
+        mr_owner | ((env_only && !use_ptde_envdiffuse_island) ? 0u : envdiff_owner);''')
 patch(RTC,
 '''env_only ? 0u : envdiff_owner;''',
 '''(env_only && !use_ptde_envdiffuse_island) ? 0u : envdiff_owner;''')
