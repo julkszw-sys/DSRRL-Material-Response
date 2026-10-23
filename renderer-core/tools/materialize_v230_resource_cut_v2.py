@@ -105,7 +105,6 @@ patch(p,'''    // std::wstring move is noexcept: do not introduce allocations or
 #endif
     // std::wstring move is noexcept: do not introduce allocations or''')
 patch(p,'''    const auto h2 = hashes[2];
-
 #if defined(DSRRL_V230_DUAL_FRONTIER)''',
 '''    const auto h2 = hashes[2];
 #if defined(DSRRL_V230_RESOURCE_CUT_V2)
