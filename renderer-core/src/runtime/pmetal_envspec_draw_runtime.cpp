@@ -840,27 +840,24 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_feature_ready_);
 
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp &&
-        (!core_.features().enabled(
-             core::operator_id::material_response) ||
-         !core_.features().enabled(
-             core::operator_id::diffuse_material_domain) ||
-         !core_.features().enabled(
-             core::operator_id::spec_rgb) ||
-         !core_.features().enabled(
-             core::operator_id::terminal_sat_rgb))) {
+    // This private HemEnv shader composes PTDE cubemap, SpecRGB and
+    // Material Response. An independent resource sidecar may be prepared
+    // without these, but the *combined pixel shader* may not: no DSR PBL
+    // tail is a substitute for the PTDE material-domain consumer.
+    const bool material_chain_ready =
+        core_.features().enabled(core::operator_id::material_response) &&
+        core_.features().enabled(core::operator_id::diffuse_material_domain) &&
+        core_.features().enabled(core::operator_id::spec_rgb);
+    const bool lerp_terminal_ready =
+        family != pmetal_envspec_receiver_family::hemenvlerp ||
+        core_.features().enabled(core::operator_id::terminal_sat_rgb);
+    if (!material_chain_ready || !lerp_terminal_ready) {
         telemetry::hot_count(semantic_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_lerp_feature);
-        log_prepare_stage_once(
-            1u << 2u,
-            "lerp_feature_reject",
-            material,
-            decision,
-            family);
+        effect_fail(effect_fail_mask_,
+            family == pmetal_envspec_receiver_family::hemenvlerp
+                ? k_effect_fail_lerp_feature : k_effect_fail_feature);
+        log_prepare_stage_once(1u << 2u,
+            "incomplete_ptde_material_spec_chain", material, decision, family);
         return false;
     }
 
@@ -1335,7 +1332,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                       shadow_material,
                       decision.receiver_id,
                       query,
-                      true,
+                      material_chain_ready,
                       true,
                       prepared.material_resources)
             : material_resources_.
@@ -1343,7 +1340,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                       context,
                       decision.receiver_id,
                       query,
-                      true,
+                      material_chain_ready,
                       true,
                       prepared.material_resources);
 
