@@ -61,9 +61,22 @@ a hybrid PTDE SpecRGB + stock DSR PBL/F0 renderer output.
 The runtime now uses a single `material_chain_ready` condition on both
 stable HemEnv and HemEnvLerp private shader transactions; the latter
 separately requires the exact terminal SAT operator. PTDE EnvSpec resource
-preparation remains before SpecRGB. A t10 resource request explicitly
-requires `full_material_response_ready` within this HemEnv route.
+preparation remains before SpecRGB. The *t10 resource-only preflight*
+instead requires only the actual equipment owner/t1 logical identity,
+corresponding PTDE sidecar and certified SpecRGB consumer; it must not
+be vetoed by the unrelated generic `full_material_response_ready` bit.
+The caller owning the complete HemEnv private shader validates the combined
+MR+EnvSpec+SpecRGB operator before committing any mutation.
 The equipment-only SpecRGB PROTECT is unchanged.
+
+## Disabled operator fast path
+
+The generic resource router only resolves a bound t0, t1 or t2 companion when
+that operator is enabled and its receiver family is supported. No stock SRV
+identity/sidecar lookups are run for disabled classes. This is a performance
+filter, **not** a source-authority veto; exact owner still applies to
+equipment t10, whereas t0/t2 use actual stock SRV identity. The material
+response/cubemap/pixel check stays on the private HemEnv shader.
 
 ## Exact zero-beta Lerp reduction
 
