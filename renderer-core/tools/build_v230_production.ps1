@@ -26,6 +26,8 @@ if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 release contract failed' }
 $env:DSRRL_V230_LOG_FREE_AUDIT='1'
 python renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
 if ($LASTEXITCODE -ne 0) { throw 'PTDE armor V13 pair/triple supplement failed' }
+python renderer-core/tools/materialize_v230_rx34_frontier.py
+if ($LASTEXITCODE -ne 0) { throw 'source1 RX34 failure frontier overlay failed' }
 cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated
 '@
 
