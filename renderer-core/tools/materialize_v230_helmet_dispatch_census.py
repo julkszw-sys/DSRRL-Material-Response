@@ -32,6 +32,10 @@ void v230_helmet_draw_witness(
         fingerprint=(fingerprint^byte)*1099511628211ull;
     fingerprint=(fingerprint^material.material_slot)*1099511628211ull;
     fingerprint=(fingerprint^decision.receiver_id)*1099511628211ull;
+    fingerprint=(fingerprint^material.route_index)*1099511628211ull;
+    fingerprint=(fingerprint^decision.route_index)*1099511628211ull;
+    fingerprint=(fingerprint^static_cast<unsigned>(decision.reason))*1099511628211ull;
+    fingerprint=(fingerprint^static_cast<unsigned>(decision.active))*1099511628211ull;
     static std::array<std::atomic<std::uint64_t>,16384> last_seen{};
     static std::atomic<std::uint32_t> total{0u};
     const auto now=static_cast<std::uint64_t>(GetTickCount64());
@@ -74,5 +78,12 @@ assert s.count(needle)==2,f"HELM_DISPATCH_CALLSITE_DRIFT {s.count(needle)}"
 s=s.replace(needle,"""#if defined(DSRRL_V230_CUTSCENE_TRACE)
     v230_helmet_draw_witness(material,decision);
     v230_cutscene_emit(""")
+# Catch resource/atomic-denied draw attempts before dispatch.
+# This observer is placed inside the existing V230 cutscene macro block
+# and does not alter the subsequent stock DSR fallback.
+denied='v230_cutscene_emit(material, decision, nullptr, cmd_list,'
+assert s.count(denied)==1,f"EARLY_MATERIAL_DENIAL_CUT_DRIFT {s.count(denied)}"
+s=s.replace(denied,
+    'v230_helmet_draw_witness(material,decision);\\n            '+denied,1)
 p.write_text(s,encoding="utf-8")
-print("HELM_DRAW_CUT_PASS dispatch-coupled male/female material census, two paths, no operator changes")
+print("EQUIPMENT_CENSUS_PASS both draw sites plus early atomic deny; read-only, all material identities")
