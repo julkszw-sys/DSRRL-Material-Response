@@ -57,3 +57,10 @@ env=(root/"src/runtime/envspec_resource_runtime.cpp").read_text("utf-8")
 stable=env.split("bool envspec_resource_runtime::prepare_envdiffuse(",1)[1].split("void envspec_resource_runtime::release(",1)[0]
 assert "(probe_b_required && probe_b >= env::k_legacy_envspec_probe_count)" in stable
 assert "if (!probe_b_required)" in stable and "probe_b = probe_a;" in stable
+
+# EnvSpec donor is producer-independent from optional EnvDiffuse endpoint data.
+producer=(root/"src/runtime/pmetal_env_source_runtime.cpp").read_text("utf-8")
+assert producer.count("if (donor_ok)\n        publish_hook_source(")==2
+assert "next.envdiffuse_linear_valid = envdiffuse_valid;" in producer
+assert producer.count("            envdiffuse_ok,")==2
+assert "bool latest_hook_source(" in producer # protected fallback unchanged
