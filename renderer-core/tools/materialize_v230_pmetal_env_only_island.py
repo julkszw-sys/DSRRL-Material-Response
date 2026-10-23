@@ -173,7 +173,7 @@ patch(c,
             shader->AddRef();''')
 patch(c,"    const bool shadow_env_ready =\n        !k_native_dsr_cubemap_feed &&",
       "    const bool shadow_env_ready =\n        !(k_native_dsr_cubemap_feed || env_only) &&")
-patch(c,"    const bool env_resource_ready =\n        k_native_dsr_cubemap_feed",
+patch(c,"    bool env_resource_ready =\n        k_native_dsr_cubemap_feed",
       "    const bool env_resource_ready =\n        (k_native_dsr_cubemap_feed || env_only)")
 inject(c,'''    ID3D11ShaderResourceView *shadow_material[3]{};''',
 '''#if defined(DSRRL_V230_PMETAL_ENV_ONLY_ISLAND)
