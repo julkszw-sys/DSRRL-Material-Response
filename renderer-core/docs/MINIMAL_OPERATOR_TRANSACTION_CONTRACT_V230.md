@@ -65,6 +65,19 @@ preparation remains before SpecRGB. A t10 resource request explicitly
 requires `full_material_response_ready` within this HemEnv route.
 The equipment-only SpecRGB PROTECT is unchanged.
 
+## Exact zero-beta Lerp reduction
+
+For a verified HemEnvLerp source and finite endpoints the PTDE linear
+composition is `E=A+beta*(B-A)`. When `beta == 0.0f`, `E=A`
+regardless of B. The runtime now aliases PTDE B cubemaps to A
+(`t14=t12` for EnvSpec, `t13=t11` for EnvDiffuse), uses the same sampler
+and exact A EnvDiffuse source for c84, and skips a separate B probe lookup.
+The private Lerp shader still receives valid resources at both slots.
+This is **exact zero only**, not an epsilon or a visual heuristic.
+For any nonzero beta, require the original exact two-endpoint routing,
+two valid PTDE cubemaps and separate c86/c84 signals. Full pixel
+equivalence still requires runtime testing.
+
 ## Source=1 diagnosis (OPEN)
 
 The canonical runtime log `201838` proves a source_kind=1 RX34 EnvSpec
