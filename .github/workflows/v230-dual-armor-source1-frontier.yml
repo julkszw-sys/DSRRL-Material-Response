@@ -24,9 +24,13 @@ jobs:
           python3 renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
           python3 renderer-core/tools/materialize_v230_rx34_frontier.py
           python3 renderer-core/tools/materialize_v230_dual_frontier.py
+          python3 renderer-core/tools/materialize_v230_resource_cut_v2.py
           grep -F 'armor_v13::pair_ok(h1,h0)' renderer-core/src/runtime/material_resource_draw_runtime.cpp
           grep -F '[DSRRL RX34 FRONTIER]' renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
           grep -F '[DSRRL DUAL FRONTIER]' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F '[DSRRL RESOURCE CUT V2]' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F '[DSRRL HELM OWNER CUT]' renderer-core/src/runtime/material_owner_selection.cpp
+          grep -F '[DSRRL RX34 SRV CUT]' renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
   build:
     needs: validate
     runs-on: windows-latest
@@ -46,7 +50,7 @@ jobs:
           $s=[IO.File]::ReadAllText($p)
           $old='/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE '
           if (!$s.Contains($old)) { throw 'Expected source1 flags absent' }
-          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER ')
+          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 )
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
       - name: Build single addon (V13 source routes plus repaired Source1)
         shell: pwsh
@@ -59,14 +63,14 @@ jobs:
           $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
           if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'Invalid PE'}
           $s=[Text.Encoding]::ASCII.GetString($b)
-          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]')) {
+          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM OWNER CUT]','[DSRRL RX34 SRV CUT]')) {
             if (!$s.Contains($mark)) {throw "Missing diagnostic marker $mark"}
           }
-          $dest='out-v230-release/DSRRL_V230_DUAL_ARMOR_SOURCE1_FRONTIER.addon64'
+          $dest='out-v230-release/DSRRL_V230_RESOURCE_CUT_V2.addon64'
           Copy-Item $src $dest
           Get-FileHash $dest -Algorithm SHA256
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v230-DUAL-ARMOR-SOURCE1-FRONTIER
-          path: out-v230-release/DSRRL_V230_DUAL_ARMOR_SOURCE1_FRONTIER.addon64
+          name: DSRRL-v230-RESOURCE-CUT-V2-ARMOR-SOURCE1
+          path: out-v230-release/DSRRL_V230_RESOURCE_CUT_V2.addon64
           if-no-files-found: error
