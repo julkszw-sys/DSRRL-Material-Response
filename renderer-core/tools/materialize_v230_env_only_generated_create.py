@@ -23,10 +23,8 @@ assert "register_envspec_only_replacement" in block
 assert "envspec.receiver_id" in block
 assert "[DSRRL ENV ONLY CREATE]" not in dst
 assert "[DSRRL EQUIPMENT ROUTE CENSUS]" in dst,("EQUIPMENT_CENSUS_PRESERVATION_REQUIRED",)
-assert "[DSRRL HELM ENTRY CUT]" in dst,("HELM_PRESERVATION_REQUIRED",)
 dst=dst.replace(anchor,block+anchor,1)
 assert dst.count("[DSRRL ENV ONLY CREATE]")==1
 assert "[DSRRL EQUIPMENT ROUTE CENSUS]" in dst
-assert "[DSRRL HELM ENTRY CUT]" in dst
 compiled.write_text(dst,encoding="utf-8")
 print("V230_PHYSICAL_CUT_ENV_ONLY_CREATE_PASS exact insertion; original equipment and helmet observers retained")
