@@ -3,7 +3,7 @@ on:
   push:
     branches: [diagnostic/v230-dual-armor-source1-20261023]
   pull_request:
-    branches: [main]
+    branches: [main, feature/ptde-armor-all-slot-route-classification-20261023]
   workflow_dispatch:
 permissions:
   contents: read
