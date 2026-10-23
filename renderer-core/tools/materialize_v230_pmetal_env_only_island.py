@@ -136,11 +136,11 @@ patch(c,
         return false;
     }
 #if defined(DSRRL_V230_PMETAL_ENV_ONLY_ISLAND)
-    const auto spec_probe = material_resources_.probe_exact_specular_companion(context);
+    const auto env_only_spec_probe = material_resources_.probe_exact_specular_companion(context);
     const bool env_only =
         family == pmetal_envspec_receiver_family::stable_hemenv &&
         exact_pmetal_material(material) &&
-        !spec_probe.companion_ready;
+        !env_only_spec_probe.companion_ready;
     if(env_only) {
         static std::atomic<std::uint32_t> seen{0u};
         const auto n=seen.fetch_add(1u,std::memory_order_relaxed)+1u;
@@ -149,7 +149,7 @@ patch(c,
             std::snprintf(line,sizeof(line),
                 "[DSRRL PMETAL ENV ONLY] n=%u rx=%u route=%u hash=%016llx t10=unused",
                 n,decision.receiver_id,material.route_index,
-                (unsigned long long)spec_probe.logical_hash);
+                (unsigned long long)env_only_spec_probe.logical_hash);
             reshade::log::message(reshade::log::level::warning,line);
         }
     }
