@@ -50,7 +50,7 @@ jobs:
           $s=[IO.File]::ReadAllText($p)
           $old='/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE '
           if (!$s.Contains($old)) { throw 'Expected source1 flags absent' }
-          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 )
+          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 ')
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
       - name: Build single addon (V13 source routes plus repaired Source1)
         shell: pwsh
