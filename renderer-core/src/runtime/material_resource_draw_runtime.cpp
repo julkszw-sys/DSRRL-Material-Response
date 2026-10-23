@@ -1762,7 +1762,13 @@ prepare_draw_requests_bound(
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
 
+    // Unlike a texture-only t0/t2 swap, equipment SpecRGB is consumed by
+    // the certified PTDE material-response shader. This local t10 carrier
+    // cannot advertise an isolated PTDE appearance without that consumer.
+    // EnvSpec verifies the matching PTDE cubemap before calling this route;
+    // the two operator components remain independent failure domains.
     if (exact_material &&
+        full_material_response_ready &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
             core::operator_id::spec_rgb) &&
