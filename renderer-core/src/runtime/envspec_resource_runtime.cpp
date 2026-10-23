@@ -1690,11 +1690,12 @@ bool envspec_resource_runtime::prepare_envdiffuse(
     (void)probe_b_required;
     return false;
 #else
-    if (probe_a >=
-            env::k_legacy_envspec_probe_count ||
-        probe_b >=
-            env::k_legacy_envspec_probe_count)
+    // Stable consumes only A: the unused B endpoint cannot veto it.
+    if (probe_a >= env::k_legacy_envspec_probe_count ||
+        (probe_b_required && probe_b >= env::k_legacy_envspec_probe_count))
         return false;
+    if (!probe_b_required)
+        probe_b = probe_a;
 
     resource_view a_view{};
     resource_view b_view{};
