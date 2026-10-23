@@ -22,7 +22,7 @@ swap("""    pmetal_envspec_receiver_family family,
 {""",
 """    pmetal_envspec_receiver_family family,
     prepared_pmetal_envspec_draw &prepared) noexcept
-{{
+{
     prepared = {};
 #if defined(DSRRL_V230_RX34_FRONTIER)
     std::uint32_t v230_prepare_phase=0u;
