@@ -23,6 +23,7 @@ jobs:
           python3 -m py_compile renderer-core/tools/materialize_v230_stock_identity_transport_v2.py
           python3 -m py_compile renderer-core/tools/materialize_v230_source_join_cause.py
           python3 -m py_compile renderer-core/tools/materialize_v230_source1_exact_sidecar_origin.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_envdiffuse_split.py
           python3 renderer-core/tools/test_v230_source1_exact_asset.py
           python3 -m py_compile renderer-core/tools/materialize_v230_helmet_dispatch_census.py
           python3 -m py_compile renderer-core/tools/materialize_v230_source1_repair.py
@@ -56,13 +57,13 @@ jobs:
           $s=[IO.File]::ReadAllText($p)
           $old='/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE '
           if (!$s.Contains($old)) { throw 'Expected source1 flags absent' }
-          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 /DDSRRL_V230_UNGATED_STOCK_IDENTITY /DDSRRL_V230_SOURCE_JOIN_CAUSE /DDSRRL_V230_SOURCE1_SIDECAR_ORIGIN /DDSRRL_V230_EXACT_NONMETAL_SOURCE_ROUTE ')
+          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 /DDSRRL_V230_UNGATED_STOCK_IDENTITY /DDSRRL_V230_SOURCE_JOIN_CAUSE /DDSRRL_V230_SOURCE1_SIDECAR_ORIGIN /DDSRRL_V230_EXACT_NONMETAL_SOURCE_ROUTE /DDSRRL_V230_ENV_DIFFUSE_SPLIT ')
           $hook='$temp=Join-Path $PSScriptRoot'
           if (!$s.Contains($hook)) { throw 'Build finalization hook absent' }
           $late=@'
           $native='cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated'
           if (!$script:base.Contains($native)) { throw 'Missing generated build command' }
-          $script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`npython renderer-core/tools/materialize_v230_env_only_generated_create.py`nif (`$LASTEXITCODE -ne 0) { throw 'Physical cut exact registration overlay failed' }`n"+$native)
+          $script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`npython renderer-core/tools/materialize_v230_env_only_generated_create.py`nif (`$LASTEXITCODE -ne 0) { throw 'Physical cut exact registration overlay failed' }`npython renderer-core/tools/materialize_v230_source1_envdiffuse_split.py`nif (`$LASTEXITCODE -ne 0) { throw 'Source1 PTDE EnvDiffuse independent island failed' }`n"+$native)
           '@
           $s=$s.Replace($hook,$late+[Environment]::NewLine+$hook)
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
@@ -77,14 +78,14 @@ jobs:
           $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
           if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'Invalid PE'}
           $s=[Text.Encoding]::ASCII.GetString($b)
-          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]','[DSRRL STOCK IDENTITY ONLY]','[DSRRL SOURCE JOIN CAUSE]','[DSRRL SOURCE1 SIDECAR ORIGIN]','[DSRRL NONMETAL EXACT ROUTE]','[DSRRL ENV ONLY CREATE]')) {
+          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]','[DSRRL STOCK IDENTITY ONLY]','[DSRRL SOURCE JOIN CAUSE]','[DSRRL SOURCE1 SIDECAR ORIGIN]','[DSRRL NONMETAL EXACT ROUTE]','[DSRRL ENV ONLY CREATE]','[DSRRL SOURCE1 ENVDIFFUSE CREATE]','[DSRRL SOURCE1 ENVDIFFUSE]')) {
             if (!$s.Contains($mark)) {throw "Missing diagnostic marker $mark"}
           }
-          $dest='out-v230-release/DSRRL_V230_SOURCE1_NONMETAL_PARALLEL.addon64'
+          $dest='out-v230-release/DSRRL_V230_ENVDIFFUSE_NONMETAL_SPLIT.addon64'
           Copy-Item $src $dest
           Get-FileHash $dest -Algorithm SHA256
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v230-SOURCE1-NONMETAL-PARALLEL
-          path: out-v230-release/DSRRL_V230_SOURCE1_NONMETAL_PARALLEL.addon64
+          name: DSRRL-v230-ENVDIFFUSE-NONMETAL-SPLIT
+          path: out-v230-release/DSRRL_V230_ENVDIFFUSE_NONMETAL_SPLIT.addon64
           if-no-files-found: error
