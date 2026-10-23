@@ -276,4 +276,10 @@ inject(i,"                    ++g_envspec_payload_materialize_ok;",
                             alt,alt_bytes.data(),alt_bytes.size());
 #endif
 ''')
+# Reconciles mutable resource status required by existing post-prepare resnapshot.
+resource_source=R/"src/runtime/pmetal_envspec_draw_runtime.cpp"
+resource_code=resource_source.read_text("utf-8")
+resource_code=resource_code.replace("const bool env_resource_ready =",
+                                    "bool env_resource_ready =")
+resource_source.write_text(resource_code,"utf-8")
 print("V230_PMETAL_ENV_ONLY_ISLAND_PATCH_PASS")
