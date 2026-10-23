@@ -38,6 +38,8 @@ python renderer-core/tools/materialize_v230_stock_identity_transport_v2.py
 if ($LASTEXITCODE -ne 0) { throw 'Stock texture identity integration failed' }
 python renderer-core/tools/materialize_v230_helmet_dispatch_census.py
 if ($LASTEXITCODE -ne 0) { throw 'equipped helmet two-draw dispatch census failed' }
+python renderer-core/tools/materialize_v230_source_join_cause.py
+if ($LASTEXITCODE -ne 0) { throw 'Source1 producer/draw join witness source drift' }
 cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated
 '@
 
