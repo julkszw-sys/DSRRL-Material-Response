@@ -144,7 +144,7 @@ patch(p,'''    const auto h2 = hashes[2];
     }
 #endif
 
-    const bool v13_owner =''')
+ #if defined(DSRRL_V230_DUAL_FRONTIER)''')
 
 # Record which route 345 RX34 SRV read path is taken. The shadow snapshot
 # is a thread-local descriptor observer; a successful snapshot may still
