@@ -10,6 +10,9 @@ def patch(path,old,new):
     f=R/path
     s=f.read_text("utf-8")
     expected=2 if path=="src/runtime/pmetal_envspec_draw_runtime.cpp" and old.startswith("        if (record.shader != nullptr)") else 1
+    if s.count(old)!=expected:
+        k=s.find("env_resource_ready")
+        if k>=0: print("ENV_RESOURCE_CONTEXT:",repr(s[max(0,k-180):k+680]))
     assert s.count(old)==expected,(path,old[:80],s.count(old))
     f.write_text(s.replace(old,new,expected),"utf-8")
 def inject(path,needle,insert):patch(path,needle,insert+needle)
