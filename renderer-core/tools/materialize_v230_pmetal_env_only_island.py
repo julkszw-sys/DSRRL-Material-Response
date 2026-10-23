@@ -291,7 +291,7 @@ inject(i,"                    ++g_envspec_payload_materialize_ok;",
                         char line[220]{};
                         std::snprintf(line,sizeof(line),
                             "[DSRRL ENV ONLY CREATE] n=%u full_rx=%u alt_rx=%u alt_result=%u no_t10=%u registered=%u dxbc_bytes=%llu",
-                            wn,outcome.receiver_id,alt.receiver_id,
+                            wn,envspec.receiver_id,alt.receiver_id,
                             static_cast<unsigned>(alt.result),
                             no_t10_compiled?1u:0u,no_t10_registered?1u:0u,
                             (unsigned long long)alt_bytes.size());
