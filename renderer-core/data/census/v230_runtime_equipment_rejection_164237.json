@@ -1,0 +1,11 @@
+{
+  "source_sha256": "b7013459c85860c7324704ac9cb2372091c1c1043487cc51564bbb19663707a4",
+  "census": 500,
+  "flver": 95,
+  "mtd": 9,
+  "atomic_failures": 295,
+  "unique_failure_tuples": 5,
+  "source1": "stockmask7 hashmask0 sidemask0; fail-open",
+  "v13": "stockmask7 hashmask7 sidemask7; prepared all three",
+  "status": "construction data only; pixels open"
+}
