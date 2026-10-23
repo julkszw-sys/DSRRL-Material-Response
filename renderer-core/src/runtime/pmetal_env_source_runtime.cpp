@@ -2280,7 +2280,11 @@ void __fastcall envspec_blend_hook_entry(
     bool envdiffuse_ok =
         donor_ok &&
         exact_envdiffuse_endpoint(bank_a, row_a, envdiffuse_a);
-    if (envdiffuse_ok && endpoints.beta == 0.0f) {
+    if (envdiffuse_ok &&
+        (endpoints.beta == 0.0f || endpoints.a == endpoints.b)) {
+        // The EnvSpec producer already aliases identical logical selectors.
+        // The PTDE EnvDiffuse endpoint must follow the same source identity:
+        // no second lookup for an unused or identical B.
         envdiffuse_b = envdiffuse_a;
     } else if (envdiffuse_ok) {
         envdiffuse_ok =
