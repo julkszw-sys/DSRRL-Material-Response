@@ -89,5 +89,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: DSRRL-v361-SHA-NATIVE-OVERRIDE
-          path: out-v230-release/DSRRL_V230_ENVDIFFUSE_NONMETAL_SPLIT.addon64
+          path: out-v230-release/DSRRL_V361_SHA_NATIVE_TEXTURE_OVERRIDE.addon64
           if-no-files-found: error
