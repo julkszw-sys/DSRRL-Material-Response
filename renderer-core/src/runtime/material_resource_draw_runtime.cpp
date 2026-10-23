@@ -26,6 +26,7 @@
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi1_4.h>
+#include "dsrrl/runtime/sha_texture_override.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1705,6 +1706,11 @@ register_events() noexcept
     reshade::register_event<reshade::addon_event::init_device>(
         on_init_device_residency);
 
+    // Content-SHA replacement is self-contained at texture creation.
+    // It does not consult the draw/material/EnvSpec authorization chain.
+    reshade::register_event<reshade::addon_event::create_resource>(
+        sha_texture_override::on_create_resource);
+
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
             on_init_resource_view);
@@ -1728,6 +1734,9 @@ unregister_events() noexcept
 
     reshade::unregister_event<reshade::addon_event::init_device>(
         on_init_device_residency);
+
+    reshade::unregister_event<reshade::addon_event::create_resource>(
+        sha_texture_override::on_create_resource);
 
     reshade::unregister_event<
         reshade::addon_event::destroy_device>(
