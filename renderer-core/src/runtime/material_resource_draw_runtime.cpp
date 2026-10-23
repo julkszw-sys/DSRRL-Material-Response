@@ -14,7 +14,6 @@
 #endif
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
-#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -642,123 +641,11 @@ load_result load_dds(
                 load_status::unsupported
             };
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
-        // R3 closes the remaining content-authority hole on the exact
-        // material seen in the owner's active black/red R2 draw. R2 only
-        // authenticated logical identity + a non-null companion SRV, so a
-        // stale same-name DDS could silently enter t10. For HD_A_9550_s we
-        // now require the exact retail PTDE DDS bytes recovered by the PTDE
-        // equipment extractor.
-        constexpr std::uint64_t k_hd_a_9550_s_hash =
-            0xaedd13872d25cffbull;
-        constexpr char k_hd_a_9550_s_sha256[] =
-            "988d288dc65c7cb0856b65243ed33cbcc16862ea8c233d48ca0a377f0e8b1f77";
-
-        if (cls == asset_class::specular &&
-            logical_hash == k_hd_a_9550_s_hash) {
-            const auto digest =
-                operators::legacy_plan::hashing::sha256(
-                    bytes.data(),
-                    bytes.size());
-            if (!operators::legacy_plan::hashing::matches_hex(
-                    digest,
-                    k_hd_a_9550_s_sha256)) {
-                if (!g_pmetal_r3_spec_attest_fail_logged.exchange(
-                        true,
-                        std::memory_order_relaxed))
-                    reshade::log::message(
-                        reshade::log::level::warning,
-                        "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA mismatch; fail-open, stale/wrong sidecar rejected.");
-                return {
-                    nullptr,
-                    load_status::hash_mismatch
-                };
-            }
-
-            if (!g_pmetal_r3_spec_attest_ok_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
-                reshade::log::message(
-                    reshade::log::level::info,
-                    "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA PASS.");
-        }
-
-
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
-        // PR216 exact-content authority: for the active HD_A_9550 P_Metal
-        // equipment draw, t0 diffuse and t2 normal must be exact retail PTDE
-        // bytes. Same-name stale/wrong sidecars fail open.
-        constexpr std::uint64_t k_hd_a_9550_diffuse_hash =
-            0x00b515c367a88e31ull;
-        constexpr std::uint64_t k_hd_a_9550_normal_hash =
-            0xaedcfe872d25ac4cull;
-        constexpr char k_hd_a_9550_diffuse_sha256[] =
-            "ed4e1d104b5db59d51ace7fdaafbeeb2a8c36eea830233edf29b01907ed46803";
-        constexpr char k_hd_a_9550_normal_sha256[] =
-            "3c83caa2a95a85e1fc2d0397edfd48a271a3829330d7a0d5aa74b0cd599de78c";
-
-        if (cls == asset_class::diffuse &&
-            logical_hash == k_hd_a_9550_diffuse_hash) {
-            const auto digest =
-                operators::legacy_plan::hashing::sha256(
-                    bytes.data(),
-                    bytes.size());
-            if (!operators::legacy_plan::hashing::matches_hex(
-                    digest,
-                    k_hd_a_9550_diffuse_sha256)) {
-                if (!g_pmetal_r5_diffuse_attest_fail_logged.exchange(
-                        true,
-                        std::memory_order_relaxed))
-                    reshade::log::message(
-                        reshade::log::level::warning,
-                        "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA mismatch; fail-open, stale/wrong diffuse sidecar rejected.");
-                return {
-                    nullptr,
-                    load_status::hash_mismatch
-                };
-            }
-
-            if (!g_pmetal_r5_diffuse_attest_ok_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
-                reshade::log::message(
-                    reshade::log::level::info,
-                    "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA PASS.");
-        }
-
-        if (cls == asset_class::normal &&
-            logical_hash == k_hd_a_9550_normal_hash) {
-            const auto digest =
-                operators::legacy_plan::hashing::sha256(
-                    bytes.data(),
-                    bytes.size());
-            if (!operators::legacy_plan::hashing::matches_hex(
-                    digest,
-                    k_hd_a_9550_normal_sha256)) {
-                if (!g_pmetal_r5_normal_attest_fail_logged.exchange(
-                        true,
-                        std::memory_order_relaxed))
-                    reshade::log::message(
-                        reshade::log::level::warning,
-                        "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA mismatch; fail-open, stale/wrong normal sidecar rejected.");
-                return {
-                    nullptr,
-                    load_status::hash_mismatch
-                };
-            }
-
-            if (!g_pmetal_r5_normal_attest_ok_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
-                reshade::log::message(
-                    reshade::log::level::info,
-                    "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA PASS.");
-        }
-#endif
-#else
+// A sidecar is a user-provided texture; the bound stock view identifies
+        // its target. Only the DDS structure/format must be validated here.
+        // Fixed original-file SHA would reject an otherwise valid replacement.
         (void)cls;
         (void)logical_hash;
-#endif
 
         std::uint32_t magic = 0u;
         dds_header header{};
@@ -1817,9 +1704,7 @@ prepare_draw_requests(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    if (!exact_material)
-        return true;
-
+    // Independent texture replacements do not need FLVER-owner attestation.
     if (!spec_rgb_consumer_ready &&
         (receiver_id < 24u ||
          receiver_id > 35u))
@@ -1866,9 +1751,7 @@ prepare_draw_requests_bound(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    if (!exact_material)
-        return true;
-
+    // Independent texture replacements do not need FLVER-owner attestation.
     if (!spec_rgb_consumer_ready &&
         (receiver_id < 24u ||
          receiver_id > 35u))
@@ -1892,7 +1775,7 @@ prepare_draw_requests_bound(
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
 
-    if (full_material_response_ready &&
+    if (exact_material &&
         spec_rgb_consumer_ready &&
         core_.features().enabled(
             core::operator_id::spec_rgb) &&
@@ -1998,182 +1881,66 @@ prepare_draw_requests_bound(
         receiver_id >= 24u &&
         receiver_id <= 35u;
 
-    const bool diffuse_pair =
-        h0 != 0u &&
-        h1 != 0u &&
-        generated::diffuse_pair_allowed_v12(
-            h1,
-            h0);
-
-    if (bmp_receiver &&
-        exact_material &&
-        diffuse_pair &&
-        full_material_response_ready &&
-        core_.features().enabled(
-            core::operator_id::diffuse)) {
-        auto *replacement =
-            diffuse_pair
-                ? companions[0]
-                : nullptr;
-        if (diffuse_pair)
-            companions[0] = nullptr;
-
-        const auto semantic =
-            operators::material_response::
-                classify_mtd_semantic(
-                    query,
-                    operators::material_response::
-                        mtd_semantic_operator::diffuse);
-
-        operators::resource_bridges::
-            diffuse_bridge_context context_diff{};
-        context_diff.receiver_id =
-            receiver_id;
-        context_diff.actual_material_verified =
-            exact_material &&
-            semantic.state ==
-                operators::material_response::
-                    mtd_semantic_state::use;
-        context_diff.actual_bound_t0_verified =
-            h0 != 0u;
-        context_diff.exact_ptde_diffuse_companion_verified =
-            diffuse_pair &&
-            replacement != nullptr;
-        context_diff.ptde_srv_ready =
-            replacement != nullptr;
-        context_diff.ptde_c100_donor_verified =
-            full_material_response_ready;
-        context_diff.diffuse_linear_receiver_ready =
-            full_material_response_ready;
-        context_diff.shared_material_route =
-            true;
-        context_diff.exact_texture_identity_conjunction =
-            diffuse_pair;
-
-        const auto decision =
-            operators::resource_bridges::
-                evaluate_diffuse_route(
-                    context_diff);
-
-        if (decision.action ==
-                operators::resource_bridges::
-                    diffuse_action::
-                        bind_ptde_t0_and_full_material_response &&
-            replacement != nullptr) {
+    // Resource-local exact binding: each bound stock SRV carries its own
+    // logical target. Diffuse never needs t1; Normal never needs t0/t1.
+    const bool diffuse_target = h0 != 0u && companions[0] != nullptr;
+    if (bmp_receiver && diffuse_target &&
+        core_.features().enabled(core::operator_id::diffuse)) {
+        auto *replacement = companions[0];
+        companions[0] = nullptr;
+        operators::resource_bridges::diffuse_bridge_context ctx{};
+        ctx.receiver_id = receiver_id;
+        ctx.actual_bound_t0_verified = true;
+        ctx.exact_ptde_diffuse_companion_verified = true;
+        ctx.ptde_srv_ready = true;
+        // c100 is an independent Material Response operation, not t0 authority.
+        ctx.ptde_c100_donor_verified = full_material_response_ready;
+        ctx.diffuse_linear_receiver_ready = full_material_response_ready;
+        const auto route = operators::resource_bridges::evaluate_diffuse_route(ctx);
+        if (route.action == operators::resource_bridges::diffuse_action::bind_ptde_t0) {
             island_draw_adapter_request request{};
-            request.primary =
-                core::operator_id::diffuse;
+            request.primary = core::operator_id::diffuse;
             request.receiver_verified = true;
-            request.material_verified = true;
-            request.srvs[0] = {
-                decision.srv_slot,
-                replacement
-            };
+            request.material_verified = true; // Exact stock-t0 identity.
+            request.srvs[0] = {route.srv_slot, replacement};
             request.srv_count = 1u;
-
-            if (append_retained_request(
-                    prepared,
-                    request,
-                    replacement)) {
+            if (append_retained_request(prepared, request, replacement)) {
                 prepared.diffuse = true;
                 hot_count(g_diffuse_requests);
                 replacement = nullptr;
             }
         }
-
-        if (replacement != nullptr)
-            replacement->Release();
+        if (replacement != nullptr) replacement->Release();
     }
 
-    const bool normal_tuple =
-        h0 != 0u &&
-        h1 != 0u &&
-        h2 != 0u &&
-        generated::normal_tuple_allowed_v12(
-            h0,
-            h1,
-            h2);
-
-    if (bmp_receiver &&
-        exact_material &&
-        normal_tuple &&
-        core_.features().enabled(
-            core::operator_id::normal)) {
-        auto *replacement =
-            normal_tuple
-                ? companions[2]
-                : nullptr;
-        if (normal_tuple)
-            companions[2] = nullptr;
-
-        const auto semantic =
-            operators::material_response::
-                classify_mtd_semantic(
-                    query,
-                    operators::material_response::
-                        mtd_semantic_operator::normal_bump);
-
-        operators::resource_bridges::
-            normal_bridge_context context_norm{};
-        context_norm.receiver_id =
-            receiver_id;
-
-        if (semantic.state ==
-            operators::material_response::
-                mtd_semantic_state::use) {
-            context_norm.authority =
-                operators::resource_bridges::
-                    normal_route_authority::
-                        homologous_material_route;
-            context_norm.homologous_bmp_material_route =
-                true;
-        }
-
-        context_norm.target_unambiguous =
-            normal_tuple;
-        context_norm.actual_bound_t2_verified =
-            h2 != 0u;
-        context_norm.exact_ptde_normal_sidecar_verified =
-            normal_tuple &&
-            replacement != nullptr;
-        context_norm.ptde_srv_ready =
-            replacement != nullptr;
-        context_norm.preserve_stock_s2 =
-            true;
-
-        const auto decision =
-            operators::resource_bridges::
-                evaluate_normal_route(
-                    context_norm);
-
-        if (decision.action ==
-                operators::resource_bridges::
-                    normal_action::bind_ptde_t2 &&
-            replacement != nullptr) {
+    const bool normal_target = h2 != 0u && companions[2] != nullptr;
+    if (bmp_receiver && normal_target &&
+        core_.features().enabled(core::operator_id::normal)) {
+        auto *replacement = companions[2];
+        companions[2] = nullptr;
+        operators::resource_bridges::normal_bridge_context ctx{};
+        ctx.receiver_id = receiver_id;
+        ctx.authority = operators::resource_bridges::normal_route_authority::exact_bound_t2;
+        ctx.target_unambiguous = true;
+        ctx.actual_bound_t2_verified = true;
+        ctx.exact_ptde_normal_sidecar_verified = true;
+        ctx.ptde_srv_ready = true;
+        ctx.preserve_stock_s2 = true;
+        const auto route = operators::resource_bridges::evaluate_normal_route(ctx);
+        if (route.action == operators::resource_bridges::normal_action::bind_ptde_t2) {
             island_draw_adapter_request request{};
-            request.primary =
-                core::operator_id::normal;
+            request.primary = core::operator_id::normal;
             request.receiver_verified = true;
-            request.material_verified =
-                exact_material;
-            request.srvs[0] = {
-                decision.srv_slot,
-                replacement
-            };
+            request.material_verified = true; // Exact stock-t2 identity.
+            request.srvs[0] = {route.srv_slot, replacement};
             request.srv_count = 1u;
-
-            if (append_retained_request(
-                    prepared,
-                    request,
-                    replacement)) {
+            if (append_retained_request(prepared, request, replacement)) {
                 prepared.normal = true;
                 hot_count(g_normal_requests);
                 replacement = nullptr;
             }
         }
-
-        if (replacement != nullptr)
-            replacement->Release();
+        if (replacement != nullptr) replacement->Release();
     }
 
     for (auto *&companion : companions)
