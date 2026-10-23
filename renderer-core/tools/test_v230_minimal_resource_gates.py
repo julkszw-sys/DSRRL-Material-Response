@@ -102,3 +102,11 @@ assert "b_view = a_view;" in stable
 assert "prepared.ptde_b = b_native;" in stable
 for a,b in ((0.0,0.75),(0.91,0.02),(-0.3,0.8)):
     assert a + 0.0 * (b-a) == a
+
+# Same-selector LightBank transport is one semantic endpoint, irrespective
+# of blend beta. Do not require second source pointer/cache membership.
+selector_code = producer.split("bool capture_hook_selector_identity(",1)[1].split("struct bank_cache_entry",1)[0]
+assert "if (beta_bits == 0u || selector_a == selector_b)" in selector_code
+assert "out.source_b = source_a;" in selector_code
+assert "out.base_b = out.base_a;" in selector_code
+assert "out.beta_bits = beta_bits;" in selector_code
