@@ -28,7 +28,14 @@ assert "const bool normal_target = h2 != 0u && companions[2] != nullptr;" in dra
 assert "diffuse_pair_allowed_v12" not in draw
 assert "normal_tuple_allowed_v12" not in draw
 assert "core::operator_id::spec_rgb" in draw
-assert "if (exact_material &&" in draw
+assert "const bool want_spec_rgb = exact_material && spec_receiver &&" in draw
+assert "const bool want_diffuse = bmp_receiver &&" in draw
+assert "const bool want_normal = bmp_receiver &&" in draw
+assert "{want_diffuse ? views[0] : nullptr, asset_class::diffuse}" in draw
+assert "{want_spec_rgb ? views[1] : nullptr, asset_class::specular}" in draw
+assert "{want_normal ? views[2] : nullptr, asset_class::normal}" in draw
+assert "if (!want_diffuse && !want_normal && !want_spec_rgb)" in draw
+assert "full_material_response_ready &&\n        spec_rgb_consumer_ready" not in draw
 
 # No unrelated c100, MTD or FLVER check may veto a t0/t2 sidecar.
 assert "if (!context.actual_material_verified)" not in dif
@@ -76,8 +83,10 @@ assert composed.index("const bool env_resource_ready =") < composed.index("const
 assert "if (!env_resource_ready)" in composed
 assert "!prepared.material_resources.spec_rgb" in composed
 assert "source.envdiffuse_linear_valid" in composed
-spec_region=draw.split("if (exact_material &&",1)[1].split("const bool bmp_receiver =",1)[0]
-assert "full_material_response_ready &&" in spec_region
+spec_region=draw.split("if (want_spec_rgb) {",1)[1].split("const bool diffuse_target =",1)[0]
+assert "if (want_spec_rgb)" in draw
+assert "full_material_response_ready" not in spec_region
+assert "material_chain_ready" in composed
 assert "spec_equipment_allowed(" in spec_region
 assert "stock_t1_preserved =" in spec_region
 assert "native_t10_transport_ready =" in spec_region
