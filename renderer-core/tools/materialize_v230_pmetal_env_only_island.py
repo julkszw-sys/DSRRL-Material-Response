@@ -175,17 +175,15 @@ patch(c,"    const bool shadow_env_ready =\n        !k_native_dsr_cubemap_feed &
       "    const bool shadow_env_ready =\n        !(k_native_dsr_cubemap_feed || env_only) &&")
 patch(c,"    bool env_resource_ready =\n        k_native_dsr_cubemap_feed",
       "    const bool env_resource_ready =\n        (k_native_dsr_cubemap_feed || env_only)")
-inject(c,'''    ID3D11ShaderResourceView *shadow_material[3]{};''',
-'''#if defined(DSRRL_V230_PMETAL_ENV_ONLY_ISLAND)
-    if (!env_only) {
-#endif
-''')
-patch(c,"    effect_latch(effect_spec_rgb_ready_);\n#endif",
-'''    effect_latch(effect_spec_rgb_ready_);
-#if defined(DSRRL_V230_PMETAL_ENV_ONLY_ISLAND)
-    }
-#endif
-#endif''')
+patch(c,
+'''    if (!material_ready ||
+        !prepared.material_resources.spec_rgb) {''',
+'''    if (env_only)
+        material_resources_.release_prepared_draw(prepared.material_resources);
+    if (!env_only &&
+        (!material_ready || !prepared.material_resources.spec_rgb)) {''')
+patch(c,"    effect_latch(effect_spec_rgb_ready_);",
+      "    if (!env_only) effect_latch(effect_spec_rgb_ready_);")
 patch(c,"    if (!env_resources_.prepare_envdiffuse(\n",
       "    if (!env_only && !env_resources_.prepare_envdiffuse(\n")
 patch(c,"    if (!g_native_envdiffuse_logged.exchange(\n",
