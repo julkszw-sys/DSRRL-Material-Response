@@ -63,3 +63,7 @@ assert s.count(old)==1,("FINAL_PUBLISH_DRIFT",s.count(old))
 s=s.replace(old,old.replace("material,next,epoch","source_key_material,next,epoch"),1)
 p.write_text(s,"utf-8")
 print("V230_NONMETAL_EXACT_SOURCE_ROUTE_PASS scope=all_unique_verified_mtd_sha_name_routes owner+MTD+slot")
+
+# Apply the matching source/draw full-identity key invariant to this same build.
+import runpy
+runpy.run_path('renderer-core/tools/materialize_v230_certified_producer_key.py')
