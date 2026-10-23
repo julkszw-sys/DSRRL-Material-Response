@@ -12,6 +12,9 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cstddef>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
