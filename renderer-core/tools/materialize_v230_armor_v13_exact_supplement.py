@@ -137,6 +137,8 @@ report={"source":"PTDE physical same-binder BASE source; DSR spec v12 actual nam
 "ptde_triples_original":552,"ptde_spec_unique":548,"v12_pairs":528,"v12_triples":557,
 "ptde_candidate_pairs":len(candidate_pairs),"ptde_candidate_triples":len(candidate_triples),
 "missing_pairs_added":len(newpairs),"missing_triples_added":len(newtriples),
+"missing_pair_names": [sp for sp in corpus if sp not in AMBIGUOUS and sp in stock_spec_names and (fnv(sp),fnv(EXCEPTIONS.get(sp,(sp[:-2],sp[:-2]+"_n"))[0])) in set(newpairs)],
+"missing_triple_names": [sp for sp in corpus if sp not in AMBIGUOUS and sp in stock_spec_names and EXCEPTIONS.get(sp,(sp[:-2],sp[:-2]+"_n"))[1] is not None and (fnv(EXCEPTIONS.get(sp,(sp[:-2],sp[:-2]+"_n"))[0]),fnv(sp),fnv(EXCEPTIONS.get(sp,(sp[:-2],sp[:-2]+"_n"))[1])) in set(newtriples)],
 "source_spec_not_in_dsr_corpus":not_in_stock_spec,"ambiguous_source_names":sorted(AMBIGUOUS),
 "v13_header_sha256":hashlib.sha256(header.encode()).hexdigest(),
 "routing_scope":"ONLY base/source-tpf-certified pairs, known DSR t1 name, exact DSR FLVER/slot/MTD owner, RX24-35 and operator-local semantic use; runtime and pixels OPEN"}
