@@ -137,10 +137,13 @@ patch(c,
     }
 #if defined(DSRRL_V230_PMETAL_ENV_ONLY_ISLAND)
     const auto env_only_spec_probe = material_resources_.probe_exact_specular_companion(context);
+    // Exact usable t10 requires bound stock t1, identified native view,
+    // allowlisted logical identity AND PTDE companion. The presence of an
+    // arbitrary sidecar pointer is not permission to require the full PS.
     const bool env_only =
         family == pmetal_envspec_receiver_family::stable_hemenv &&
         exact_pmetal_material(material) &&
-        !env_only_spec_probe.companion_ready;
+        !env_only_spec_probe.ready();
     if(env_only) {
         static std::atomic<std::uint32_t> seen{0u};
         const auto n=seen.fetch_add(1u,std::memory_order_relaxed)+1u;
