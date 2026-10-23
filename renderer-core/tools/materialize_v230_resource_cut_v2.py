@@ -16,44 +16,34 @@ def patch(path,old,new):
         raise RuntimeError(f"RESOURCE_CUT_DRIFT: {path}: {n}: {old[:100]!r}")
     p.write_text(s.replace(old,new,1),encoding="utf-8")
 
-# Observe material before the owner classifier discards a draw. The prior
-# helmet probe was downstream of this caller and restricted to male route229.
-p="material_owner_selection.cpp"
-patch(p,'#include <optional>',
-'''#include <optional>
+# Observe exact HELM route candidates at the entry of the EnvSpec draw
+# runtime, BEFORE its route/feature checks; does not widen eligibility.
+p="pmetal_envspec_draw_runtime.cpp"
+patch(p,'''    prepared = {};
+    effect_latch(effect_entry_seen_);''',
+'''    prepared = {};
 #if defined(DSRRL_V230_RESOURCE_CUT_V2)
-#include <cstdio>
-#include <reshade.hpp>
-#endif''')
-patch(p,'''bool material_owner_selection_publish(
-    const operators::material_response::material_identity &identity) noexcept
-{''',
-'''bool material_owner_selection_publish(
-    const operators::material_response::material_identity &identity) noexcept
-{
-#if defined(DSRRL_V230_RESOURCE_CUT_V2)
-    if ((identity.route_index == 229u || identity.route_index == 5u) &&
-        identity.material_slot_valid && identity.material_slot == 0u) {
-        static std::atomic<std::uint32_t> helm_owner_samples{0u};
-        const auto n=helm_owner_samples.fetch_add(1u,std::memory_order_relaxed)+1u;
+    if ((material.route_index==229u || material.route_index==5u) &&
+        material.material_slot_valid && material.material_slot==0u) {
+        static std::atomic<std::uint32_t> helm_samples{0u};
+        const auto n=helm_samples.fetch_add(1u,std::memory_order_relaxed)+1u;
         if(n<=32u) {
-            char b[420]{};
+            char b[440]{};
             std::snprintf(b,sizeof(b),
-                "[DSRRL HELM OWNER CUT] n=%u route=%u slot=%u valid=%u owner=%u actual=%u flver8=%02x%02x%02x%02x mtd8=%02x%02x%02x%02x sem=%016llx",
-                n,identity.route_index,identity.material_slot,
-                identity.valid?1u:0u,identity.owner_tuple_exact?1u:0u,
-                identity.actual_material_exact?1u:0u,
-                identity.flver_sha256[0],identity.flver_sha256[1],
-                identity.flver_sha256[2],identity.flver_sha256[3],
-                identity.raw_mtd_sha256[0],identity.raw_mtd_sha256[1],
-                identity.raw_mtd_sha256[2],identity.raw_mtd_sha256[3],
-                static_cast<unsigned long long>(identity.semantic_name_hash));
+                "[DSRRL HELM ENTRY CUT] n=%u rx=%u route=%u slot=%u valid=%u owner=%u actual=%u flver8=%02x%02x%02x%02x mtd8=%02x%02x%02x%02x sem=%016llx",
+                n,decision.receiver_id,material.route_index,material.material_slot,
+                material.valid?1u:0u,material.owner_tuple_exact?1u:0u,
+                material.actual_material_exact?1u:0u,
+                material.flver_sha256[0],material.flver_sha256[1],
+                material.flver_sha256[2],material.flver_sha256[3],
+                material.raw_mtd_sha256[0],material.raw_mtd_sha256[1],
+                material.raw_mtd_sha256[2],material.raw_mtd_sha256[3],
+                static_cast<unsigned long long>(material.semantic_name_hash));
             reshade::log::message(reshade::log::level::warning,b);
         }
     }
 #endif
-
-''')
+    effect_latch(effect_entry_seen_);''')
 
 # This observer runs inside the real texture-name creation callback and
 # records whether HD_M/HD_F_9360 textures are ever named, and whether the
