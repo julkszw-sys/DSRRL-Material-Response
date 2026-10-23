@@ -34,6 +34,37 @@ D3D11 draw-specific mutation must still restore the relevant original state.
   It does **not** inherit t12/t14 EnvSpec, t10 SpecRGB, PBL F0, PointLight,
   or full Material Response prerequisites.
 
+## Composition rule: SpecRGB cannot pass pixel tests by itself
+
+**Transport readiness** for equipment SpecRGB is narrow: exact owner+slot/MTD,
+actual bound stock t1 logical identity, allowed PTDE Specular companion SRV,
+certified t10 receiver, and stock t1 roughness/alpha preserved.
+
+**PTDE pixel-behavior readiness** for HemEnv is stricter, but it is not an
+extra prerequisite on independent resource-only operators:
+
+```text
+PTDE EnvSpec material pixel:
+    receiver/MTD exact
+    + PTDE SpecRGB t10 with stock t1 roughness
+    + correctly mapped PTDE EnvSpec cubemap t12 (t14 if blended)
+    + PTDE material response c100/c101 + verified private consumer
+    + source endpoints, beta, and complete downstream composition
+    -> pixel candidate, NOT pixel PASS until reference comparison
+```
+
+The entire HemEnv private shader must fail open to stock DSR if a consumed
+component is unverified. Source=1 publication and Diffuse/Normal swaps are
+independent. Neither a successful t10 bind nor a cubemap upload authorizes
+a hybrid PTDE SpecRGB + stock DSR PBL/F0 renderer output.
+
+The runtime now uses a single `material_chain_ready` condition on both
+stable HemEnv and HemEnvLerp private shader transactions; the latter
+separately requires the exact terminal SAT operator. PTDE EnvSpec resource
+preparation remains before SpecRGB. A t10 resource request explicitly
+requires `full_material_response_ready` within this HemEnv route.
+The equipment-only SpecRGB PROTECT is unchanged.
+
 ## Source=1 diagnosis (OPEN)
 
 The canonical runtime log `201838` proves a source_kind=1 RX34 EnvSpec
