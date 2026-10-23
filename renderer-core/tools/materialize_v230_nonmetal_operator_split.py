@@ -87,9 +87,14 @@ REPLACEMENT="""#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
             return false;""".replace("%MARK%",MARK)
 for p in (ROOT/"integrated/integrated_addon.cpp", PHYS):
     s=p.read_text("utf-8")
-    hits=s.count(NEEDLE)
-    if hits != 1 or MARK in s:
-        raise RuntimeError(f"INDEPENDENT_OPERATOR_SPLIT_DRIFT path={p} count={hits}")
-    p.write_text(s.replace(NEEDLE,REPLACEMENT,1),"utf-8")
+    pos=s.find("if (!g_pmetal_envspec.prepare(")
+    tail=s.find("            return false;",pos)
+    safe=pos>=0 and tail>pos and tail-pos<1500
+    if not safe or MARK in s:
+        raise RuntimeError(f"INDEPENDENT_OPERATOR_SPLIT_DRIFT path={p} pos={pos} tail={tail}")
+    fallback=REPLACEMENT.split("#if defined(DSRRL_V230_NONMETAL_NORMAL_OPERATOR_SPLIT)",1)[1].rsplit("#endif",1)[0]
+    fallback="#if defined(DSRRL_V230_NONMETAL_NORMAL_OPERATOR_SPLIT)"+fallback+"#endif"
+    s=s[:tail]+fallback+"\n"+s[tail:]
+    p.write_text(s,"utf-8")
     print(f"V230_NORMAL_SPLIT_PHYSICAL_PATCH_PASS {p}")
 print("V230_INDEPENDENT_NORMAL_SPLIT_SOURCE_PASS no MR/SpecRGB/Diffuse downgrade, exact owner, protected P_Metal/body/Lerp")
