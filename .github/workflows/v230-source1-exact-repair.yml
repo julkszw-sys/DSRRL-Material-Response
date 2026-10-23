@@ -1,0 +1,59 @@
+name: V230 Exact Material Source1 Repair
+on:
+  push:
+    branches: [diagnostic/v230-exact-source1-repair-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify native source repair overlay contract
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_repair.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_cutscene_trace.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("renderer-core/tools/materialize_v230_source1_repair.py").read_text()
+          q=Path("renderer-core/tools/build_v230_production.ps1").read_text()
+          assert "pmetal_producer_state_begin(material, epoch)" in p
+          assert "g_source1_exact.fetch_add" in p
+          assert "g_source1_hook.fetch_add" in p
+          assert "DSRRL_V230_SOURCE1_REPAIR" in q
+          assert "materialize_v230_source1_repair.py" in q
+          assert q.index("materialize_v230_source1_repair.py") < q.index("test_v230_release_contract.py")
+          print("SOURCE1_OFFLINE_CONTRACT_PASS")
+          PY
+  build-win64:
+    runs-on: windows-latest
+    needs: validate-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Native v230 source1 ReShade addon build
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Validate PE and independent Source1/Hook diagnostics
+        shell: pwsh
+        run: |
+          $src='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $src)) { throw 'No built addon' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $src))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Invalid PE' }
+          $text=[Text.Encoding]::ASCII.GetString($bytes)
+          if (!$text.Contains('[DSRRL SOURCE1]') -or !$text.Contains('[DSRRL V230 CUTSCENE]')) { throw 'Missing compiled native diagnostics' }
+          $dest='out-v230-release/DSRRL_V230_EXACT_SOURCE1_REPAIR_DIAG.addon64'
+          Copy-Item $src $dest
+          Get-FileHash $dest -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-v230-EXACT-SOURCE1-REPAIR
+          path: out-v230-release/DSRRL_V230_EXACT_SOURCE1_REPAIR_DIAG.addon64
+          if-no-files-found: error
