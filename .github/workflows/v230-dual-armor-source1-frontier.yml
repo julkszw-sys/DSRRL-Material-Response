@@ -64,7 +64,7 @@ jobs:
           if (!$script:base.Contains($native)) { throw 'Missing generated build command' }
           $script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`n"+$native)
           '@
-          $s=$s.Replace($hook,$late+$hook)
+          $s=$s.Replace($hook,$late+[Environment]::NewLine+$hook)
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
       - name: Build single addon (V13 source routes plus repaired Source1)
         shell: pwsh
