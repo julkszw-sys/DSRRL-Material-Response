@@ -39,6 +39,12 @@ REPLACEMENT="""#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
                 material.semantic_name_hash !=
                     dsrrl::operators::material_response::mtd_semantic_hash(
                         "Ps_Body[DSB].mtd") &&
+                material.semantic_name_hash !=
+                    dsrrl::operators::material_response::mtd_semantic_hash(
+                        "Ps_Body[DSB][M].mtd") &&
+                material.semantic_name_hash !=
+                    dsrrl::operators::material_response::mtd_semantic_hash(
+                        "Ps_Body[DSB]_Alp.mtd") &&
                 decision.active && decision.receiver_id >= 33u &&
                 decision.receiver_id <= 35u;
             if (independent_normal_scope) {
@@ -76,6 +82,18 @@ REPLACEMENT="""#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
                         // %MARK%: only normal-resource request, never EnvSpec
                         // MR, SpecRGB or dependent Diffuse. D3D restore is
                         // performed by the normal draw batch transaction.
+                        static std::atomic<std::uint32_t> split_samples{0u};
+                        const auto n=split_samples.fetch_add(
+                            1u,std::memory_order_relaxed)+1u;
+                        if(n<=24u) {
+                            char line[236]{};
+                            std::snprintf(line,sizeof(line),
+                                "[DSRRL V230 NORMAL SPLIT] n=%u rx=%u route=%u slot=%u normal=1 spec=0 diffuse=0 envspec=0",
+                                n,decision.receiver_id,material.route_index,
+                                material.material_slot);
+                            reshade::log::message(
+                                reshade::log::level::warning,line);
+                        }
                         return true;
                     }
                     release_prepared_island_batch(prepared);
