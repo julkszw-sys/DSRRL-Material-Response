@@ -65,7 +65,7 @@ jobs:
           $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
           if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'Invalid PE'}
           $s=[Text.Encoding]::ASCII.GetString($b)
-          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL HELM DRAW CUT]')) {
+          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]')) {
             if (!$s.Contains($mark)) {throw "Missing diagnostic marker $mark"}
           }
           $dest='out-v230-release/DSRRL_V230_RESOURCE_CUT_V2.addon64'
