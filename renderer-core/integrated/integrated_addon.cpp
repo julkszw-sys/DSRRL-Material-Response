@@ -2781,7 +2781,15 @@ bool observe_draw_identity(
                  dsrrl::core::operator_id::hemdir3)) ||
             (subsurface_bound &&
              g_core.features().enabled(
-                 dsrrl::core::operator_id::subsurface));
+                 dsrrl::core::operator_id::subsurface)) ||
+            // Resource-only t0/t2 has its own exact stock-SRV authority.
+            // Owner/FLVER/MTD is still mandatory for shader/material islands.
+            ((stable_receiver || hemenvlerp_receiver) &&
+             receiver_id >= 24u && receiver_id <= 35u &&
+             (g_core.features().enabled(
+                  dsrrl::core::operator_id::diffuse) ||
+              g_core.features().enabled(
+                  dsrrl::core::operator_id::normal)));
         return ownerless_island_enabled;
     }
 
@@ -6384,6 +6392,28 @@ bool prepare_island_batch(
             return true;
         }
 
+        // A Lerp material may still have valid t0/t2 replacements when the
+        // independent Material Response shader/c100 route is unavailable.
+        // This binds only live stock-SRV matched companions, never t10.
+        if (context != nullptr && receiver_id >= 24u && receiver_id <= 35u) {
+            dsrrl::operators::material_response::mtd_semantic_query resource_query{};
+            resource_query.material = material;
+            resource_query.receiver_id = receiver_id;
+            (void)g_material_resources.prepare_draw_requests(
+                context, receiver_id, resource_query, false, false,
+                prepared.resources);
+            for (std::uint32_t i = 0u;
+                 i < prepared.resources.request_count; ++i) {
+                if (dsrrl::runtime::append_island_draw_request(
+                        prepared.batch, prepared.resources.requests[i]) !=
+                    dsrrl::runtime::island_draw_batch_result::ready) {
+                    release_prepared_island_batch(prepared);
+                    return false;
+                }
+            }
+            if (prepared.resources.request_count != 0u)
+                return true;
+        }
         return false;
     }
 
