@@ -1,0 +1,43 @@
+name: V348 Unified HemEnvLerp PTDE SpecRGB XYZ Fix
+on:
+  push:
+    branches: [agent/v348-spec-rgb-fix-build-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R19, unified shader and PTDE SpecRGB exact source invariants
+        run: |
+          python3 renderer-core/tools/audit_v347_r19_lerp_rebase.py
+          python3 renderer-core/tools/audit_v338_nonmetal_lerp_else_rgb.py
+          python3 renderer-core/tools/audit_v344_ptde_spec_post_env.py
+          python3 renderer-core/tools/audit_v345_single_lerp.py
+          python3 renderer-core/tools/audit_v348_unified_specrgb.py
+  native-windows-x64:
+    needs: source-audit
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build one V348 x64 ReShade addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v348_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Emit source and artifact SHA256
+        shell: pwsh
+        run: |
+          $f='out-v348/DSRRL_V348_PTDE_LERP_RGB_SWIZZLE_FIXED.addon64'
+          Write-Host "commit=$((git rev-parse HEAD).Trim())"
+          Write-Host "sha256=$((Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V348_UNIFIED_PTDE_LERP_RGB_ONE_ADDON
+          path: out-v348/DSRRL_V348_PTDE_LERP_RGB_SWIZZLE_FIXED.addon64
+          if-no-files-found: error

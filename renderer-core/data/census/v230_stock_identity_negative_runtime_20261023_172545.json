@@ -1,0 +1,41 @@
+{
+  "source_log": "ReShade(20261023-172545).log",
+  "source_sha256": "206ab78eca09af549011086954e501fc36985183cc9ecca58e3e36a05899ca51",
+  "observed": {
+    "new_binary_loaded": true,
+    "stock_identity_only_count": 48,
+    "stock_identity_ptde_companions_nonzero": 0,
+    "equipment_candidates": 516,
+    "unique_routes": [
+      232,
+      345,
+      1073741869,
+      160,
+      331,
+      88,
+      5,
+      1073741868
+    ],
+    "v13_resource_cuts": 20,
+    "v13_masks_all_7": true,
+    "source1_rx34_resource_cuts": 0,
+    "source1_hit": 0,
+    "source1_frontier": 0,
+    "helm_draw_cut": 0,
+    "helm_DDS_events": 6,
+    "post_dispatch": 1890,
+    "post_dispatch_source_kind2": 1889,
+    "post_dispatch_source_kind0": 1,
+    "post_dispatch_source_kind1": 0,
+    "atomic_prepare_fail": 125,
+    "atomic_reject_routes": {
+      "88": 10,
+      "160": 10,
+      "232": 105
+    },
+    "producer_source1_last_reads": 16384,
+    "producer_source1_last_published": 967,
+    "producer_source1_last_exact": 0
+  },
+  "conclusion": "OWNER_PIXEL_NO_IMPROVEMENT. Stock identity-only prefilter removal works as instrumented, but not evidence of an activated PTDE resource/consumer. Source1 target RX34 was not sampled in this log; old denial not disproved. V13 resource preparation remains, pixel equivalence not demonstrated. No renderer patch inferred."
+}

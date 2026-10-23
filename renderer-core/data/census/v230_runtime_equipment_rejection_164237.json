@@ -1,0 +1,77 @@
+{
+  "source_log_sha256": "b7013459c85860c7324704ac9cb2372091c1c1043487cc51564bbb19663707a4",
+  "addon_version": "v230",
+  "observed": {
+    "material_records": 500,
+    "unique_nonzero_flver": 95,
+    "unique_mtd": 9,
+    "unique_owner_flver_mtd_slot_rx": 358,
+    "material_response_active": 500,
+    "decision_reason_0": 500,
+    "owner_exact": 498,
+    "owner_missing": 2,
+    "actual_material_exact_false": 90,
+    "post_dispatch_total": 2019,
+    "post_dispatch_source_kind_2": 2017,
+    "post_dispatch_source_kind_0": 2,
+    "post_dispatch_source_kind_1": 0,
+    "atomic_prepare_fail": 295
+  },
+  "atomic_failures": [
+    [
+      "Ps_Body[DSB]",
+      232,
+      "d7370669de1cfbb379cb85c3a672ea91f7bec21a8cfdf2ef373dcc5b201fa3bf",
+      0,
+      110
+    ],
+    [
+      "P_DullLeather[DSB]_Edge",
+      88,
+      "c317c8e0b1b3ae3f05ab08ed7f524150849c537bfddc509019ae6f75ee1ac7b2",
+      2,
+      91
+    ],
+    [
+      "P_DullLeather[DSB]",
+      160,
+      "c317c8e0b1b3ae3f05ab08ed7f524150849c537bfddc509019ae6f75ee1ac7b2",
+      3,
+      89
+    ],
+    [
+      "P_Metal[DSB]",
+      345,
+      "3a82e4f6e45f13a05ac40418ba6ad12ff9acae9cf01e19937bd5c5f45ff2636c",
+      2,
+      4
+    ],
+    [
+      "P_DullLeather[DSB]",
+      160,
+      "97b2dc9a5d542fa9649f8f89d1de6b049bd35bd61145ea0758577a8dd35a8552",
+      4,
+      1
+    ]
+  ],
+  "source1": {
+    "stockmask": 7,
+    "hashmask": 0,
+    "sidemask": 0,
+    "samples": 20,
+    "spec_reason_4": 18,
+    "phase7": 26
+  },
+  "v13": {
+    "stockmask": 7,
+    "hashmask": 7,
+    "sidemask": 7,
+    "samples": 20,
+    "prepared_spec_diff_norm_all": 18
+  },
+  "helm": {
+    "male_hd_m_9360_diff_norm_spec_loaded": true,
+    "draw_route229_observed": false
+  },
+  "scope": "Draw hooks only. No direct equip coverage or PTDE pixel equivalence. Atomic_prepare_fail is operator-local and may be correct fail-open."
+}

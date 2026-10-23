@@ -2,6 +2,7 @@
 #include "dsrrl/runtime/a1_create_pipeline_bridge.hpp"
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
@@ -10,6 +11,15 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v287_nonmetal_trace.hpp"
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+#include "dsrrl/runtime/v291_material_stage_trace.hpp"
+#endif
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+#include "dsrrl/runtime/v290_spec_draw_census.hpp"
+#endif
+#endif
 #include "dsrrl/runtime/pmetal_native_draw_bridge.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
@@ -2927,6 +2937,14 @@ bool integrated_operator_enabled_by_policy(
     case dsrrl::core::operator_id::upper_lower:
     case dsrrl::core::operator_id::hemdir3:
         return false;
+#if defined(DSRRL_POINTLIGHT_DRAWTIME_BYPASS)
+    // RC2: PointLight is stock DSR. No fixed/clustered PointLight,
+    // per-light legacy specular, or PntS attenuation island may be armed.
+    case dsrrl::core::operator_id::point_light:
+    case dsrrl::core::operator_id::local_specular_legacy:
+    case dsrrl::core::operator_id::pointlight_pnts_attenuation:
+        return false;
+#endif
     default:
         return true;
     }
@@ -3210,7 +3228,7 @@ void log_state(const char *tag) noexcept
         "tx_begin_ok=%llu tx_begin_fail=%llu tx_bind_fail=%llu tx_issued=%llu "
         "tx_restore_ok=%llu tx_restore_fail=%llu tx_readback_skip=%llu tx_quarantine=%u "
         "tex_hook=%u/%u tex_restore_fail=%u res_named=%llu res_ready=%llu res_missing=%llu "
-        "res_unsupported=%llu spec_req=%llu fixed_spec=%llu fixed_diff=%llu diff_req=%llu norm_req=%llu res_fo=%llu "
+        "res_unsupported=%llu spec_req=%llu fixed_spec=%llu fixed_diff=%llu diff_req=%llu norm_req=%llu res_fo=%llu res_shared=%llu/%llu "
         "ul_hook=%u ul_q=%u ul_restore_fail=%u ul_pub=%llu ul_sel=%llu/%llu/%llu ul_tuple_miss=%llu "
         "ul_pub_tuple_miss=%llu ul_steady=%llu/%llu ul_blend=%llu/%llu/%llu ul_b13=%llu/%llu ul_req=%llu "
         "sub_candidate=%llu sub_prepared=%llu sub_pipe_reject=%llu sub_mat_reject=%llu sub_surface_reject=%llu "
@@ -3298,6 +3316,8 @@ void log_state(const char *tag) noexcept
         static_cast<unsigned long long>(resources.diffuse_requests),
         static_cast<unsigned long long>(resources.normal_requests),
         static_cast<unsigned long long>(resources.fail_open),
+        static_cast<unsigned long long>(resources.shared_srv_reuse),
+        static_cast<unsigned long long>(resources.shared_srv_upload),
         ul.producer_hooks_armed ? 1u : 0u,
         ul.quarantined ? 1u : 0u,
         ul.restore_failed ? 1u : 0u,
@@ -4676,14 +4696,34 @@ bool on_create_pipeline(
 
             if (envspec_lerp.result ==
                     envspec_lerp_result::applied) {
-                if (g_pmetal_envspec.
-                        register_lerp_replacement(
-                            envspec_lerp,
-                            envspec_lerp_payload.data(),
-                            envspec_lerp_payload.size()))
+                const bool r19_registered =
+                    g_pmetal_envspec.register_lerp_replacement(
+                        envspec_lerp,
+                        envspec_lerp_payload.data(),
+                        envspec_lerp_payload.size());
+                if (r19_registered)
                     ++g_envspec_payload_materialize_ok;
                 else
                     ++g_envspec_payload_materialize_fail;
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+                if (r19_registered) {
+                    const bool candidate =
+                        g_pmetal_envspec.
+                            register_lerp_nonmetal_r8_candidate(
+                                envspec_lerp,
+                                envspec_lerp_payload.data(),
+                                envspec_lerp_payload.size());
+                    char line[192]{};
+                    std::snprintf(line,sizeof(line),
+                        "[DSRRL V289 R8 NONMETAL] rx=%u create=%s metal_ps=V288",
+                        static_cast<unsigned>(envspec_lerp.semantic_receiver_id),
+                        candidate ? "ready" : "failopen");
+                    reshade::log::message(
+                        candidate ? reshade::log::level::info :
+                            reshade::log::level::warning,
+                        line);
+                }
+#endif
             } else if (
                 envspec_lerp.result !=
                     envspec_lerp_result::pass_not_candidate &&
@@ -4982,6 +5022,12 @@ void on_bind_pipeline(
             cmd_list,
             pixel_stage_bound,
             pipeline.handle);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    if (pixel_stage_bound)
+        dsrrl::runtime::v291_material_trace::log_pipeline_bind(
+            static_cast<std::uint64_t>(pipeline.handle),
+            static_cast<std::uint32_t>(route_mask));
+#endif
 
     if (pixel_stage_bound && route_mask != 0u) {
         if ((route_mask & k_route_stable) != 0u)
@@ -6091,15 +6137,59 @@ bool prepare_island_batch(
             material,
             decision);
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (hemenvlerp_bound &&
+        material.valid && decision.active &&
+        !exact_pmetal_envspec) {
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            "lerp_generic_fallback",
+            material, decision, 1u);
+    }
+#endif
+
     if (exact_pmetal_envspec) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (material.route_index != 345u) {
+            static std::atomic_bool first_nonmetal_gate{false};
+            if (!first_nonmetal_gate.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL V286 NONMETAL] stage=exact_material_candidate");
+            }
+        }
+#endif
+        // Preserve the exact audit-verified fail-open carrier.
         if (!g_pmetal_envspec.prepare(
                 cmd_list,
                 material,
                 decision,
                 envspec_family,
-                prepared.envspec))
+                prepared.envspec)) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "atomic_prepare_fail",
+                material, decision,
+                static_cast<std::uint32_t>(envspec_family));
+#endif
             return false;
+        }
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (material.route_index != 345u) {
+            static std::atomic_bool first_nonmetal_prepared{false};
+            if (!first_nonmetal_prepared.exchange(true)) {
+                reshade::log::message(
+                    reshade::log::level::info,
+                    "[DSRRL V286 NONMETAL] stage=full_atomic_prepare_ready");
+            }
+        }
+#endif
+
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            "atomic_prepare_ready", material, decision,
+            static_cast<std::uint32_t>(envspec_family));
+#endif
         prepared.envspec_in_batch = true;
 
         if (dsrrl::runtime::append_island_draw_request(
@@ -6122,6 +6212,11 @@ bool prepare_island_batch(
             }
         }
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            "atomic_batch_ready", material, decision,
+            static_cast<std::uint32_t>(envspec_family));
+#endif
         return true;
     }
 
@@ -6184,6 +6279,10 @@ bool prepare_island_batch(
         }
 
         if (lerp_mr_prepared) {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "lerp_diffuse_only_ready", material, decision, 1u);
+#endif
             prepared.mr_in_batch = true;
             prepared.lerp_mr_in_batch = true;
 
@@ -6490,6 +6589,30 @@ bool on_draw(
                 cmd_list));
 
     if (route_mask == 0u) {
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,
+        // otherwise the 1295-name funnel misses the largest unknown class.
+        // Uses the existing TLS pixel binding shadow (no D3D calls in
+        // steady state); native readback only for first unique t1 view.
+        ID3D11ShaderResourceView *shadow_t1[1]{};
+        if (dsrrl::runtime::pixel_srv_shadow_snapshot(
+                cmd_list, 1u, 1u, shadow_t1) &&
+            shadow_t1[0] != nullptr &&
+            dsrrl::runtime::v290_spec_census::first_unrouted_view(
+                shadow_t1[0])) {
+            auto *census_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            const auto probe =
+                g_material_resources.probe_exact_specular_companion(
+                    census_context);
+            dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+            dsrrl::runtime::v291_material_trace::log_unrouted(
+                shadow_t1[0],probe);
+#endif
+        }
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -6598,12 +6721,47 @@ bool on_draw(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "identity_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
         return false;
     }
 
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+    // CENSUS ONLY: one optional t1 snapshot per first-seen exact material /
+    // slot / receiver / Stable-Lerp pair. No material gate is relaxed.
+    // Includes non-authorized receivers to identify the *actual* semantic
+    // cut preventing a sidecar item from reaching a supported PTDE shader.
+    if ((material.valid || receiver_id != 0u) &&
+        dsrrl::runtime::v290_spec_census::claim(
+            material, receiver_id, hemenvlerp_bound ? 1u : 0u)) {
+        auto *census_context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+        const auto probe =
+            g_material_resources.probe_exact_specular_companion(
+                census_context);
+        const bool authorized =
+            dsrrl::runtime::exact_pmetal_envspec_candidate(
+                material, decision);
+        dsrrl::runtime::v290_spec_census::report(
+            material, receiver_id,
+            hemenvlerp_bound ? 1u : 0u,
+            authorized, probe);
+    }
+#endif
+
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    // Every routed observed MTD, even without SpecRGB or EnvSpec authority.
+    dsrrl::runtime::v291_material_trace::log(
+        "identity_ok",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u);
+#endif
     // Direct PointLight routing is exclusive at this point. A material
     // decision that is not active can only fail open to stock DSR, so do not
     // enter the draw-time shader/resource preparation path. In PointLight
@@ -6612,8 +6770,14 @@ bool on_draw(
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
     if (direct_pointlight_route &&
-        !decision.active)
+        !decision.active) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "pointlight_inactive",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
@@ -6665,6 +6829,11 @@ bool on_draw(
             effect_probe_stage::fail_open,
             receiver_id,
             decision.route_index);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "prepare_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
     }
 
@@ -6687,6 +6856,19 @@ bool on_draw(
         receiver_id,
         decision.route_index);
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        "batch_prepared",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
+#endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            "prepared",material,decision,prepared.envspec);
+#endif
     if (k_pmetal_native_draw_runtime_enabled &&
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch) &&
@@ -6697,6 +6879,22 @@ bool on_draw(
             instance_count,
             first_vertex,
             first_instance)) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "native_draw_armed",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "atomic_native_draw_armed", material, decision,
+                hemenvlerp_bound ? 1u : 0u);
+#endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+                "native_armed",material,decision,prepared.envspec);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade continues into its single original
@@ -6791,6 +6989,32 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "draw_issued" : "draw_failopen",
+            material,decision,prepared.envspec);
+#endif
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+            ? "draw_issued" : "draw_failopen",
+        material,decision,receiver_id,hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
+#endif
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "atomic_replay_draw_issued"
+                : "atomic_replay_failopen",
+            material, decision,
+            hemenvlerp_bound ? 1u : 0u);
+#endif
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
@@ -6919,6 +7143,30 @@ bool on_draw_indexed(
                 cmd_list));
 
     if (route_mask == 0u) {
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,
+        // otherwise the 1295-name funnel misses the largest unknown class.
+        // Uses the existing TLS pixel binding shadow (no D3D calls in
+        // steady state); native readback only for first unique t1 view.
+        ID3D11ShaderResourceView *shadow_t1[1]{};
+        if (dsrrl::runtime::pixel_srv_shadow_snapshot(
+                cmd_list, 1u, 1u, shadow_t1) &&
+            shadow_t1[0] != nullptr &&
+            dsrrl::runtime::v290_spec_census::first_unrouted_view(
+                shadow_t1[0])) {
+            auto *census_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            const auto probe =
+                g_material_resources.probe_exact_specular_companion(
+                    census_context);
+            dsrrl::runtime::v290_spec_census::report_unrouted(probe);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+            dsrrl::runtime::v291_material_trace::log_unrouted(
+                shadow_t1[0],probe);
+#endif
+        }
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -7009,12 +7257,47 @@ bool on_draw_indexed(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "identity_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         mark_effect_probe_mask(
             route_candidates,
             effect_probe_stage::fail_open);
         return false;
     }
 
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+    // CENSUS ONLY: one optional t1 snapshot per first-seen exact material /
+    // slot / receiver / Stable-Lerp pair. No material gate is relaxed.
+    // Includes non-authorized receivers to identify the *actual* semantic
+    // cut preventing a sidecar item from reaching a supported PTDE shader.
+    if ((material.valid || receiver_id != 0u) &&
+        dsrrl::runtime::v290_spec_census::claim(
+            material, receiver_id, hemenvlerp_bound ? 1u : 0u)) {
+        auto *census_context =
+            reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+        const auto probe =
+            g_material_resources.probe_exact_specular_companion(
+                census_context);
+        const bool authorized =
+            dsrrl::runtime::exact_pmetal_envspec_candidate(
+                material, decision);
+        dsrrl::runtime::v290_spec_census::report(
+            material, receiver_id,
+            hemenvlerp_bound ? 1u : 0u,
+            authorized, probe);
+    }
+#endif
+
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    // Every routed observed MTD, even without SpecRGB or EnvSpec authority.
+    dsrrl::runtime::v291_material_trace::log(
+        "identity_ok",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u);
+#endif
     // Direct PointLight routing is exclusive at this point. A material
     // decision that is not active can only fail open to stock DSR, so do not
     // enter the draw-time shader/resource preparation path. In PointLight
@@ -7023,8 +7306,14 @@ bool on_draw_indexed(
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
     if (direct_pointlight_route &&
-        !decision.active)
+        !decision.active) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "pointlight_inactive",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
+    }
 
     const auto effect_candidates =
         candidate_effect_mask(
@@ -7076,6 +7365,11 @@ bool on_draw_indexed(
             effect_probe_stage::fail_open,
             receiver_id,
             decision.route_index);
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "prepare_failopen",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
         return false;
     }
 
@@ -7098,6 +7392,19 @@ bool on_draw_indexed(
         receiver_id,
         decision.route_index);
 
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        "batch_prepared",material,decision,receiver_id,
+        hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
+#endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            "prepared",material,decision,prepared.envspec);
+#endif
     if (k_pmetal_native_draw_runtime_enabled &&
         (prepared.envspec_in_batch ||
          prepared.clustered_in_batch) &&
@@ -7109,6 +7416,22 @@ bool on_draw_indexed(
             first_index,
             vertex_offset,
             first_instance)) {
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+        dsrrl::runtime::v291_material_trace::log(
+            "indexed_native_armed",material,decision,receiver_id,
+            hemenvlerp_bound?1u:0u);
+#endif
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v287_nonmetal_trace::log(
+                "atomic_indexed_native_armed",
+                material, decision, hemenvlerp_bound ? 1u : 0u);
+#endif
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+        if (prepared.envspec_in_batch)
+            dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+                "native_armed",material,decision,prepared.envspec);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade executes exactly one original
@@ -7156,6 +7479,31 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "indexed_issued" : "indexed_failopen",
+            material,decision,prepared.envspec);
+#endif
+#if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    dsrrl::runtime::v291_material_trace::log(
+        dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+            ? "indexed_issued" : "indexed_failopen",
+        material,decision,receiver_id,hemenvlerp_bound?1u:0u,
+        (prepared.envspec_in_batch?1u:0u) |
+        (prepared.mr_in_batch?2u:0u) |
+        (prepared.clustered_in_batch?4u:0u));
+#endif
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (prepared.envspec_in_batch)
+        dsrrl::runtime::v287_nonmetal_trace::log(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction)
+                ? "atomic_indexed_draw_issued"
+                : "atomic_indexed_failopen",
+            material, decision, hemenvlerp_bound ? 1u : 0u);
+#endif
 
     const bool mr_in_batch =
         prepared.mr_in_batch;
@@ -7350,6 +7698,12 @@ bool AddonInit(
 {
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
+    dsrrl::runtime::qpc_bisect::init_from_game_directory();
+    char qpc_mode_line[200]{};
+    std::snprintf(qpc_mode_line,sizeof(qpc_mode_line),
+        "[DSRRL QPC CAUSALITY] mode=%u same_binary=YES qpc_bit=1 atomic_bit=2",
+        static_cast<unsigned>(dsrrl::runtime::qpc_bisect::g_mode.load(std::memory_order_relaxed)));
+    reshade::log::message(reshade::log::level::info,qpc_mode_line);
 
     if (k_addon_loaded_only_bisect) {
         reshade::log::message(
@@ -7873,6 +8227,7 @@ void AddonUninit(
     }
 
     unregister_events();
+    dsrrl::runtime::qpc_bisect::report();
     log_state("PRE_UNLOAD");
     log_effect_matrix("PRE_UNLOAD");
     motion_blur_camera_fallback_disable::

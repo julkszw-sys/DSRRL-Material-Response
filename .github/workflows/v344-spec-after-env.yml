@@ -1,0 +1,22 @@
+name: V344 PTDE SpecRGB One Addon
+on:
+  push:
+    branches: [agent/v344-ptde-lerp-spec-after-env-20261017]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          path: _reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+      - name: Compile native x64
+        shell: pwsh
+        run: ./renderer-core/tools/build_v344_ptde_lerp_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V344-PTDE-post-EnvSpec
+          path: out-v344/DSRRL_V344_PTDE_LERP_SPEC_POST_ENV.addon64

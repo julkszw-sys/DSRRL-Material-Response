@@ -72,6 +72,36 @@ option(
     OFF)
 
 option(
+    DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS
+    "Diagnostic: exact t1 logical hash / physical PTDE sidecar / receiver and MTD cut sampled at draw without automatic speculative shader admission"
+    OFF)
+
+option(
+    DSRRL_V291_MATERIAL_STAGE_CENSUS
+    "Diagnostic only: track every routed MTD draw (including P_Metal and materials with no SpecRGB) through identity, prepared, issued/failopen stages"
+    OFF)
+
+option(
+    DSRRL_V291_LERP_CUBEMAP_CENSUS
+    "Diagnostic only: exact prepared PTDE EnvSpec/EnvDiffuse cubemap A/B source beta with indexed draw confirmation"
+    OFF)
+
+option(
+    DSRRL_V293_PARSER_EXACT_FLVER_ALIAS
+    "Experimental: exact-parser FLVER owner recovery plus atomic homologous PTDE-SPX RoughCloth EnvSpec on full authenticated owner only"
+    OFF)
+
+option(
+    DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB
+    "V289 opt-in nonmetal-only RX33-35 Lerp R8 SPEC-domain first consumer island A/B; P_Metal unchanged"
+    OFF)
+
+option(
+    DSRRL_V285_ATOMIC_NONMETAL_DIAG
+    "V285 experimental 36 exact FLVER/slot/MTD SpecRGB+EnvSpec PTDE atomic material island; OFF in releases"
+    OFF)
+
+option(
     DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG
     "Diagnostic: PR203 V13/native-DSR EnvSpec plus only PTDE SpecRGB*c101*COLOR0 modulation on the EnvSpec accumulator before the preserved common merge; stable HemEnv + paired HemEnvLerp"
     OFF)
@@ -798,6 +828,80 @@ if(DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL)
         dsrrl_renderer_core_integrated
         PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:DSRRL_PMETAL_FULL_PTDE_HEMENV_R17_PTDE_DIFFUSE_MATERIAL>)
+endif()
+
+if(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+    if(NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V290 SpecRGB full draw census requires full V286 loader and exact source bridges")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS>)
+endif()
+
+if(DSRRL_V291_MATERIAL_STAGE_CENSUS)
+    if(NOT DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS OR
+       NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V291 global material stage census requires V290 and V285 diagnostics")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_MATERIAL_STAGE_CENSUS>)
+endif()
+
+if(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if(NOT DSRRL_V291_MATERIAL_STAGE_CENSUS OR
+       NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR "V291 Lerp cubemap observer needs V291 material census and exact R19 PTDE EnvDiffuse island")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V291_LERP_CUBEMAP_CENSUS>)
+endif()
+
+if(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    # V293 checks parser-authenticated identity independently of diagnostic
+    # material census. Preserve the required nonmetal consumer gate only.
+    if(NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        message(FATAL_ERROR "V293 exact owner alias requires nonmetal atomic gate")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V293_PARSER_EXACT_FLVER_ALIAS>)
+endif()
+
+if(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    if(NOT DSRRL_V285_ATOMIC_NONMETAL_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+        message(FATAL_ERROR
+            "V289 requires existing complete V285+R19 exact Lerp atom")
+    endif()
+    target_compile_definitions(dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB>)
+endif()
+
+if(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(V286_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/dsrrl/runtime/generated_spec_whitelist_20261010.hpp")
+    execute_process(COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate_sidecar_spec_whitelist_20261010.py"
+        --input "${CMAKE_CURRENT_SOURCE_DIR}/../data/provenance/sidecar_specular_20261010_names.b85"
+        --output "${V286_HEADER}"
+        RESULT_VARIABLE V286_RESULT)
+    if(NOT V286_RESULT EQUAL 0)
+        message(FATAL_ERROR "V286 manifest generator failed")
+    endif()
+    target_include_directories(dsrrl_renderer_core_integrated PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    if(NOT DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG OR
+       NOT DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW OR
+       NOT DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE OR
+       NOT DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE OR
+       NOT DSRRL_PHYSICAL_CUT_POINTLIGHT_ALL)
+        message(FATAL_ERROR
+            "V285 nonmetal diagnostic needs complete R19 PTDE operator and independent UL/PointLight cuts")
+    endif()
+    target_compile_definitions(
+        dsrrl_renderer_core_integrated PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:DSRRL_V285_ATOMIC_NONMETAL_DIAG>)
 endif()
 
 if(DSRRL_PMETAL_R19_LERP_MATERIALWORKFLOW)

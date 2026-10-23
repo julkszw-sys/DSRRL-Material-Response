@@ -1,0 +1,22 @@
+name: V299 atomic source receiver contract
+on:
+  push:
+    branches: [agent/v294-all-sidecar-manifest-atomic-20261015]
+  workflow_dispatch:
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 renderer-core/tools/materialize_v296_oct10_atomic_policy.py
+          python3 renderer-core/tools/materialize_v297_authored_slot0.py
+          python3 renderer-core/tools/materialize_v297_retail_mtd_owner.py
+          python3 renderer-core/tools/materialize_v298_live_mtd_witness.py
+          python3 renderer-core/tools/materialize_v299_slot0_source_consumer.py
+          python3 renderer-core/tools/materialize_v299_oct10_candidate_census.py
+          python3 renderer-core/tools/test_v297_authored_slot0_source.py
+          python3 renderer-core/tools/test_v298_live_mtd_source_contract.py
+          python3 renderer-core/tools/test_v299_source_consumer_contract.py
+      - run: |
+          g++ -std=c++17 -pthread -Wall -Wextra -Werror -I renderer-core/include renderer-core/tests/v298_parser_mtd_witness_test.cpp -o /tmp/v298 && /tmp/v298

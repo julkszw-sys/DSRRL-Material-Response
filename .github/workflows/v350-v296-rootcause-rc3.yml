@@ -1,0 +1,60 @@
+name: V350 RC3 V296 root cause PointLight OFF addon
+on:
+  push:
+    branches: [agent/v350-v296-rootcause-telemetry-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parent plus root-cause contracts
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v296_oct10_source_contract.py
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/audit_v350_ptde_rgb_lane_swizzle.py
+          python3 - <<'PY'
+          from pathlib import Path
+          h=Path('renderer-core/include/dsrrl/runtime/v296_failopen_rootcause_diag.hpp').read_text()
+          p=Path('renderer-core/tools/materialize_v296_oct10_atomic_policy.py').read_text()
+          b=Path('renderer-core/tools/build_v350_v296_rootcause_rc3.ps1').read_text()
+          assert 'texture_swap_observed=NO' in h
+          assert 'NO_CERTIFIED_ATOMIC_PTDE_CONSUMER' in h
+          assert 'DSRRL_V296_ROOTCAUSE_TELEMETRY' in p
+          assert 'v296_diag::record' in p
+          assert 'DSRRL_POINTLIGHT_DRAWTIME_BYPASS=ON' in Path('renderer-core/tools/build_v350_gpu_resident_pointlight_off_rc2.ps1').read_text()
+          assert '/DDSRRL_V296_ROOTCAUSE_TELEMETRY' in b
+          print('RC3 V296 ROOTCAUSE CONTRACT PASS')
+          PY
+      - name: V296 patch materialization
+        run: |
+          python3 renderer-core/tools/materialize_v296_oct10_atomic_policy.py
+          python3 - <<'PY'
+          from pathlib import Path
+          t=Path('renderer-core/integrated/integrated_addon.cpp').read_text()
+          assert 'v296_diag::record' in t
+          assert 'v296_failopen_rootcause_diag.hpp' in t
+          print('RC3 PATCH APPLIED')
+          PY
+  native-one-addon:
+    needs: source-contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build Windows x64 one addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v350_v296_rootcause_rc3.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V350-V296-RootCause-RC3-one-addon
+          path: out-v350-v296-rootcause-rc3/DSRRL_V350_V296_ROOTCAUSE_RC3.addon64
+          if-no-files-found: error

@@ -1,0 +1,51 @@
+name: V345 Unified HemEnvLerp One Pixel Shader
+on:
+  push:
+    branches: [agent/v345-single-lerp-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check V338 and one Lerp shader routing
+        run: |
+          python3 renderer-core/tools/audit_v338_nonmetal_lerp_else_rgb.py
+          python3 renderer-core/tools/audit_v344_ptde_spec_post_env.py
+          python3 renderer-core/tools/audit_v345_single_lerp.py
+  native-win64:
+    needs: exact-source
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build one native V345 unified ReShade addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v345_single_lerp_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify x64 executable, source identity and unified debug markers
+        shell: pwsh
+        run: |
+          $f = 'out-v345/DSRRL_V345_UNIFIED_PTDE_HEMENVLERP.addon64'
+          if (-not (Test-Path $f)) { throw 'Missing addon' }
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $f))
+          if ($b.Length -lt 500000) {throw 'Too small'}
+          if ([Text.Encoding]::ASCII.GetString($b,0,2) -ne 'MZ') {throw 'MZ missing'}
+          $off=[BitConverter]::ToInt32($b,0x3c)
+          if ([Text.Encoding]::ASCII.GetString($b,$off,4) -ne "PE`0`0") {throw 'PE missing'}
+          if ([BitConverter]::ToUInt16($b,$off+4) -ne 0x8664) {throw 'Not x64'}
+          $sha=(git rev-parse HEAD).Trim()
+          $strings=[Text.Encoding]::ASCII.GetString($b)
+          if (-not $strings.Contains($sha)) {throw 'Source commit identity absent'}
+          if (-not $strings.Contains('[DSRRL V345 UNIFIED LERP]')) {throw 'Unified marker absent'}
+          Write-Host "V345 addon SHA256=$((Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V345_UNIFIED_HEMENVLERP_ONE_ADDON
+          path: out-v345/DSRRL_V345_UNIFIED_PTDE_HEMENVLERP.addon64
+          if-no-files-found: error

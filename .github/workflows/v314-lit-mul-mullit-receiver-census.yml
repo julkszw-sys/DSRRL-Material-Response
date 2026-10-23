@@ -1,0 +1,79 @@
+name: V314 Original Lit Mul MulLit PS Receiver Census
+on:
+  push:
+    branches: [agent/v314-lit-mul-mullit-receiver-census-20261016]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  donor-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python materializer syntax gate
+        run: python3 -m py_compile renderer-core/tools/materialize_v300_retail_leather_owner.py renderer-core/tools/materialize_v300_donor_provenance.py renderer-core/tools/test_v301_mixed_donor_source_contract.py renderer-core/tools/materialize_v304_typed_dsr_only_donors.py renderer-core/tools/test_v304_typed_donor_contract.py renderer-core/tools/test_v305_dsr_host_spec_route.py renderer-core/tools/materialize_v306_exact_c_leather.py renderer-core/tools/test_v306_exact_c_leather_source.py renderer-core/tools/materialize_v307_exact_c_dullleather.py renderer-core/tools/test_v307_exact_c_dullleather_source.py renderer-core/tools/materialize_v308_exact_six_mtd.py renderer-core/tools/test_v308_exact_source_consumer.py renderer-core/tools/materialize_v309_character_source_compiler.py renderer-core/tools/test_v309_character_source_consumer.py renderer-core/tools/materialize_v310_live_parser_owner_sha_join.py renderer-core/tools/test_v310_live_parser_owner_contract.py renderer-core/tools/materialize_v311_live_direct_owner.py renderer-core/tools/test_v311_owner_recovery_contract.py renderer-core/tools/materialize_v312_exact_difspcbmp_cohorts.py renderer-core/tools/test_v312_exact_difspcbmp_source_consumer.py renderer-core/tools/materialize_v313_exact_metal_wet_slot23.py renderer-core/tools/test_v313_slot23_source_consumer.py renderer-core/tools/materialize_v314_original_lit_mul_sources.py renderer-core/tools/materialize_v314_unrouted_receiver_probe.py renderer-core/tools/test_v314_lit_mul_receiver_contract.py
+      - name: Validate original PTDE plus DSR-only donor index
+        run: python3 renderer-core/tools/test_v300_mixed_lightbank_donors.py
+      - name: Compile exact donor row policy C++17
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I renderer-core/include renderer-core/tests/v300_exact_dsr_only_donors_test.cpp -o /tmp/v300_donors
+          /tmp/v300_donors
+      - name: Materialize one-add-on source chain and assert donor cut
+        run: |
+          python3 renderer-core/tools/materialize_v296_oct10_atomic_policy.py
+          python3 renderer-core/tools/materialize_v297_authored_slot0.py
+          python3 renderer-core/tools/materialize_v297_retail_mtd_owner.py
+          python3 renderer-core/tools/materialize_v298_live_mtd_witness.py
+          python3 renderer-core/tools/materialize_v299_slot0_source_consumer.py
+          python3 renderer-core/tools/materialize_v299_oct10_candidate_census.py
+          python3 renderer-core/tools/materialize_v300_leather_operator.py
+          python3 renderer-core/tools/materialize_v300_retail_leather_owner.py
+          python3 renderer-core/tools/materialize_v300_leather_census.py
+          python3 renderer-core/tools/materialize_v300_donor_provenance.py
+          python3 renderer-core/tools/materialize_v304_typed_dsr_only_donors.py
+          python3 renderer-core/tools/test_v300_mixed_lightbank_donors.py
+          python3 renderer-core/tools/test_v301_mixed_donor_source_contract.py
+          python3 renderer-core/tools/test_v304_typed_donor_contract.py
+          python3 renderer-core/tools/test_v305_dsr_host_spec_route.py
+          python3 renderer-core/tools/test_v300_leather_atomic_source.py
+          python3 renderer-core/tools/materialize_v306_exact_c_leather.py
+          python3 renderer-core/tools/test_v306_exact_c_leather_source.py
+          python3 renderer-core/tools/materialize_v307_exact_c_dullleather.py
+          python3 renderer-core/tools/test_v307_exact_c_dullleather_source.py
+          python3 renderer-core/tools/materialize_v308_exact_six_mtd.py
+          python3 renderer-core/tools/test_v308_exact_source_consumer.py
+          python3 renderer-core/tools/materialize_v309_character_source_compiler.py
+          python3 renderer-core/tools/test_v309_character_source_consumer.py
+          python3 renderer-core/tools/materialize_v310_live_parser_owner_sha_join.py
+          python3 renderer-core/tools/test_v310_live_parser_owner_contract.py
+          g++ -std=c++17 -Wall -Wextra -Werror -I renderer-core/include renderer-core/tests/v310_exact_live_parser_owner_join_test.cpp -o /tmp/v310_owner_parser
+          /tmp/v310_owner_parser
+          python3 renderer-core/tools/materialize_v311_live_direct_owner.py
+          python3 renderer-core/tools/test_v311_owner_recovery_contract.py
+          g++ -std=c++17 -Wall -Wextra -Werror -I renderer-core/include renderer-core/tests/v311_direct_model_live_mtd_owner_test.cpp -o /tmp/v311_owner_model
+          /tmp/v311_owner_model
+          python3 renderer-core/tools/materialize_v312_exact_difspcbmp_cohorts.py
+          python3 renderer-core/tools/test_v312_exact_difspcbmp_source_consumer.py
+          python3 renderer-core/tools/materialize_v313_exact_metal_wet_slot23.py
+          python3 renderer-core/tools/test_v313_slot23_source_consumer.py
+          python3 renderer-core/tools/materialize_v314_original_lit_mul_sources.py
+          python3 renderer-core/tools/materialize_v314_unrouted_receiver_probe.py
+          python3 renderer-core/tools/test_v314_lit_mul_receiver_contract.py
+  addon:
+    needs: donor-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build one addon; no runtime/pixel claim
+        shell: pwsh
+        run: ./renderer-core/tools/build_v314_lit_mul_receiver_census_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V314-69-exact-lit-mul-receiver-census-one-addon
+          path: out-v314/*.addon64
+          if-no-files-found: error

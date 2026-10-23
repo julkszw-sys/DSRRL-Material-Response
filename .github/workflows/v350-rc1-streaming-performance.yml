@@ -1,0 +1,58 @@
+name: V350 RC1 streaming performance exact FLVER single addon
+on:
+  push:
+    branches: [agent/v350-rc1-streaming-qpc-performance-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source-and-flver-lifetime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: V350 RGB and PTDE operator regression audits
+        run: |
+          python3 renderer-core/tools/audit_v347_r19_lerp_rebase.py
+          python3 renderer-core/tools/audit_v344_ptde_spec_post_env.py
+          python3 renderer-core/tools/audit_v345_single_lerp.py
+          python3 renderer-core/tools/audit_v348_unified_specrgb.py
+          python3 renderer-core/tools/audit_v349_ptde_r1_yzw.py
+          python3 renderer-core/tools/audit_v350_ptde_rgb_lane_swizzle.py
+      - name: Performance source invariant tests without QPC or runtime telemetry
+        run: python3 renderer-core/tools/test_v350_perf_source_contract.py
+      - name: Compile and exercise actual production FLVER registry with cross-thread identity lifetime test
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -I renderer-core/include \
+            renderer-core/src/runtime/flver_identity_registry.cpp \
+            renderer-core/tests/v350_flver_direct_parser_tls_lifetime_test.cpp \
+            -o /tmp/v350_flver_lifetime
+          /tmp/v350_flver_lifetime
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -DDSRRL_RUNTIME_TELEMETRY_DEFAULT_ON -I renderer-core/include \
+            renderer-core/src/runtime/flver_identity_registry.cpp \
+            renderer-core/tests/flver_identity_registry_tests.cpp \
+            -o /tmp/v350_flver_canonical
+          /tmp/v350_flver_canonical
+  native-one-addon:
+    needs: exact-source-and-flver-lifetime
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build V350 RC1 performance one-addon derivative
+        shell: pwsh
+        run: ./renderer-core/tools/build_v350_perf_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Record exact source and binary identity
+        shell: pwsh
+        run: |
+          $f='out-v350-perf/DSRRL_V350_RC1_STREAMING_PERF.addon64'
+          Write-Host "source_commit=$((git rev-parse HEAD).Trim())"
+          Write-Host "sha256=$((Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V350-RC1-streaming-performance-single-addon
+          path: out-v350-perf/DSRRL_V350_RC1_STREAMING_PERF.addon64
+          if-no-files-found: error

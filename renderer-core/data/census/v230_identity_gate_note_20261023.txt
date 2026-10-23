@@ -1,0 +1,1 @@
+Named stock texture identity observation should not depend on PTDE DDS replacement eligibility. Runtime validation remains required.

@@ -1,0 +1,20 @@
+name: V300 Leather
+on:
+  push:
+    branches: [agent/v294-all-sidecar-manifest-atomic-20261015]
+  workflow_dispatch
+jobs:
+  win64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          path: _reshade
+      - shell: pwsh
+        run: ./renderer-core/tools/build_v300_one_atomic_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v300-single-addon-runtime-open
+          path: out-v300/*.addon64

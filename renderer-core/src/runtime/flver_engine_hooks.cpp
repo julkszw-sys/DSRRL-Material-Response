@@ -6,6 +6,7 @@
 #endif
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
 #include "dsrrl/runtime/exact_material_cache.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/material_owner_selection.hpp"
@@ -15,10 +16,16 @@
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #endif
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/clustered_pnts_draw_runtime.hpp"
 #include "dsrrl/runtime/fixed_pointlight_draw_runtime.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
 #include "dsrrl/operators/material_response/generated_routes_v1.hpp"
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+#include "dsrrl/operators/material_response/generated_dsr_flver_owner_tuples_v1.hpp"
+#endif
 #include "dsrrl/operators/material_response/generated_exact_binding_mr_v1.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 #include <Windows.h>
@@ -460,8 +467,6 @@ bool selector_identity_cache_lookup(
         material_index < 0)
         return false;
 
-    const auto epoch =
-        flver_identity_epoch();
     const auto set =
         selector_identity_cache_set(
             container,
@@ -473,17 +478,24 @@ bool selector_identity_cache_lookup(
     for (std::size_t way = 0u;
          way < k_selector_identity_cache_ways;
          ++way) {
-        const auto &entry =
+        auto &entry =
             g_selector_identity_cache[
                 base + way];
 
         if (!entry.occupied ||
             entry.container != container ||
             entry.material_index !=
-                material_index ||
-            entry.epoch != epoch)
+                material_index)
             continue;
 
+        std::uint64_t current_epoch = 0u;
+        if (!flver_identity_cache_epoch_survives(
+                container,
+                entry.epoch,
+                current_epoch))
+            continue;
+
+        entry.epoch = current_epoch;
         identity = entry.identity;
         return identity.valid &&
             identity.owner_tuple_exact;
@@ -747,6 +759,7 @@ void observe_exact_runtime_mtd(
     std::uint32_t len,
     const wchar_t *semantic_key) noexcept
 {
+ dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::mtd_observe);
  (void)semantic_key;
  if(material==nullptr)return;
 
@@ -925,6 +938,7 @@ bool exe_ok(){
  if(h)BCryptDestroyHash(h);BCryptCloseAlgorithmProvider(a,0);if(!ok)return false;static constexpr char x[]="0123456789abcdef";std::string s(64,'0');for(std::size_t i=0;i<32;++i){s[2*i]=x[d[i]>>4];s[2*i+1]=x[d[i]&15];}return s==k_sha;
 }
 void __fastcall parse_entry(void*m,const void*r) noexcept {
+ dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::flver_parse);
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  g_selector_profile_parse_events.fetch_add(
      1u,
@@ -1037,18 +1051,28 @@ bool publish_exact_selector_identity(
 
     // Route 345 is necessary but not sufficient. The isolated source runtime
     // retains exact semantic/raw-MTD validation before donor decode.
-    if (identity.route_index == 345u) {
+    if (identity.route_index == 345u
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        || v203_equipment::exact_envspec36_material(identity)
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+        || v203_equipment::exact_spx_roughcloth_material(identity)
+#endif
+#endif
+    ) {
         const auto pmetal_begin =
             profile != nullptr
                 ? selector_profile_begin(*profile)
                 : 0u;
-        pmetal_env_source_selector_event(
-            owner,
-            ret,
-            r14,
-            r15,
-            selector_stack,
-            identity);
+        {
+            dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::pmetal_selector);
+            pmetal_env_source_selector_event(
+                owner,
+                ret,
+                r14,
+                r15,
+                selector_stack,
+                identity);
+        }
         if (profile != nullptr)
             selector_profile_end_stage(
                 *profile,
@@ -1080,6 +1104,7 @@ extern "C" void dsrrl_flver_selector_observer(
     std::uint32_t incoming_mode,
     const void *selector_stack) noexcept
 {
+ dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::selector);
  selector_profile_sample profile{};
 #ifdef DSRRL_FLVER_SELECTOR_PROFILE
  const auto profile_sequence =
@@ -1214,7 +1239,7 @@ extern "C" void dsrrl_flver_selector_observer(
  actual_material_owner_observation observation{};
  const auto owner_lookup_begin =
      selector_profile_begin(profile);
- const bool owner_lookup_ok =
+ bool owner_lookup_ok =
      flver_identity_enrich_owner(
         container,
         static_cast<std::uint32_t>(
@@ -1224,6 +1249,38 @@ extern "C" void dsrrl_flver_selector_observer(
      profile,
      owner_lookup_begin,
      profile.owner_lookup_ticks);
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+ // Exact model-alias recovery, invoked only on the missing primary owner.
+ // Never infer a FLVER from MTD or sidecar: candidate must be registered by
+ // the *live parser*, and complete source SHA/slot/MTD must match.
+ bool direct_parser_owner = false;
+ operators::material_response::material_identity direct_runtime_mtd{};
+ if (!owner_lookup_ok && actual_material != nullptr &&
+     lookup_exact_runtime_material(
+         actual_material,direct_runtime_mtd) &&
+     direct_runtime_mtd.valid &&
+     direct_runtime_mtd.actual_material_exact &&
+     direct_runtime_mtd.semantic_name_hash != 0u) {
+     core::sha256_digest parser_sha{};
+     if (flver_identity_lookup_direct_parser_model(
+             container,parser_sha)) {
+         std::uint64_t source_mtd = 0u;
+         if (operators::material_response::generated::
+                 dsr_flver_owner_mtd_hash(
+                     parser_sha,
+                     static_cast<std::uint32_t>(material_index),
+                     source_mtd) &&
+             source_mtd == direct_runtime_mtd.semantic_name_hash) {
+             observation.flver_sha256 = parser_sha;
+             observation.material_slot =
+                 static_cast<std::uint32_t>(material_index);
+             observation.material_slot_valid = true;
+             owner_lookup_ok = true;
+             direct_parser_owner = true;
+         }
+     }
+ }
+#endif
 
  if(owner_lookup_ok){
   telemetry::hot_count(g_owner_sha_hits);
@@ -1245,7 +1302,27 @@ extern "C" void dsrrl_flver_selector_observer(
        make_actual_material_identity(
            observation);
 
-   if(publish_exact_selector_identity(
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+   // Full FLVER+slot+semantic match from source must ALSO preserve actual
+   // parser-authenticated raw MTD identity; never conflate basename and raw.
+   const bool alias_raw_mtd_matches =
+       !direct_parser_owner ||
+       (identity.raw_mtd_sha256 ==
+            direct_runtime_mtd.raw_mtd_sha256 &&
+        identity.semantic_name_hash ==
+            direct_runtime_mtd.semantic_name_hash);
+   if (!alias_raw_mtd_matches) {
+       static std::atomic_bool first_alias_conflict{false};
+       if (!first_alias_conflict.exchange(true))
+           reshade::log::message(
+               reshade::log::level::warning,
+               "[DSRRL V293 OWNER] direct_alias_raw_mtd_conflict=FAILOPEN");
+   }
+   if (alias_raw_mtd_matches &&
+#else
+   if (
+#endif
+      publish_exact_selector_identity(
           owner,
           actual_material,
           ret,
@@ -1256,6 +1333,11 @@ extern "C" void dsrrl_flver_selector_observer(
           &profile)){
     const auto cache_publish_begin =
         selector_profile_begin(profile);
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    // Alias models are not validated by the legacy offset-based cache
+    // epoch guard. Evaluate them fresh on every selector invocation.
+    if (!direct_parser_owner)
+#endif
     selector_identity_cache_publish(
         container,
         material_index,
@@ -1264,6 +1346,16 @@ extern "C" void dsrrl_flver_selector_observer(
         profile,
         cache_publish_begin,
         profile.final_cache_publish_ticks);
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    if (direct_parser_owner) {
+        static std::atomic_bool first_alias_success{false};
+        if (!first_alias_success.exchange(true))
+            reshade::log::message(
+                reshade::log::level::info,
+                "[DSRRL V293 OWNER] direct_parser_alias_auth=PASS "
+                "full_sha=ON slot=ON raw_mtd=ON cache=OFF");
+    }
+#endif
     selector_profile_finish(
         profile,
         selector_profile_path::owner);

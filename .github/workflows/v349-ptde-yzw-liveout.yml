@@ -1,0 +1,37 @@
+name: V349 PTDE HemEnvLerp EnvSpec YZW RGB Liveout
+on:
+  push:
+    branches: [agent/v349-r1-yzw-ptde-envspec-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit exact original PTDE YZW, V347 routing and V348 SRV
+        run: |
+          python3 renderer-core/tools/audit_v347_r19_lerp_rebase.py
+          python3 renderer-core/tools/audit_v344_ptde_spec_post_env.py
+          python3 renderer-core/tools/audit_v345_single_lerp.py
+          python3 renderer-core/tools/audit_v348_unified_specrgb.py
+          python3 renderer-core/tools/audit_v349_ptde_r1_yzw.py
+  native-x64:
+    needs: exact-source
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Compile native one-shader V349 addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v349_one_addon.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL_V349_PTDE_YZW_UNIFIED_ONE_ADDON
+          path: out-v349/DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIXED.addon64
+          if-no-files-found: error

@@ -180,20 +180,27 @@ def main() -> None:
 ''',
         "FLVER selector profile log insertion")
 
-    text = replace_once(
-        text,
-        '''    if (present == 1u ||
-        (g_hot_telemetry_enabled &&
-         (present % 300u) == 0u)) {
-''',
-        '''    if (present == 1u ||
-#ifdef DSRRL_FLVER_SELECTOR_PROFILE
-        (present % 300u) == 0u ||
-#endif
-        (g_hot_telemetry_enabled &&
-         (present % 300u) == 0u)) {
-''',
-        "FLVER selector profile periodic present log")
+    # V352 owns a QPC wall-clock 30s reporting interval and its Present
+    # predicate is already instrumented. The FLVER selector profiler is
+    # disabled in V352; never restore the legacy modulo-300 predicate.
+    if "DSRRL_V352_LONG_SOAK_PRESENT" in text:
+        if "const bool telemetry_window = g_v352_soak.present();" not in text:
+            raise SystemExit("V352 physical cut present monitor missing")
+    else:
+        text = replace_once(
+            text,
+            '''    if (present == 1u ||
+            (g_hot_telemetry_enabled &&
+             (present % 300u) == 0u)) {
+    ''',
+            '''    if (present == 1u ||
+    #ifdef DSRRL_FLVER_SELECTOR_PROFILE
+            (present % 300u) == 0u ||
+    #endif
+            (g_hot_telemetry_enabled &&
+             (present % 300u) == 0u)) {
+    ''',
+            "FLVER selector profile periodic present log")
 
     for forbidden in (
         "dsrrl::runtime::upper_lower_draw_runtime\n    g_upper_lower",

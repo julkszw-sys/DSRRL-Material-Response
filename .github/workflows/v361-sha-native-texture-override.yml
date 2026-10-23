@@ -1,0 +1,93 @@
+name: V361 SHA-only Diffuse and Normals native texture override
+on:
+  push:
+    branches: [fix/v361-sha-native-diffuse-normals]
+  pull_request:
+    branches: [main, feature/ptde-armor-all-slot-route-classification-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit source certified PTDE armor against V12 pair/triple
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_rx34_frontier.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_dual_frontier.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_resource_cut_v2.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_v13_target_loader_closure.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_stock_identity_transport_v2.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source_join_cause.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_exact_sidecar_origin.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_envdiffuse_split.py
+          python3 renderer-core/tools/test_v230_source1_exact_asset.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_helmet_dispatch_census.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_repair.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_exact_hit_provenance.py
+          python3 renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
+          python3 renderer-core/tools/materialize_v230_rx34_frontier.py
+          python3 renderer-core/tools/materialize_v230_dual_frontier.py
+          python3 renderer-core/tools/materialize_v230_resource_cut_v2.py
+          grep -F 'sha_texture_override::on_create_resource' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F 'sha256.map' renderer-core/include/dsrrl/runtime/sha_texture_override.hpp
+          grep -F 'armor_v13::pair_ok(h1,h0)' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F '[DSRRL RX34 FRONTIER]' renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
+          grep -F '[DSRRL DUAL FRONTIER]' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F '[DSRRL RESOURCE CUT V2]' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F '[DSRRL HELM ENTRY CUT]' renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
+          grep -F '[DSRRL RX34 SRV CUT]' renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
+  build:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Enable v230 source1 exact producer provenance and RX34 bounded frontier
+        shell: pwsh
+        run: |
+          python renderer-core/tools/enable_v230_source1_provenance_ci.py
+          if ($LASTEXITCODE -ne 0) { throw 'Source1 provenance activation failed' }
+          $p='renderer-core/tools/build_v230_production.ps1'
+          $s=[IO.File]::ReadAllText($p)
+          $old='/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE '
+          if (!$s.Contains($old)) { throw 'Expected source1 flags absent' }
+          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 /DDSRRL_V230_UNGATED_STOCK_IDENTITY /DDSRRL_V230_SOURCE_JOIN_CAUSE /DDSRRL_V230_SOURCE1_SIDECAR_ORIGIN /DDSRRL_V230_EXACT_NONMETAL_SOURCE_ROUTE /DDSRRL_V230_ENV_DIFFUSE_SPLIT ')
+          $hook='$temp=Join-Path $PSScriptRoot'
+          if (!$s.Contains($hook)) { throw 'Build finalization hook absent' }
+          $late=@'
+          $native='cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated'
+          if (!$script:base.Contains($native)) { throw 'Missing generated build command' }
+          $script:base=$script:base.Replace($native,"python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Nonmetal source route drift' }`npython renderer-core/tools/materialize_v230_env_only_generated_create.py`nif (`$LASTEXITCODE -ne 0) { throw 'Physical cut exact registration overlay failed' }`npython renderer-core/tools/materialize_v230_source1_envdiffuse_split.py`nif (`$LASTEXITCODE -ne 0) { throw 'Source1 PTDE EnvDiffuse independent island failed' }`n"+$native)
+          '@
+          $s=$s.Replace($hook,$late+[Environment]::NewLine+$hook)
+          [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
+      - name: Build single addon (V13 source routes plus repaired Source1)
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify PE and runtime marker
+        shell: pwsh
+        run: |
+          $src='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $src)) {throw 'Missing built addon'}
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
+          if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'Invalid PE'}
+          $s=[Text.Encoding]::ASCII.GetString($b)
+          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]','[DSRRL STOCK IDENTITY ONLY]','[DSRRL SOURCE JOIN CAUSE]','[DSRRL SOURCE1 SIDECAR ORIGIN]','[DSRRL NONMETAL EXACT ROUTE]','[DSRRL ENV ONLY CREATE]','[DSRRL SOURCE1 ENVDIFFUSE CREATE]','[DSRRL SOURCE1 ENVDIFFUSE]','[DSRRL SHA TEXTURE]')) {
+            if (!$s.Contains($mark)) {throw "Missing diagnostic marker $mark"}
+          }
+          $dest='out-v230-release/DSRRL_V361_SHA_NATIVE_TEXTURE_OVERRIDE.addon64'
+          Copy-Item $src $dest
+          Get-FileHash $dest -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-v361-SHA-NATIVE-OVERRIDE
+          path: out-v230-release/DSRRL_V361_SHA_NATIVE_TEXTURE_OVERRIDE.addon64
+          if-no-files-found: error

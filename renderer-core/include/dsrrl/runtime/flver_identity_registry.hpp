@@ -26,6 +26,15 @@ bool flver_identity_lookup(
     const void *selector_container,
     std::array<std::uint8_t, 32> &sha256) noexcept;
 
+// Fallback for a differently laid-out selector container. Authenticate the
+// pointer against an *actual FLVER parser registration* (no address guessing,
+// scanning, or basename-based authorization). Must be checked against the full
+// FLVER+slot+semantic owner corpus by its caller. Does not affect the original
+// selector-to-model offset path or its caches.
+bool flver_identity_lookup_direct_parser_model(
+    const void *candidate_model,
+    std::array<std::uint8_t, 32> &sha256) noexcept;
+
 bool flver_identity_enrich_owner(
     const void *selector_container,
     std::uint32_t material_slot,
@@ -37,5 +46,14 @@ flver_identity_telemetry flver_identity_stats() noexcept;
 // New unrelated model insertion intentionally does not invalidate existing
 // identities; replacement/destruction of an existing model advances it.
 std::uint64_t flver_identity_epoch() noexcept;
+
+// Validate a cached positive selector identity against FLVER lifetime changes
+// for this exact selector container. Unrelated model destruction/replacement
+// may advance the global epoch without invalidating this model; same-model
+// invalidation, reset, journal overflow or a concurrent writer fail closed.
+bool flver_identity_cache_epoch_survives(
+    const void *selector_container,
+    std::uint64_t cached_epoch,
+    std::uint64_t &current_epoch) noexcept;
 
 } // namespace dsrrl::runtime

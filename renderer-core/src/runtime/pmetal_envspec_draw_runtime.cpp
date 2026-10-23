@@ -6,8 +6,15 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#include "dsrrl/runtime/v287_nonmetal_trace.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
+#if defined(DSRRL_V336_WANDERER_SRV_AUDIT)
+#include "dsrrl/runtime/v336_wanderer_srv_witness.hpp"
+#endif
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
@@ -18,6 +25,12 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+namespace dsrrl::operators::env_spec {
+std::uint32_t v346_lerp_reject_stage() noexcept;
+}
+#endif
 
 namespace dsrrl::runtime {
 namespace {
@@ -62,6 +75,16 @@ void log_prepare_stage_once(
     const mr::decision &decision,
     pmetal_envspec_receiver_family family) noexcept
 {
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    if (material.route_index != 345u) {
+        // Previous global stage bit masked Lerp family1 after Stable family0
+        // and also collapsed different FLVER/MTD failure sources. V287
+        // records a bounded per-owner+receiver+family+stage observation.
+        v287_nonmetal_trace::log(
+            stage, material, decision, static_cast<std::uint32_t>(family));
+        return;
+    }
+#endif
     const auto observed =
         g_prepare_stage_log_mask.load(
             std::memory_order_relaxed);
@@ -208,9 +231,21 @@ bool exact_pmetal_envspec_candidate(
     const operators::material_response::material_identity &material,
     const operators::material_response::decision &decision) noexcept
 {
-    return
-        exact_pmetal_material(material) &&
-        exact_pmetal_decision(decision);
+    if (exact_pmetal_material(material) &&
+        exact_pmetal_decision(decision))
+        return true;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    // Experimental nonmetal island: independent exact FLVER/slot/MTD gate.
+    // Never promote by shader family alone or use a generic MR/DSR PBL tail.
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    return v203_equipment::exact_envspec36_draw(material, decision) ||
+        v203_equipment::exact_spx_roughcloth_draw(material, decision);
+#else
+    return v203_equipment::exact_envspec36_draw(material, decision);
+#endif
+#else
+    return false;
+#endif
 }
 
 pmetal_envspec_draw_runtime::
@@ -251,6 +286,12 @@ release_resources() noexcept
             shader->Release();
     }
     lerp_replacements_.clear();
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
+        if (shader != nullptr) shader->Release();
+    }
+    lerp_nonmetal_r8_replacements_.clear();
+#endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
 
@@ -369,6 +410,12 @@ on_destroy_device(
             shader->Release();
     }
     lerp_replacements_.clear();
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    for (auto &[_, shader] : lerp_nonmetal_r8_replacements_) {
+        if (shader != nullptr) shader->Release();
+    }
+    lerp_nonmetal_r8_replacements_.clear();
+#endif
     lerp_replacement_sha256_.clear();
     lerp_replacement_size_.clear();
 
@@ -542,6 +589,39 @@ register_lerp_replacement(
         return false;
     }
 
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    // Exactly ONE D3D11 HemEnvLerp pixel shader per RX33-35, identical
+    // for P_Metal and nonmetal. Rebuild after R19 A/B source preparation
+    // with a single PTDE post-EnvSpec material consumer.
+    std::vector<std::uint8_t> unified;
+    if (!operators::env_spec::
+            materialize_nonmetal_lerp_r8_spec_linear_candidate(
+                static_cast<const std::uint8_t *>(dxbc),
+                dxbc_size, unified) ||
+        unified.empty()) {
+        ++lerp_replacement_register_fail_;
+        char log[256]{};
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+        std::snprintf(log,sizeof(log),
+            #if defined(DSRRL_V347_LERP_ENVDIFFUSE_REBASE)
+            "[DSRRL V347 LERP REJECT] stage=create rx=%u candidate=REJECTED gate=%u fail_open=stock",
+#else
+            "[DSRRL V346 LERP REJECT] stage=create rx=%u candidate=REJECTED gate=%u fail_open=stock",
+#endif
+            static_cast<unsigned>(outcome.semantic_receiver_id),
+            static_cast<unsigned>(
+                operators::env_spec::v346_lerp_reject_stage()));
+#else
+        std::snprintf(log,sizeof(log),
+            "[DSRRL V345 UNIFIED LERP] stage=create rx=%u candidate=REJECTED fail_open=stock",
+            static_cast<unsigned>(outcome.semantic_receiver_id));
+#endif
+        reshade::log::message(reshade::log::level::warning,log);
+        return false;
+    }
+    dxbc=unified.data();
+    dxbc_size=unified.size();
+#endif
     const auto payload_sha256 =
         hashing::sha256(
             static_cast<const std::uint8_t *>(
@@ -612,10 +692,78 @@ register_lerp_replacement(
     lerp_replacement_size_[
         outcome.semantic_receiver_id] =
         dxbc_size;
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    char log[256]{};
+    std::snprintf(log,sizeof(log),
+#if defined(DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX)
+#if defined(DSRRL_V350_PTDE_LERP_RGB_COMPONENT_SWIZZLE)
+        "[DSRRL V350 PTDE LERP RGB] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1 t10=XYZW c101=scalar_x dst=r1.yzw src1=XYZW src2=XXYZ",
+#elif defined(DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX)
+        "[DSRRL V349 PTDE RGB LIVEOUT] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1 t10=XYZW c101=scalar_x envspec=r1.yzw",
+#else
+        "[DSRRL V348 SPEC RGB] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1 swizzle=XYZW c101=scalar_x",
+#endif
+#else
+        "[DSRRL V345 UNIFIED LERP] stage=create rx=%u candidate=CREATED bytes=%zu variant_count=1",
+#endif
+        static_cast<unsigned>(outcome.semantic_receiver_id),dxbc_size);
+    reshade::log::message(reshade::log::level::info,log);
+#endif
 
     ++lerp_replacement_register_ok_;
     return true;
 }
+
+
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+bool pmetal_envspec_draw_runtime::
+register_lerp_nonmetal_r8_candidate(
+    const operators::env_spec::
+        pmetal_rgba_lerp_materialize_outcome &outcome,
+    const void *r19_dxbc,
+    std::size_t r19_size) noexcept
+{
+    if (outcome.result != operators::env_spec::
+            pmetal_rgba_lerp_materialize_result::applied ||
+        outcome.semantic_receiver_id < 33u ||
+        outcome.semantic_receiver_id > 35u ||
+        !outcome.spec_rgb_consumer ||
+        r19_dxbc == nullptr || r19_size==0u)
+        return false;
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    // Canonical PS already built once at register_lerp_replacement.
+    // No second R8 shader is ever created.
+    return true;
+#else
+    std::vector<std::uint8_t> candidate;
+    if (!operators::env_spec::
+            materialize_nonmetal_lerp_r8_spec_linear_candidate(
+                static_cast<const std::uint8_t *>(r19_dxbc),
+                r19_size,
+                candidate) ||
+        candidate.empty())
+        return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (device_==nullptr || quarantined_.load())
+        return false;
+    if (lerp_replacements_.find(outcome.semantic_receiver_id) ==
+        lerp_replacements_.end())
+        return false;
+    if (lerp_nonmetal_r8_replacements_.find(
+            outcome.semantic_receiver_id) !=
+        lerp_nonmetal_r8_replacements_.end())
+        return true;
+    ID3D11PixelShader *shader=nullptr;
+    if (FAILED(device_->CreatePixelShader(
+            candidate.data(),candidate.size(),nullptr,&shader)) ||
+        shader==nullptr)
+        return false;
+    lerp_nonmetal_r8_replacements_[
+        outcome.semantic_receiver_id]=shader;
+    return true;
+#endif
+}
+#endif
 
 bool pmetal_envspec_draw_runtime::prepare(
     reshade::api::command_list *cmd_list,
@@ -733,7 +881,14 @@ bool pmetal_envspec_draw_runtime::prepare(
             mr::mtd_envspec_router_state::
                 present ||
         !env_semantics.envspc_slot_valid ||
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        ((exact_pmetal_material(material) &&
+          env_semantics.envspc_slot != 2u) ||
+         (!exact_pmetal_material(material) &&
+          env_semantics.envspc_slot >= 4u))) {
+#else
         env_semantics.envspc_slot != 2u) {
+#endif
         telemetry::hot_count(semantic_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -990,6 +1145,9 @@ bool pmetal_envspec_draw_runtime::prepare(
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    bool r8_selected = false;
+#endif
 
     {
         std::lock_guard<std::mutex> lock(
@@ -1019,6 +1177,24 @@ bool pmetal_envspec_draw_runtime::prepare(
             }
 
             shader = found->second;
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+            // Dedicated Lerp variant only; stock R19 remains P_Metal's.
+            if (material.route_index != 345u &&
+                (
+                    v203_equipment::exact_envspec36_material(material)
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+                    || v203_equipment::exact_spx_roughcloth_material(material)
+#endif
+                )) {
+                const auto alternative =
+                    lerp_nonmetal_r8_replacements_.find(
+                        decision.receiver_id);
+                if (alternative !=
+                    lerp_nonmetal_r8_replacements_.end() &&
+                    alternative->second!=nullptr)
+                    { shader=alternative->second; r8_selected=true; }
+            }
+#endif
             shader->AddRef();
         } else {
             const auto found =
@@ -1048,6 +1224,10 @@ bool pmetal_envspec_draw_runtime::prepare(
         }
     }
 
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    if (r8_selected)
+        v287_nonmetal_trace::log("v289_r8_ps_selected",material,decision,1u);
+#endif
     effect_latch(effect_replacement_ready_);
 
     const bool probe_b_required =
@@ -1890,6 +2070,43 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
+    if (family == pmetal_envspec_receiver_family::hemenvlerp) {
+        prepared.diagnostic_lerp = true;
+        prepared.diagnostic_beta = source.beta;
+        prepared.diagnostic_serial = source.serial;
+        prepared.diagnostic_probe_a = prepared.env_resources.probe_a;
+        prepared.diagnostic_probe_b = prepared.env_resources.probe_b;
+        prepared.diagnostic_diff_a = prepared.envdiffuse_resources.probe_a;
+        prepared.diagnostic_diff_b = prepared.envdiffuse_resources.probe_b;
+    }
+#endif
+#if defined(DSRRL_V336_WANDERER_SRV_AUDIT) && defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+    if (r8_selected &&
+        family == pmetal_envspec_receiver_family::hemenvlerp)
+        v336_wanderer_srv_witness(
+            material, decision, env_resources_, prepared.env_resources,
+            shadow_env_ready, shadow_material_ready,
+            source.beta, source.serial);
+#endif
+#if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
+    if (family == pmetal_envspec_receiver_family::hemenvlerp) {
+        static std::atomic<std::uint32_t> once{0u};
+        const bool pmetal = material.route_index == 345u;
+        const auto bit = 1u << (decision.receiver_id-33u+
+                                 (pmetal ? 0u : 3u));
+        if (!(once.fetch_or(bit,std::memory_order_relaxed)&bit)) {
+            char log[320]{};
+            std::snprintf(log,sizeof(log),
+                "[DSRRL V345 UNIFIED LERP] stage=request_ready rx=%u route=%u class=%s single_ps=1 t10=post_env t1=native beta=%.9g",
+                static_cast<unsigned>(decision.receiver_id),
+                static_cast<unsigned>(material.route_index),
+                pmetal ? "P_METAL" : "NONMETAL",
+                static_cast<double>(source.beta));
+            reshade::log::message(reshade::log::level::info,log);
+        }
+    }
+#endif
     prepared.ready = true;
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);

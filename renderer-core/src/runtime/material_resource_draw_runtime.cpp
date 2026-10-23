@@ -1,11 +1,17 @@
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/texture_identity_transport.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
+#include "dsrrl/runtime/key_invalidation_journal.hpp"
 #include "dsrrl/operators/resource_bridges/spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/fixed_pointlight_spec_rgb_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/diffuse_bridge.hpp"
 #include "dsrrl/operators/resource_bridges/normal_bridge.hpp"
 #include "dsrrl/runtime/generated_spec_routes_v12.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#include "dsrrl/runtime/generated_spec_whitelist_20261010.hpp"
+#endif
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -19,6 +25,8 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#include <dxgi1_4.h>
+#include "dsrrl/runtime/sha_texture_override.hpp"
 
 #include <algorithm>
 #include <array>
@@ -28,15 +36,38 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwctype>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace dsrrl::runtime {
 namespace {
+
+inline bool spec_equipment_allowed(std::uint64_t hash) noexcept
+{
+#if defined(DSRRL_V305_DSR_DIRECT_SPEC_ROUTE) && defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    // V295 exact FLVER corpus: no independent PTDE low *_L.flver in DSR.
+    // Keep all 1295 PTDE sidecar names but never route 544 low-name
+    // materials or two unresolved weapons through a base DSR draw.
+    // This must override the inherited V12 resource-name allowlist.
+    // Positive host name still requires exact owner/slot/MTD, native t1,
+    // receiver shader, complete PTDE operator and atomic GPU state.
+    if (sidecar_20261010::spec_allowed(hash) &&
+        !sidecar_20261010::dsr_direct_spec_allowed(hash))
+        return false;
+#endif
+    if (generated::spec_equipment_name_hash_allowed_v12(hash)) return true;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    return sidecar_20261010::spec_allowed(hash);
+#else
+    return false;
+#endif
+}
 
 enum class asset_class : std::uint8_t {
     specular = 0,
@@ -55,6 +86,10 @@ enum class load_status : std::uint8_t {
 struct companion_set {
     ID3D11Device *device = nullptr;
     std::uint64_t logical_hash = 0;
+    // Exact loader-name identity, needed to release a shared sidecar without
+    // guessing by FNV alone (or retaining it beyond its final stock view).
+    std::wstring logical_name{};
+    std::uint8_t shared_mask = 0u;
     ID3D11ShaderResourceView *specular = nullptr;
     ID3D11ShaderResourceView *diffuse = nullptr;
     ID3D11ShaderResourceView *normal = nullptr;
@@ -119,11 +154,52 @@ constexpr std::uint32_t k_caps2_cubemap = 0x200u;
 core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
+
+// One sidecar GPU SRV may back multiple concurrently live stock SRVs with
+// exactly the same (device, class, name, logical hash). The cache retains one
+// reference *only while stock owners remain alive*. No blanket preload.
+struct sidecar_shared_key {
+    ID3D11Device *device = nullptr;
+    asset_class cls = asset_class::specular;
+    std::uint64_t logical_hash = 0u;
+    std::wstring logical_name;
+    bool operator==(const sidecar_shared_key &other) const noexcept
+    {
+        return device == other.device &&
+            cls == other.cls &&
+            logical_hash == other.logical_hash &&
+            logical_name == other.logical_name;
+    }
+};
+struct sidecar_shared_hash {
+    std::size_t operator()(const sidecar_shared_key &key) const noexcept
+    {
+        auto h = std::hash<std::wstring>{}(key.logical_name);
+        h ^= std::hash<ID3D11Device *>{}(key.device) +
+             0x9e3779b9u + (h << 6u) + (h >> 2u);
+        h ^= static_cast<std::size_t>(key.logical_hash) +
+             0x9e3779b9u + (h << 6u) + (h >> 2u);
+        h ^= static_cast<std::size_t>(key.cls) +
+             0x9e3779b9u + (h << 6u) + (h >> 2u);
+        return h;
+    }
+};
+struct sidecar_shared_entry {
+    ID3D11ShaderResourceView *view = nullptr; // owns one cache reference
+    std::size_t live_stock_users = 0u;
+    bool resident = false; // one GPU SRV ref retained until device teardown
+};
+std::unordered_map<sidecar_shared_key, sidecar_shared_entry,
+                   sidecar_shared_hash> g_sidecar_shared;
+std::atomic_bool g_session_residency{true};
+// Guarded by g_mutex: no resident cold upload may exceed the same startup cap.
+std::uint64_t g_resident_gpu_limit = 0u;
+std::uint64_t g_resident_gpu_used = 0u;
 // A live native SRV handle observed under more than one exact logical texture
 // identity is not resolvable at draw time. Keep the handle quarantined until
 // its resource-view lifetime ends instead of allowing last-writer-wins identity.
 std::unordered_map<std::uint64_t, ID3D11Device *> g_ambiguous_view_device;
-std::atomic<std::uint64_t> g_cache_epoch{1u};
+key_invalidation_journal<512u> g_view_cache_journal;
 thread_local bool g_internal_create = false;
 
 struct companion_tls_entry {
@@ -196,6 +272,8 @@ std::atomic<std::uint64_t> g_named_views{0};
 std::atomic<std::uint64_t> g_sidecar_ready{0};
 std::atomic<std::uint64_t> g_sidecar_missing{0};
 std::atomic<std::uint64_t> g_sidecar_unsupported{0};
+std::atomic<std::uint64_t> g_sidecar_shared_hits{0};
+std::atomic<std::uint64_t> g_sidecar_shared_uploads{0};
 std::atomic<std::uint64_t> g_spec_requests{0};
 std::atomic<std::uint64_t> g_fixed_pointlight_spec_requests{0};
 std::atomic<std::uint64_t> g_fixed_pointlight_diffuse_requests{0};
@@ -296,18 +374,56 @@ void release_view(
     }
 }
 
+void release_shared_user(
+    ID3D11Device *device,
+    asset_class cls,
+    std::uint64_t logical_hash,
+    const std::wstring &name) noexcept
+{
+    ID3D11ShaderResourceView *last = nullptr;
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const sidecar_shared_key key{device, cls, logical_hash, name};
+        const auto found = g_sidecar_shared.find(key);
+        if (found == g_sidecar_shared.end() ||
+            found->second.live_stock_users == 0u)
+            return;
+        if (--found->second.live_stock_users == 0u &&
+            !found->second.resident) {
+            last = found->second.view;
+            g_sidecar_shared.erase(found);
+        }
+    } catch (...) {
+        // COM references owned directly by stock companion_set still release.
+        // A cache bookkeeping failure cannot authorize a wrong resource.
+    }
+    if (last != nullptr)
+        last->Release();
+}
+
 void release_set(companion_set &set) noexcept
 {
+    // Drop shared-cache user counts before relinquishing the stock-view
+    // references. Cache entries vanish once the last stock owner disappears.
+    if ((set.shared_mask & 1u) != 0u)
+        release_shared_user(set.device, asset_class::specular,
+                            set.logical_hash, set.logical_name);
+    if ((set.shared_mask & 2u) != 0u)
+        release_shared_user(set.device, asset_class::diffuse,
+                            set.logical_hash, set.logical_name);
+    if ((set.shared_mask & 4u) != 0u)
+        release_shared_user(set.device, asset_class::normal,
+                            set.logical_hash, set.logical_name);
     release_view(set.specular);
     release_view(set.diffuse);
     release_view(set.normal);
-
     if (set.device != nullptr) {
         set.device->Release();
         set.device = nullptr;
     }
-
     set.logical_hash = 0u;
+    set.shared_mask = 0u;
+    set.logical_name.clear();
 }
 
 void release_cache() noexcept
@@ -318,15 +434,27 @@ void release_cache() noexcept
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        g_cache_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
+        g_view_cache_journal.publish(0u);
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
     }
 
     for (auto &entry : dead)
         release_set(entry.second);
+
+    // Reclaim resident cache refs at addon teardown, outside the mutex:
+    // COM Release may re-enter a ReShade resource-view callback.
+    std::vector<ID3D11ShaderResourceView *> resident;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (const auto &entry : g_sidecar_shared)
+            resident.push_back(entry.second.view);
+        g_sidecar_shared.clear();
+        g_resident_gpu_limit = 0u;
+        g_resident_gpu_used = 0u;
+    }
+    for (auto *view : resident)
+        if (view != nullptr) view->Release();
 }
 
 void release_cache_for_device(
@@ -363,13 +491,27 @@ void release_cache_for_device(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(0u);
     }
 
     for (auto &set : dead)
         release_set(set);
+
+    // A resident SRV is owned by this device session only. Release the
+    // cache-owned reference after all stock owners are dropped.
+    std::vector<ID3D11ShaderResourceView *> resident;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        for (auto it = g_sidecar_shared.begin();
+             it != g_sidecar_shared.end();) {
+            if (it->first.device == device) {
+                resident.push_back(it->second.view);
+                it = g_sidecar_shared.erase(it);
+            } else ++it;
+        }
+    }
+    for (auto *view : resident)
+        if (view != nullptr) view->Release();
 }
 
 std::filesystem::path process_dir()
@@ -457,6 +599,7 @@ load_result load_dds(
     asset_class cls,
     std::uint64_t logical_hash) noexcept
 {
+    qpc_bisect::scope qpc_scope(qpc_bisect::stage::dds_load);
     if (device == nullptr ||
         path.empty())
         return {};
@@ -816,11 +959,13 @@ load_result load_dds(
 
         g_internal_create = true;
 
-        const HRESULT create_texture =
-            device->CreateTexture2D(
+        const HRESULT create_texture = [&]() noexcept {
+            qpc_bisect::scope qpc_texture(qpc_bisect::stage::create_texture);
+            return device->CreateTexture2D(
                 &desc,
                 initial.data(),
                 &texture);
+        }();
 
         HRESULT create_view = E_FAIL;
         if (SUCCEEDED(create_texture) &&
@@ -860,6 +1005,120 @@ load_result load_dds(
     }
 }
 
+// Optional early preload. The exact stock logical name, material, MTD,
+// receiver and draw gates STILL authorize every runtime sidecar binding.
+// Merely finding a DDS in DSRRL/ grants no shader/resource authority.
+// V350 RC1: sidecar residency is enabled without any external mode file.
+// Exact material authorization and DXGI budget guards still fail open.
+void on_init_device_residency(reshade::api::device *device) {
+    if (!g_session_residency.load(std::memory_order_acquire) ||
+        device == nullptr ||
+        device->get_api() != reshade::api::device_api::d3d11)
+        return;
+    auto *native = reinterpret_cast<ID3D11Device *>(device->get_native());
+    if (native == nullptr) return;
+
+    IDXGIDevice *dxgi = nullptr;
+    IDXGIAdapter *adapter = nullptr;
+    IDXGIAdapter3 *adapter3 = nullptr;
+    DXGI_QUERY_VIDEO_MEMORY_INFO memory{};
+    bool budget_ok = false;
+    if (SUCCEEDED(native->QueryInterface(IID_PPV_ARGS(&dxgi))) &&
+        dxgi != nullptr && SUCCEEDED(dxgi->GetAdapter(&adapter)) &&
+        adapter != nullptr &&
+        SUCCEEDED(adapter->QueryInterface(IID_PPV_ARGS(&adapter3))) &&
+        adapter3 != nullptr)
+        budget_ok = SUCCEEDED(adapter3->QueryVideoMemoryInfo(
+            0u, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memory));
+    if (adapter3) adapter3->Release();
+    if (adapter) adapter->Release();
+    if (dxgi) dxgi->Release();
+    if (!budget_ok || memory.Budget <= memory.CurrentUsage) {
+        reshade::log::message(reshade::log::level::warning,
+            "[DSRRL GPU RESIDENT] DXGI unused local budget unavailable; preload disabled (stock runtime intact)");
+        return;
+    }
+    // UMA DXGI budget is a shared-memory allocation budget, not dedicated VRAM.
+    // Preserve at least half of current free budget for DSR's future streams.
+    const auto unused_budget = memory.Budget - memory.CurrentUsage;
+    const auto limit = unused_budget / 2u;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_resident_gpu_limit = limit;
+        g_resident_gpu_used = 0u;
+    }
+    std::uint64_t reserved = 0u;
+    unsigned loaded = 0u, rejected = 0u, budget_skips = 0u;
+    struct target_folder { asset_class cls; const wchar_t *name; };
+    constexpr target_folder targets[] = {
+        {asset_class::specular,L"Specular"},
+        {asset_class::diffuse,L"Diffuse"},
+        {asset_class::normal,L"Normals"}
+    };
+    for (const auto &folder : targets) {
+        try {
+            const auto dir = process_dir() / L"DSRRL" / folder.name;
+            if (!std::filesystem::is_directory(dir)) continue;
+            for (const auto &file : std::filesystem::directory_iterator(dir)) {
+                if (!file.is_regular_file() ||
+                    _wcsicmp(file.path().extension().c_str(),L".dds") != 0)
+                    continue;
+                const auto name = file.path().stem().wstring();
+                if (name.empty()) continue;
+                const auto hash = fnv_name(name);
+                const bool allowed = folder.cls == asset_class::specular
+                    ? (spec_equipment_allowed(hash) ||
+                       exact_subsurface_body_spec_hash(hash))
+                    : folder.cls == asset_class::diffuse
+                      ? generated::diffuse_target_hash_allowed_v12(hash)
+                      : generated::normal_target_hash_allowed_v12(hash);
+                if (!allowed) continue; // fail-open, no basename authority
+                const auto bytes = file.file_size();
+                if (!bytes || bytes > limit || reserved > limit - bytes) {
+                    ++budget_skips; continue;
+                }
+                sidecar_shared_key key{native,folder.cls,hash,name};
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    if (g_sidecar_shared.find(key) != g_sidecar_shared.end())
+                        continue;
+                }
+                // load_dds retains the original exact SHA/format gates.
+                const auto result = load_dds(
+                    native,file.path(),folder.cls,hash);
+                if (!result.view) { ++rejected; continue; }
+                bool inserted = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    auto found = g_sidecar_shared.find(key);
+                    if (found == g_sidecar_shared.end()) {
+                        // A concurrent cold loader may have consumed budget
+                        // since this folder was enumerated.
+                        if (bytes <= g_resident_gpu_limit &&
+                            g_resident_gpu_used <=
+                                g_resident_gpu_limit - bytes)
+                            inserted = g_sidecar_shared.emplace(
+                                std::move(key),
+                                sidecar_shared_entry{result.view,0u,true}).second;
+                    } else found->second.resident = true;
+                    if (inserted) g_resident_gpu_used += bytes;
+                }
+                if (inserted) { ++loaded; reserved += bytes; }
+                else result.view->Release(); // never Release under g_mutex
+            }
+        } catch (...) { ++rejected; }
+    }
+    char msg[360]{};
+    std::snprintf(msg,sizeof(msg),
+        "[DSRRL GPU RESIDENT] mode=1 early_gpu_preload=%u "
+        "dds_disk_bytes=%llu budget_unused=%llu max_preload=%llu "
+        "budget_skipped=%u rejected=%u receiver_auth=UNCHANGED",
+        loaded,static_cast<unsigned long long>(reserved),
+        static_cast<unsigned long long>(unused_budget),
+        static_cast<unsigned long long>(limit),budget_skips,rejected);
+    reshade::log::message(reshade::log::level::info,msg);
+}
+
 void account_load(
     load_status status) noexcept
 {
@@ -870,6 +1129,85 @@ void account_load(
         ++g_sidecar_missing;
     } else {
         ++g_sidecar_unsupported;
+    }
+}
+
+struct acquired_sidecar {
+    load_result result{};
+    bool shared = false;
+};
+
+// The heavy DDS read + immutable D3D11 texture creation happens only on a
+// cache miss, always outside g_mutex. Another concurrent loader may win the
+// publication race; in that case drop our duplicate and use the winner.
+// Both the cache and each stock companion_set retain independent COM refs.
+acquired_sidecar acquire_sidecar(
+    ID3D11Device *device,
+    asset_class cls,
+    std::uint64_t logical_hash,
+    const std::wstring &logical_name) noexcept
+{
+    try {
+        const sidecar_shared_key key{
+            device, cls, logical_hash, logical_name};
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto it = g_sidecar_shared.find(key);
+            if (it != g_sidecar_shared.end() &&
+                it->second.view != nullptr) {
+                it->second.view->AddRef();
+                ++it->second.live_stock_users;
+                g_sidecar_shared_hits.fetch_add(1u, std::memory_order_relaxed);
+                return {{it->second.view, load_status::ready}, true};
+            }
+        }
+
+        const auto path = sidecar_path(cls, logical_name);
+        auto loaded = load_dds(device, path, cls, logical_hash);
+        if (loaded.view == nullptr)
+            return {loaded, false};
+
+        std::error_code size_error{};
+        const auto cold_size = g_session_residency.load(
+            std::memory_order_relaxed)
+            ? std::filesystem::file_size(path, size_error)
+            : 0u;
+        try {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto it = g_sidecar_shared.find(key);
+            if (it != g_sidecar_shared.end() &&
+                it->second.view != nullptr) {
+                it->second.view->AddRef();
+                ++it->second.live_stock_users;
+                ID3D11ShaderResourceView *winner = it->second.view;
+                loaded.view->Release();
+                g_sidecar_shared_hits.fetch_add(1u, std::memory_order_relaxed);
+                return {{winner, load_status::ready}, true};
+            }
+
+            const bool resident = !size_error && cold_size != 0u &&
+                cold_size <= g_resident_gpu_limit &&
+                g_resident_gpu_used <= g_resident_gpu_limit - cold_size;
+            const bool inserted =
+                g_sidecar_shared.emplace(
+                    key,
+                    sidecar_shared_entry{loaded.view, 1u, resident}).second;
+            if (inserted && resident) g_resident_gpu_used += cold_size;
+            if (!inserted) {
+                // No successful publication: retain the standalone SRV.
+                return {loaded, false};
+            }
+            loaded.view->AddRef(); // independent cache ownership
+            g_sidecar_shared_uploads.fetch_add(1u, std::memory_order_relaxed);
+            return {loaded, true};
+        } catch (...) {
+            // Allocation failure must never turn into a wrong association.
+            return {loaded, false};
+        }
+    } catch (...) {
+        // Fallback preserves previous single-view loader semantics.
+        return {load_dds(device, sidecar_path(cls, logical_name),
+                         cls, logical_hash), false};
     }
 }
 
@@ -891,8 +1229,7 @@ bool snapshot_companion_cached(
             reinterpret_cast<std::uintptr_t>(
                 stock));
     const auto epoch =
-        g_cache_epoch.load(
-            std::memory_order_acquire);
+        g_view_cache_journal.current_epoch();
     auto &cached =
         g_companion_tls[
             companion_tls_index(key)];
@@ -926,9 +1263,13 @@ bool snapshot_companion_cached(
             return true;
         };
 
+    std::uint64_t current_epoch = 0u;
     if (cached.key == key &&
-        cached.epoch == epoch)
+        g_view_cache_journal.survives(
+            key, cached.epoch, current_epoch)) {
+        cached.epoch = current_epoch;
         return publish_from_cache();
+    }
 
     std::uint64_t logical_hash = 0u;
     ID3D11ShaderResourceView *spec = nullptr;
@@ -942,8 +1283,7 @@ bool snapshot_companion_cached(
             g_mutex);
 
         snapshot_epoch =
-            g_cache_epoch.load(
-                std::memory_order_relaxed);
+            g_view_cache_journal.current_epoch();
 
         if (g_ambiguous_view_device.find(key) ==
                 g_ambiguous_view_device.end()) {
@@ -1084,6 +1424,7 @@ void on_init_resource_view(
     const reshade::api::resource_view_desc &,
     reshade::api::resource_view view)
 {
+    qpc_bisect::scope qpc_scope(qpc_bisect::stage::resource_view_init);
     if (g_internal_create ||
         g_quarantined.load() ||
         device == nullptr ||
@@ -1110,7 +1451,7 @@ void on_init_resource_view(
         exact_subsurface_body_spec_hash(
             logical_hash);
     const bool spec_member =
-        generated::spec_equipment_name_hash_allowed_v12(
+        spec_equipment_allowed(
             logical_hash) ||
         subsurface_body_spec;
     const bool diffuse_member =
@@ -1145,49 +1486,49 @@ void on_init_resource_view(
     set.device->AddRef();
     set.logical_hash =
         logical_hash;
-
     if (spec_member) {
         const auto loaded =
-            load_dds(
+            acquire_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::specular,
-                    logical_name),
                 asset_class::specular,
-                logical_hash);
-        account_load(loaded.status);
-        set.specular = loaded.view;
+                logical_hash, logical_name);
+        account_load(loaded.result.status);
+        set.specular = loaded.result.view;
+        if (loaded.shared)
+            set.shared_mask |= 1u;
     }
 
     if (generated::
         diffuse_target_hash_allowed_v12(
             logical_hash)) {
         const auto loaded =
-            load_dds(
+            acquire_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::diffuse,
-                    logical_name),
                 asset_class::diffuse,
-                logical_hash);
-        account_load(loaded.status);
-        set.diffuse = loaded.view;
+                logical_hash, logical_name);
+        account_load(loaded.result.status);
+        set.diffuse = loaded.result.view;
+        if (loaded.shared)
+            set.shared_mask |= 2u;
     }
 
     if (generated::
         normal_target_hash_allowed_v12(
             logical_hash)) {
         const auto loaded =
-            load_dds(
+            acquire_sidecar(
                 native_device,
-                sidecar_path(
-                    asset_class::normal,
-                    logical_name),
                 asset_class::normal,
-                logical_hash);
-        account_load(loaded.status);
-        set.normal = loaded.view;
+                logical_hash, logical_name);
+        account_load(loaded.result.status);
+        set.normal = loaded.result.view;
+        if (loaded.shared)
+            set.shared_mask |= 4u;
     }
+
+    // std::wstring move is noexcept: do not introduce allocations or
+    // exceptions on the ReShade resource-view callback path.
+    set.logical_name = std::move(logical_name);
 
     const auto key =
         static_cast<std::uint64_t>(
@@ -1212,27 +1553,25 @@ void on_init_resource_view(
                 // exact logical identity. Neither association is safe. Remove
                 // the previous record and quarantine this handle until its
                 // destroy_resource_view callback.
-                old = found->second;
+                old = std::move(found->second);
                 g_cache.erase(found);
                 g_ambiguous_view_device.emplace(
                     key,
                     native_device);
                 had_old = true;
             } else if (found != g_cache.end()) {
-                old = found->second;
-                found->second = set;
+                old = std::move(found->second);
+                found->second = std::move(set);
                 had_old = true;
                 accepted = true;
             } else {
                 g_cache.emplace(
                     key,
-                    set);
+                    std::move(set));
                 accepted = true;
             }
 
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(key);
         }
     }
 
@@ -1280,9 +1619,7 @@ void on_destroy_resource_view(
         }
 
         if (changed)
-            g_cache_epoch.fetch_add(
-                1u,
-                std::memory_order_release);
+            g_view_cache_journal.publish(key);
     }
 
     if (found)
@@ -1359,6 +1696,20 @@ register_events() noexcept
     g_quarantined.store(false);
     g_hot_telemetry_enabled =
         runtime_hot_telemetry_requested();
+    // Release-candidate policy: one integrated addon with no TXT dependency.
+    // A missing/insufficient DXGI budget degrades safely to stock streaming.
+    g_session_residency.store(true,std::memory_order_release);
+    reshade::log::message(reshade::log::level::info,
+        "[DSRRL GPU RESIDENT RC1] default=ON config_file=NONE "
+        "init_device_preload=ON budget_guard=DXGI_HALF_FREE_LOCAL "
+        "stock_receiver_auth=UNCHANGED");
+    reshade::register_event<reshade::addon_event::init_device>(
+        on_init_device_residency);
+
+    // Content-SHA replacement is self-contained at texture creation.
+    // It does not consult the draw/material/EnvSpec authorization chain.
+    reshade::register_event<reshade::addon_event::create_resource>(
+        sha_texture_override::on_create_resource);
 
     reshade::register_event<
         reshade::addon_event::init_resource_view>(
@@ -1380,6 +1731,12 @@ unregister_events() noexcept
 {
     if (g_core != &core_)
         return;
+
+    reshade::unregister_event<reshade::addon_event::init_device>(
+        on_init_device_residency);
+
+    reshade::unregister_event<reshade::addon_event::create_resource>(
+        sha_texture_override::on_create_resource);
 
     reshade::unregister_event<
         reshade::addon_event::destroy_device>(
@@ -1431,7 +1788,7 @@ probe_exact_specular_companion(
 
     out.logical_hash_allowed =
         out.logical_hash != 0u &&
-        generated::spec_equipment_name_hash_allowed_v12(
+        spec_equipment_allowed(
             out.logical_hash);
     out.companion_ready =
         companion != nullptr;
@@ -1554,12 +1911,16 @@ prepare_draw_requests_bound(
             companions[1];
         companions[1] = nullptr;
 
-        const bool exact_companion =
+        bool exact_companion =
             h1 != 0u &&
-            generated::
-                spec_equipment_name_hash_allowed_v12(
+            spec_equipment_allowed(
                     h1) &&
             replacement != nullptr;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        // Full owner/slot/MTD + currently bound stock t1 logical identity.
+        // SpecRGB existence alone never authorizes a nonmetal consumer.
+        // Full Oct10 resource allowlist + bound t1 identity: no static 36-slot veto.
+#endif
 
         operators::resource_bridges::
             spec_rgb_context context_spec{};
@@ -1576,6 +1937,14 @@ prepare_draw_requests_bound(
                 .state ==
             operators::material_response::
                 mtd_semantic_state::use;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        if (v203_equipment::exact_envspec36_material(query.material)) {
+            // Operator-local PTDE EnvSpec/SpecRGB shader owns this consumer;
+            // the generic MR -> DSR PBL route remains disabled.
+            context_spec.material_specular_consumer_verified =
+                exact_companion;
+        }
+#endif
         context_spec.exact_name_ptde_companion_verified =
             exact_companion;
         context_spec.ptde_sidecar_ready =
@@ -1585,11 +1954,24 @@ prepare_draw_requests_bound(
         context_spec.stock_t1_preserved =
             true;
 
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        const bool exact_nonmetal =
+            v203_equipment::exact_envspec36_material(query.material);
+        // Only exact 36-owner dedicated PTDE PS may bypass the generic
+        // MTD census, which intentionally blocks PTDE RGB -> DSR PBL.
+        const auto decision =
+            exact_nonmetal
+                ? operators::resource_bridges::
+                    evaluate_spec_rgb_route(context_spec)
+                : operators::resource_bridges::
+                    evaluate_spec_rgb_route(context_spec, query);
+#else
         const auto decision =
             operators::resource_bridges::
                 evaluate_spec_rgb_route(
                     context_spec,
                     query);
+#endif
 
         if (decision.action ==
                 operators::resource_bridges::
@@ -1870,14 +2252,14 @@ prepare_fixed_pointlight_material_requests(
     const bool endpoint_a_pair =
         h0 != 0u &&
         h1 != 0u &&
-        generated::spec_equipment_name_hash_allowed_v12(h1) &&
+        spec_equipment_allowed(h1) &&
         generated::diffuse_pair_allowed_v12(h1,h0);
 
     const bool endpoint_b_pair =
         !blended_material ||
         (h3 != 0u &&
          h4 != 0u &&
-         generated::spec_equipment_name_hash_allowed_v12(h4) &&
+         spec_equipment_allowed(h4) &&
          generated::diffuse_pair_allowed_v12(h4,h3));
 
     const bool endpoint_a_normal =
@@ -2533,7 +2915,9 @@ telemetry() const noexcept
         g_diffuse_requests.load(),
         g_normal_requests.load(),
         g_fail_open.load(),
-        g_quarantined.load()
+        g_quarantined.load(),
+        g_sidecar_shared_hits.load(),
+        g_sidecar_shared_uploads.load()
     };
 }
 
@@ -2546,6 +2930,8 @@ reset() noexcept
     g_sidecar_ready.store(0u);
     g_sidecar_missing.store(0u);
     g_sidecar_unsupported.store(0u);
+    g_sidecar_shared_hits.store(0u);
+    g_sidecar_shared_uploads.store(0u);
     g_spec_requests.store(0u);
     g_fixed_pointlight_spec_requests.store(0u);
     g_fixed_pointlight_diffuse_requests.store(0u);
