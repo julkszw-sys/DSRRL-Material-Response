@@ -56,7 +56,10 @@ jobs:
           $s=[IO.File]::ReadAllText($p)
           $old='/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE '
           if (!$s.Contains($old)) { throw 'Expected source1 flags absent' }
-          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 /DDSRRL_V230_UNGATED_STOCK_IDENTITY /DDSRRL_V230_SOURCE_JOIN_CAUSE /DDSRRL_V230_SOURCE1_SIDECAR_ORIGIN ')
+          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER /DDSRRL_V230_DUAL_FRONTIER /DDSRRL_V230_RESOURCE_CUT_V2 /DDSRRL_V230_UNGATED_STOCK_IDENTITY /DDSRRL_V230_SOURCE_JOIN_CAUSE /DDSRRL_V230_SOURCE1_SIDECAR_ORIGIN /DDSRRL_V230_EXACT_NONMETAL_SOURCE_ROUTE ')
+          $native='cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated'
+          if (!$s.Contains($native)) { throw 'Missing native build hook' }
+          $s=$s.Replace($native, "python renderer-core/tools/materialize_v230_nonmetal_exact_source_route.py`nif (`$LASTEXITCODE -ne 0) { throw 'Source route drift' }`n"+$native)
           [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
       - name: Build single addon (V13 source routes plus repaired Source1)
         shell: pwsh
@@ -69,14 +72,14 @@ jobs:
           $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
           if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'Invalid PE'}
           $s=[Text.Encoding]::ASCII.GetString($b)
-          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]','[DSRRL STOCK IDENTITY ONLY]','[DSRRL SOURCE JOIN CAUSE]','[DSRRL SOURCE1 SIDECAR ORIGIN]')) {
+          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]','[DSRRL DUAL FRONTIER]','[DSRRL RESOURCE CUT V2]','[DSRRL HELM ENTRY CUT]','[DSRRL RX34 SRV CUT]','[DSRRL EQUIPMENT ROUTE CENSUS]','[DSRRL STOCK IDENTITY ONLY]','[DSRRL SOURCE JOIN CAUSE]','[DSRRL SOURCE1 SIDECAR ORIGIN]','[DSRRL NONMETAL EXACT ROUTE]','[DSRRL ENV ONLY CREATE]')) {
             if (!$s.Contains($mark)) {throw "Missing diagnostic marker $mark"}
           }
-          $dest='out-v230-release/DSRRL_V230_SOURCE1_SIDECAR_ORIGIN.addon64'
+          $dest='out-v230-release/DSRRL_V230_SOURCE1_NONMETAL_PARALLEL.addon64'
           Copy-Item $src $dest
           Get-FileHash $dest -Algorithm SHA256
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-v230-SOURCE1-SIDECAR-ORIGIN
-          path: out-v230-release/DSRRL_V230_SOURCE1_SIDECAR_ORIGIN.addon64
+          name: DSRRL-v230-SOURCE1-NONMETAL-PARALLEL
+          path: out-v230-release/DSRRL_V230_SOURCE1_NONMETAL_PARALLEL.addon64
           if-no-files-found: error
