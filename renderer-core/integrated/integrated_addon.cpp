@@ -6179,6 +6179,9 @@ bool prepare_island_batch(
                 material, decision,
                 static_cast<std::uint32_t>(envspec_family));
 #endif
+            // Clean any partially prepared EnvSpec resources before
+            // committing a resource-only draw transaction.
+            g_pmetal_envspec.release(prepared.envspec);
             // P_Metal EnvSpec/SpecRGB is not permission for independent
             // Diffuse/Normal texture resources. Failed shader/probe/source
             // must not suppress a correct live t0/t2 companion transaction.
