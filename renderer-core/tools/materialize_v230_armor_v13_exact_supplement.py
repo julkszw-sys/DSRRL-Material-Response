@@ -70,7 +70,7 @@ if not newpairs and not newtriples: fail('No missing PTDE armor material tuples;
 allowed_diffuse=sorted(set(b for _,b in newpairs))
 allowed_normal=sorted(set(c for _,_,c in newtriples))
 def lit(n):return '0x%016xull'%n
-def arr(rows,names):return ',\n'.join('  {{'+','.join(map(lit,row))+'}}' for row in rows)
+def arr(rows,names):return ',\n'.join('  {'+','.join(map(lit,row))+'}' for row in rows)
 header = '''#pragma once
 #include <array>
 #include <cstdint>
