@@ -17,12 +17,12 @@ swap("std::atomic_bool g_source_cut_logged{false};",
 std::atomic<std::uint32_t> g_rx34_frontier_log_count{0u};
 #endif
 std::atomic_bool g_source_cut_logged{false};""")
-swap("""{
-    prepared = {};
-    effect_latch(effect_entry_seen_);
-
-    if (cmd_list == nullptr ||""",
-"""{
+swap("""    pmetal_envspec_receiver_family family,
+    prepared_pmetal_envspec_draw &prepared) noexcept
+{""",
+"""    pmetal_envspec_receiver_family family,
+    prepared_pmetal_envspec_draw &prepared) noexcept
+{{
     prepared = {};
 #if defined(DSRRL_V230_RX34_FRONTIER)
     std::uint32_t v230_prepare_phase=0u;
@@ -51,9 +51,7 @@ swap("""{
         }
     } v230_frontier{material,decision,prepared,v230_prepare_phase};
 #endif
-    effect_latch(effect_entry_seen_);
-
-    if (cmd_list == nullptr ||""")
+""")
 stages=["material","feature","semantic","source","receiver_source","replacement","probe","spec_rgb","b12"]
 for i,key in enumerate(stages,1):
     old=f"    effect_latch(effect_{key}_ready_);"
