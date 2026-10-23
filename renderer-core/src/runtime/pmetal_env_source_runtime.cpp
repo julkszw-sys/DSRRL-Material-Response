@@ -1099,7 +1099,11 @@ bool capture_hook_selector_identity(
             out.row_id_a))
         return false;
 
-    if (beta_bits == 0u) {
+    // The upstream EnvSpec donor already collapses A==B selectors to one
+    // real endpoint even for nonzero beta. The freshness/cache key must use
+    // the same semantic identity, not demand a separate unused source_b.
+    // Preserve beta_bits: zero-beta and equal-selector paths are distinct.
+    if (beta_bits == 0u || selector_a == selector_b) {
         out.source_b = source_a;
         out.base_b = out.base_a;
         out.selector_b = selector_a;
