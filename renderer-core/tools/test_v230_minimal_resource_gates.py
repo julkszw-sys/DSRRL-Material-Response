@@ -35,6 +35,11 @@ assert "if (!context.actual_material_verified)" not in dif
 assert "if (!context.ptde_c100_donor_verified)" not in dif
 assert "if (context.shared_material_route &&" not in dif
 assert "normal_route_authority::exact_bound_t2" in norm
+integrated = (root / "integrated/integrated_addon.cpp").read_text("utf-8")
+assert "Resource-only t0/t2 has its own exact stock-SRV authority" in integrated
+assert "resource_query.material = material" in integrated
+assert "prepared.resources.request_count != 0u" in integrated
+assert "return ownerless_island_enabled;" in integrated
 assert "exact_bound_t2" in head
 assert "if (!context.actual_bound_t2_verified)" in norm
 assert "if (!context.preserve_stock_s2)" in norm
