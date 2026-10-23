@@ -9,8 +9,9 @@ R=Path("renderer-core")
 def patch(path,old,new):
     f=R/path
     s=f.read_text("utf-8")
-    assert s.count(old)==1,(path,old[:80],s.count(old))
-    f.write_text(s.replace(old,new,1),"utf-8")
+    expected=2 if path=="src/runtime/pmetal_envspec_draw_runtime.cpp" and old.startswith("        if (record.shader != nullptr)") else 1
+    assert s.count(old)==expected,(path,old[:80],s.count(old))
+    f.write_text(s.replace(old,new,expected),"utf-8")
 def inject(path,needle,insert):patch(path,needle,insert+needle)
 
 patch("include/dsrrl/operators/env_spec/pmetal_rgba_materializer.hpp",
