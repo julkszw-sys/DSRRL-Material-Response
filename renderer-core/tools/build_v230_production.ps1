@@ -28,6 +28,8 @@ python renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
 if ($LASTEXITCODE -ne 0) { throw 'PTDE armor V13 pair/triple supplement failed' }
 python renderer-core/tools/materialize_v230_rx34_frontier.py
 if ($LASTEXITCODE -ne 0) { throw 'source1 RX34 failure frontier overlay failed' }
+python renderer-core/tools/materialize_v230_dual_frontier.py
+if ($LASTEXITCODE -ne 0) { throw 'dual source1/armor resource diagnostic overlay failed' }
 cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated
 '@
 
