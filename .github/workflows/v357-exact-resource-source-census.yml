@@ -1,0 +1,41 @@
+name: V357 exact resource source census one addon
+on:
+  push:
+    branches: [agent/v357-exact-resource-source-census-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: V353 source and prior V352/V351 invariants
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --output v357_fallback_census.json
+          python3 -m py_compile renderer-core/tools/materialize_v353_sampled_module_profiler.py renderer-core/tools/test_v353_sampled_module_profiler.py renderer-core/tools/materialize_v357_exact_resource_source_census.py renderer-core/tools/test_v357_exact_resource_source_census.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V357-Fallback-Source-Census
+          path: v357_fallback_census.json
+  native-one-addon:
+    needs: source-contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build V357 native Win64 single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v357_exact_resource_source_census.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V357-Exact-Resource-Source-Census-single-addon
+          path: out-v357-resource-source-census/DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS.addon64
+          if-no-files-found: error

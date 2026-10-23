@@ -1,0 +1,75 @@
+name: V282 Atomic Sidecar Candidate Gate
+on:
+  push:
+    branches:
+      - agent/v282-atomic-nonmetal-prebind-planner-20261015
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-only-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run native SRV per-key lifetime regression tests
+        run: |
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -Irenderer-core/include renderer-core/tests/key_invalidation_journal_tests.cpp -o /tmp/v284_svr_cache_journal
+          /tmp/v284_svr_cache_journal
+          echo V284_KEY_JOURNAL_NATIVE_TEST_PASS
+      - name: Test exact route collisions, sidecar manifest validation and fail-open
+        run: python3 renderer-core/tools/v282/test_prebind_candidates.py
+      - name: Compile source candidate graph, never authorize draw without exact runtime joins
+        run: |
+          python3 renderer-core/tools/v282/compile_prebind_candidates.py --root . --output /tmp/v282_prebind.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/v282_prebind.json'))
+          assert d["activation_authorized"] is False
+          assert d["counts"]["spec_name_records"]==769
+          assert d["counts"]["diffuse_pairs"]==528
+          assert d["counts"]["normal_triples"]==557
+          assert d["counts"]["ambiguous_unlisted_spec_hashes"]>=3
+          assert d["counts"]["diffuse_pairs_not_in_spec_name_table"]==10
+          assert d["inputs"]["october10_inventory_supplied"] is False
+          print("V282_OFFLINE_SOURCE_CANDIDATE_PASS_RUNTIME_PIXEL_OPEN")
+          PY
+      - name: Build 3944 FLVER / 19985 exact slot-to-MTD candidate ledger
+        run: |
+          python3 renderer-core/tools/v282/compile_owner_material_candidates.py --root . --output /tmp/v283_owner_material.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/v283_owner_material.json'))
+          assert d['activation_authorized'] is False
+          assert d['counts']['flver_groups']==3944
+          assert d['counts']['owner_slots']==19985
+          print(d["anchor_observations"])
+          by={(x["flver_sha256"],x["material_slot"]):x for x in d["entries"]}
+          a="eb3b77ee419f9e2997b7d427987c002411fdf08edda12834be4a9f51b3c4eb7b"
+          b="672e35606495f24e36c704f32fceda9b933563a64e03379375f47f9fe04a0a7d"
+          for h,slot,mtd in [(a,2,"P_Leather[DSB].mtd"),(a,3,"P_Metal[DSB].mtd"),
+                             (b,8,"P_Leather[DSB].mtd"),(b,5,"P_Metal[DSB].mtd")]:
+              assert (h,slot) in by, (h,slot,"missing source donor")
+              assert by[(h,slot)]["mtd_name"]==mtd,(h,slot,by[(h,slot)]["mtd_name"])
+          print("V283_EXACT_FLVER_LEATHER_METAL_4_OF_4_SOURCE_PASS")
+          PY
+      - name: Reproduce exact Oct10 1295-name sidecar crosswalk
+        run: |
+          python3 renderer-core/tools/v282/join_sidecar_oct10.py --root . --output /tmp/v283_oct10_spec_names.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/v283_oct10_spec_names.json'))
+          assert j['activation_authorized'] is False
+          assert j['counts']['oct10_specular_names'] == 1295
+          assert j['counts']['oct10_v12_overlap'] > 700
+          assert j['counts']['oct10_not_in_v12'] > 400
+          assert all(x['physical_dds_sha256'] is None and x['ready_for_runtime'] is False for x in j['records'])
+          print("V283_OCT10_NAME_SOURCE_JOIN_PASS_NO_DDS_SHA_NO_PIXEL")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V282-offline-source-candidates-NOT-ADDON
+          path: |
+            /tmp/v282_prebind.json
+            /tmp/v283_owner_material.json
+            /tmp/v283_oct10_spec_names.json
+          if-no-files-found: error

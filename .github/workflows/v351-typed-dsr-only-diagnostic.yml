@@ -1,0 +1,44 @@
+name: V351 typed LightBank modified renderer diagnostics
+on:
+  push:
+    branches: [agent/v351-dsr-only-row64-ptde-operator-island-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: V350 base and V351 source invariants
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --output v351_fallback_census.json
+          g++ -std=c++17 -O2 -I renderer-core/include renderer-core/tests/v351_exact_dsr_only_lightbank_source_test.cpp -o /tmp/v351_donor_test
+          /tmp/v351_donor_test
+          python3 -m py_compile renderer-core/tools/v351_release_fallback_gate.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V351-Fallback-Source-Census
+          path: v351_fallback_census.json
+          if-no-files-found: error
+  native-one-addon:
+    needs: source-contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build native Win64 V351 single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v351_typed_dsr_only_diagnostic.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V351-Typed-DSR-Only-Diagnostic-one-addon
+          path: out-v351-typed-dsr-only/DSRRL_V351_TYPED_DSR_ONLY_DIAGNOSTIC.addon64
+          if-no-files-found: error

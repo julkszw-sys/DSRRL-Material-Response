@@ -6,6 +6,9 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
@@ -26,6 +29,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <shared_mutex>
 #include <vector>
 
 namespace dsrrl::runtime {
@@ -443,7 +447,10 @@ constexpr std::size_t k_hook_producer_cache_entries =
 
 std::array<hook_producer_cache_entry_v2,k_hook_producer_cache_entries>
     g_hook_producer_cache{};
-std::array<std::mutex,k_hook_producer_cache_sets>
+// Independent shard writers remain serialized; read-only selector hits can
+// execute concurrently on the same key while a producer is not publishing.
+// Do not use a spin loop or thread-affinity override on the DSR render path.
+std::array<std::shared_mutex,k_hook_producer_cache_sets>
     g_hook_producer_cache_mutex{};
 std::array<std::uint8_t,k_hook_producer_cache_sets>
     g_hook_producer_cache_victim{};
@@ -490,6 +497,8 @@ void record_bank_signature_stage(
     std::uint32_t name_offset,
     std::uint32_t consumed) noexcept
 {
+    // These stage atomics are diagnostic and do not authorize bank data.
+    if (!telemetry::hot_enabled()) return;
     g_bank_signature_attempt.store(attempt,std::memory_order_relaxed);
     g_bank_signature_stage.store(stage,std::memory_order_relaxed);
     g_bank_signature_entry.store(entry,std::memory_order_relaxed);
@@ -576,13 +585,11 @@ bool hook_producer_cache_lookup(
 
     const auto set =
         hook_producer_cache_set(key);
-    std::unique_lock<std::mutex> lock(
+    std::shared_lock<std::shared_mutex> lock(
         g_hook_producer_cache_mutex[set],
         std::try_to_lock);
     if (!lock.owns_lock()) {
-        g_hook_producer_cache_busy.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_producer_cache_busy);
         return false;
     }
 
@@ -611,15 +618,11 @@ bool hook_producer_cache_lookup(
             continue;
 
         out = entry.record;
-        g_hook_producer_cache_hit.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_producer_cache_hit);
         return true;
     }
 
-    g_hook_producer_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_producer_cache_miss);
     return false;
 }
 
@@ -632,7 +635,7 @@ void hook_producer_cache_publish_exact(
 
     const auto set =
         hook_producer_cache_set(key);
-    std::lock_guard<std::mutex> lock(
+    std::unique_lock<std::shared_mutex> lock(
         g_hook_producer_cache_mutex[set]);
 
     const auto generation =
@@ -674,9 +677,7 @@ void hook_producer_cache_publish_exact(
     entry.cache_generation = generation;
     entry.valid = true;
 
-    g_hook_producer_cache_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_producer_cache_publish);
 }
 
 std::atomic_bool g_hook_restore_failed{false};
@@ -702,6 +703,8 @@ void record_hook_decode(
     std::uint32_t row_id,
     std::uint64_t signature) noexcept
 {
+    // Statistics only: not a LightBank producer or consumer guard.
+    if (!telemetry::hot_enabled()) return;
     g_hook_decode_stage.store(stage,std::memory_order_relaxed);
     g_hook_decode_version.store(version,std::memory_order_relaxed);
     g_hook_decode_count.store(count,std::memory_order_relaxed);
@@ -831,9 +834,7 @@ bool cached_readable_window(
             entry.generation == generation &&
             entry.begin <= address &&
             address < entry.end) {
-            g_region_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(g_region_cache_hit);
             if (!entry.readable)
                 return false;
             window.begin = entry.begin;
@@ -842,9 +843,7 @@ bool cached_readable_window(
         }
     }
 
-    g_region_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_region_cache_miss);
 
     readable_window queried{};
     bool is_readable = false;
@@ -979,6 +978,24 @@ bool exact_pmetal_material_selection(
         hashing::matches_hex(
             material.raw_mtd_sha256,
             k_pmetal_material_sha256);
+}
+
+// V285 nonmetal diagnostic: source remains keyed by the actual material.
+inline bool exact_v285_or_pmetal_source(
+    const operators::material_response::material_identity &material) noexcept
+{
+    if (exact_pmetal_material_selection(material))
+        return true;
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+    return v203_equipment::exact_envspec36_material(material) ||
+        v203_equipment::exact_spx_roughcloth_material(material);
+#else
+    return v203_equipment::exact_envspec36_material(material);
+#endif
+#else
+    return false;
+#endif
 }
 
 bool retail_lightbank_record_index(
@@ -1209,9 +1226,7 @@ bool bank_layout_signature(
     std::uint64_t &layout_signature) noexcept
 {
     layout_signature = 0u;
-    g_bank_signature_scan_count.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_bank_signature_scan_count);
     g_bank_layout_signature.store(
         0u,
         std::memory_order_relaxed);
@@ -1513,16 +1528,12 @@ bool endpoint_cache_lookup(
             entry.row_id == row_id) {
             value = entry.value;
             signature = entry.signature;
-            g_endpoint_cache_hit.fetch_add(
-                1u,
-                std::memory_order_relaxed);
+            telemetry::hot_count(g_endpoint_cache_hit);
             return true;
         }
     }
 
-    g_endpoint_cache_miss.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_endpoint_cache_miss);
     return false;
 }
 
@@ -1582,9 +1593,7 @@ void endpoint_cache_publish(
     entry.value = value;
     entry.valid = true;
 
-    g_endpoint_cache_fill.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_endpoint_cache_fill);
 }
 
 bool read_exact_source(
@@ -1951,9 +1960,7 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_publish);
         return;
     }
 
@@ -1975,9 +1982,7 @@ void publish_hook_source(
         hook_producer_cache_publish_exact(
             selector_identity,
             g_hook_source_tls);
-        g_hook_publish.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_publish);
 
         static std::atomic_bool
             producer_cross_thread_hit_logged{
@@ -2043,9 +2048,7 @@ void publish_hook_source(
         selector_identity,
         g_hook_source_tls);
 
-    g_hook_publish.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_publish);
 }
 
 bool latest_hook_source_exact_selector(
@@ -2078,9 +2081,7 @@ bool latest_hook_source_exact_selector(
             g_hook_selector_identity_tls,
             query)) {
         out = g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_consume);
         return true;
     }
 
@@ -2093,9 +2094,7 @@ bool latest_hook_source_exact_selector(
     out = cached.source;
     g_hook_source_tls = cached;
     g_hook_selector_identity_tls = query;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_consume);
 
     static std::atomic_bool
         selector_cross_thread_hit_logged{
@@ -2118,9 +2117,7 @@ bool latest_hook_source(
     if (g_hook_source_tls.valid) {
         out =
             g_hook_source_tls.source;
-        g_hook_consume.fetch_add(
-            1u,
-            std::memory_order_relaxed);
+        telemetry::hot_count(g_hook_consume);
         return true;
     }
 
@@ -2132,9 +2129,7 @@ bool latest_hook_source(
 
     out =
         g_hook_source_global.source;
-    g_hook_consume.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_consume);
     return true;
 }
 
@@ -2155,9 +2150,7 @@ void __fastcall envspec_single_hook_entry(
     float *host_out,
     int selector) noexcept
 {
-    g_hook_single_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_single_seen);
 
     f4 donor{};
     std::uint64_t bank = 0u;
@@ -2221,9 +2214,7 @@ void __fastcall envspec_blend_hook_entry(
     int selector_b,
     float beta) noexcept
 {
-    g_hook_blend_seen.fetch_add(
-        1u,
-        std::memory_order_relaxed);
+    telemetry::hot_count(g_hook_blend_seen);
 
     const auto endpoints =
         pmetal_selector_policy::select(
@@ -2535,7 +2526,7 @@ void pmetal_env_source_selector_event(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_v285_or_pmetal_source(
             material) ||
         owner == nullptr ||
         return_address == nullptr)
@@ -2920,7 +2911,7 @@ bool pmetal_env_source_runtime::latest(
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_pmetal_material_selection(
+        !exact_v285_or_pmetal_source(
             material)) {
         telemetry::hot_count(
             g_consumer_fail);
@@ -2941,6 +2932,9 @@ bool pmetal_env_source_runtime::latest(
     // already-authenticated exact P_Metal draw. The retail packer is a state
     // producer: retain its latest generation until the next exact source
     // update, matching the validated V13 lifetime without exposing it to U/L.
+    // V286 owner request: identical to the working P_Metal fallback route,
+    // including for an already authenticated nonmetal EnvSpec consumer.
+    // The upstream material/receiver admission still gates the draw.
     if (latest_hook_source(out)) {
         telemetry::hot_count(
             g_consumer_ok);

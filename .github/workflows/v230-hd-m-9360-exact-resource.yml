@@ -1,0 +1,62 @@
+name: V230 exact Standard Helm resource route
+on:
+  push:
+    branches: [feature/ptde-armor-all-slot-route-classification-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reproduce narrow resource route source patch
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_hd_m_9360_exact_resource_route.py
+          python3 renderer-core/tools/materialize_v230_hd_m_9360_exact_resource_route.py
+          grep -F 'exact_hd_m_9360_resource_triple' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F 'has_exact_flver_material_ownership' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+  build:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Materialize exact HD_M_9360 resource route
+        shell: pwsh
+        run: |
+          python renderer-core/tools/materialize_v230_hd_m_9360_exact_resource_route.py
+          if ($LASTEXITCODE -ne 0) { throw 'Exact route source patch failed' }
+      - name: Enable narrow route macro in reproducible v230 build
+        shell: pwsh
+        run: |
+          $path='renderer-core/tools/build_v230_production.ps1'
+          $s=[IO.File]::ReadAllText($path)
+          $needle='/DDSRRL_V230_PRODUCTION /DDSRRL_V351_TYPED'
+          if (!$s.Contains($needle)) { throw 'Build wrapper source drift' }
+          $s=$s.Replace($needle,'/DDSRRL_V230_PRODUCTION /DDSRRL_HD_M_9360_EXACT_TRIPLE /DDSRRL_V351_TYPED')
+          [IO.File]::WriteAllText($path,$s,[Text.UTF8Encoding]::new($false))
+          if (!$s.Contains('/DDSRRL_HD_M_9360_EXACT_TRIPLE')) { throw 'Macro not set' }
+      - name: Build v230 one addon with exact Helm resource route
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Check PE and export
+        shell: pwsh
+        run: |
+          $source='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $source)) { throw 'Addon missing' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $source))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'PE verification failed' }
+          $dest='out-v230-release/DSRRL_V230_HD_M_9360_EXACT_RESOURCE_CANDIDATE.addon64'
+          Copy-Item $source $dest
+          Get-FileHash $dest -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-v230-HD-M-9360-EXACT-RESOURCE-CANDIDATE
+          path: out-v230-release/DSRRL_V230_HD_M_9360_EXACT_RESOURCE_CANDIDATE.addon64
+          if-no-files-found: error

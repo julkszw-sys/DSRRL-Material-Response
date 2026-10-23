@@ -1,0 +1,6 @@
+# User-authorized experimental EnvSpec donor intensities; ORIGINAL PTDE bytes and V13 donor source remain immutable.
+# Read by generate_pmetal_env_source_authority.py. Override has no effect until generated authority is refreshed and an addon is rebuilt.
+bank_index	area	bank_name	bank_v13_signature	row_id	original_ptde_m	authorized_m	origin
+8	a14	m14_LightBank.param	c9b879a8c5e624d0	6	100	130	USER_TEST_OVERRIDE
+8	a14	m14_LightBank.param	c9b879a8c5e624d0	12	100	130	USER_TEST_OVERRIDE
+16	a17	m17_LightBank.param	920175710a0728ec	18	100	130	USER_TEST_OVERRIDE

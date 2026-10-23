@@ -92,7 +92,13 @@ def main() -> None:
     require(source, "pmetal_producer_state_publish(", "isolated producer publication")
     require(source, "k_pmetal_material_route = 345u", "exact P_Metal route gate")
     require(source, "P_Metal[DSB].mtd", "exact P_Metal semantic gate")
-    require(flver, "if (identity.route_index == 345u)", "pre-decoder P_Metal route gate")
+    require(flver, "if (identity.route_index == 345u", "pre-decoder P_Metal route gate")
+    require(flver, "|| v203_equipment::exact_envspec36_material(identity)",
+            "certified nonmetal producer extension")
+    require(flver, "|| v203_equipment::exact_spx_roughcloth_material(identity)",
+            "parser exact roughcloth producer extension")
+    require(source, "exact_v285_or_pmetal_source(",
+            "P_Metal and exact nonmetal source gate")
     require(flver, "k_selector_identity_cache_sets = 128u", "final selector identity cache sets")
     require(flver, "k_selector_identity_cache_ways = 4u", "final selector identity cache associativity")
     require(flver, "selector_identity_cache_lookup(", "final selector identity cache lookup")

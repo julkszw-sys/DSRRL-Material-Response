@@ -29,13 +29,19 @@ selector_begin=source_cpp.index("void pmetal_env_source_selector_event(")
 selector_end=source_cpp.index("bool pmetal_env_source_runtime::latest(",selector_begin)
 selector_compact="".join(source_cpp[selector_begin:selector_end].split())
 for needle in [
-    "exact_pmetal_material_selection(",
+    "exact_v285_or_pmetal_source(",
     "pmetal_selector_policy::select(",
     "pmetal_selector_policy::source(",
     "read_exact_source(",
     "pmetal_producer_state_publish(",
 ]:
     require(selector_compact,needle,"exact selector carrier")
+# Scope extension must preserve original P_Metal exact gate and restrict
+# additional nonmetals to the independently certified full-owner family.
+wrapper=source_cpp[source_cpp.index("inline bool exact_v285_or_pmetal_source("):source_cpp.index("bool retail_lightbank_record_index(",source_cpp.index("inline bool exact_v285_or_pmetal_source("))]
+require(wrapper,"exact_pmetal_material_selection(material)","original P_Metal exact gate preserved")
+require(wrapper,"exact_envspec36_material(material)","certified nonmetal owner gate")
+require(wrapper,"exact_spx_roughcloth_material(material)","parser-exact roughcloth gate")
 require(producer_cpp,"thread_local producer_record g_record","selector TLS source state")
 require(producer_cpp,"same_material(","selector source material identity")
 require(producer_cpp,"same_source_payload(","selector source generation semantics")
@@ -71,10 +77,10 @@ for part,label in ((single,"single"),(blend,"blend")):
 # retail source-hook record is a persistent generation-stamped fallback,
 # matching the validated V13 producer-state lifetime and never generic U/L state.
 consumer=source_cpp[source_cpp.index("bool pmetal_env_source_runtime::latest("):source_cpp.index("pmetal_env_source_runtime_telemetry")]
-require(consumer,"!exact_pmetal_material_selection(","exact P_Metal gate")
+require(consumer,"!exact_v285_or_pmetal_source(","exact P_Metal-or-cert-nonmetal gate")
 require(consumer,"pmetal_producer_state_latest(","selector source first")
 require(consumer,"latest_hook_source(out)","retail source fallback")
-if consumer.index("latest_hook_source(out)") < consumer.index("!exact_pmetal_material_selection("):
+if consumer.index("latest_hook_source(out)") < consumer.index("!exact_v285_or_pmetal_source("):
     fail("retail hook source can be consumed before exact P_Metal material gate")
 # EnvSpec source hooks are independent from visible Upper/Lower. U/L remains
 # disabled by runtime policy unless separately enabled.

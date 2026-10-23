@@ -1,0 +1,41 @@
+name: V356 exact backing SpecRGB one addon
+on:
+  push:
+    branches: [agent/v356-exact-shared-backing-spec-rgb-20261017]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: V353 source and prior V352/V351 invariants
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --output v356_fallback_census.json
+          python3 -m py_compile renderer-core/tools/materialize_v353_sampled_module_profiler.py renderer-core/tools/test_v353_sampled_module_profiler.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V356-Fallback-Source-Census
+          path: v356_fallback_census.json
+  native-one-addon:
+    needs: source-contracts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build V356 native Win64 single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v356_exact_backing_recovery.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V356-Exact-Backing-SpecRGB-single-addon
+          path: out-v356-exact-backing/DSRRL_V356_EXACT_BACKING_RECOVERY.addon64
+          if-no-files-found: error

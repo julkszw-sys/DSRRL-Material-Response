@@ -1,4 +1,7 @@
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#if defined(_WIN32)
+#include "dsrrl/runtime/qpc_causality_bisect.hpp"
+#endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include <algorithm>
@@ -80,19 +83,132 @@ std::array<std::uint8_t,32> digest(const void *p,std::size_t n) noexcept {sha256
 std::mutex g_mutex;
 std::unordered_map<const void*,std::array<std::uint8_t,32>> g_by_model;
 std::atomic<std::uint64_t> g_epoch{1u};
+// New insertions do not invalidate positive FLVER identities, but they must
+// invalidate cached negative lookups: a selector can race ahead of the parser
+// support hook during streaming. Keep that publication generation separate
+// from the positive-identity lifetime epoch used by selector caches.
+std::atomic<std::uint64_t> g_insert_epoch{1u};
+
+// Destruction/replacement of model B must not force model A back through the
+// global mutex/map. The selector-facing epoch remains conservative for other
+// caches, while this registry can prove that a stale TLS verdict survived all
+// intervening mutations when every journaled mutation belongs to another
+// model. A short bounded journal is sufficient for the hot path; overflow or
+// any concurrent writer simply falls back to the authoritative mutex/map.
+struct invalidation_event {
+    std::atomic<std::uint64_t> epoch{0u};
+    std::atomic<std::uintptr_t> model{0u};
+};
+constexpr std::size_t k_invalidation_journal_size = 256u;
+static_assert(
+    (k_invalidation_journal_size &
+     (k_invalidation_journal_size - 1u)) == 0u,
+    "FLVER invalidation journal size must be a power of two");
+std::array<
+    invalidation_event,
+    k_invalidation_journal_size> g_invalidation_journal{};
+std::atomic<std::uint64_t> g_invalidation_sequence{0u};
+
+void publish_invalidation_locked(const void *model) noexcept
+{
+    // g_mutex serializes writers. The sequence makes the atomic journal a
+    // coherent snapshot for readers without placing the selector hot path
+    // behind that mutex.
+    g_invalidation_sequence.fetch_add(
+        1u,
+        std::memory_order_acq_rel);
+
+    const auto next =
+        g_epoch.load(std::memory_order_relaxed) + 1u;
+    auto &event =
+        g_invalidation_journal[
+            static_cast<std::size_t>(next) &
+            (k_invalidation_journal_size - 1u)];
+    event.model.store(
+        reinterpret_cast<std::uintptr_t>(model),
+        std::memory_order_relaxed);
+    event.epoch.store(
+        next,
+        std::memory_order_relaxed);
+    g_epoch.store(
+        next,
+        std::memory_order_release);
+
+    g_invalidation_sequence.fetch_add(
+        1u,
+        std::memory_order_release);
+}
+
+bool cached_epoch_survives_for_model(
+    const void *model,
+    std::uint64_t cached_epoch,
+    std::uint64_t &current_epoch) noexcept
+{
+    const auto sequence_before =
+        g_invalidation_sequence.load(
+            std::memory_order_acquire);
+    if ((sequence_before & 1u) != 0u)
+        return false;
+
+    current_epoch =
+        g_epoch.load(
+            std::memory_order_acquire);
+    if (cached_epoch == current_epoch) {
+        const auto sequence_after =
+            g_invalidation_sequence.load(
+                std::memory_order_acquire);
+        return sequence_before == sequence_after &&
+            (sequence_after & 1u) == 0u;
+    }
+    if (cached_epoch == 0u ||
+        cached_epoch > current_epoch ||
+        current_epoch - cached_epoch >
+            k_invalidation_journal_size)
+        return false;
+
+    const auto model_key =
+        reinterpret_cast<std::uintptr_t>(model);
+    for (auto epoch = cached_epoch + 1u;
+         epoch <= current_epoch;
+         ++epoch) {
+        const auto &event =
+            g_invalidation_journal[
+                static_cast<std::size_t>(epoch) &
+                (k_invalidation_journal_size - 1u)];
+        if (event.epoch.load(
+                std::memory_order_relaxed) != epoch)
+            return false;
+
+        const auto invalidated_model =
+            event.model.load(
+                std::memory_order_relaxed);
+        // model==nullptr is the reset sentinel and invalidates every verdict.
+        if (invalidated_model == 0u ||
+            invalidated_model == model_key)
+            return false;
+    }
+
+    const auto sequence_after =
+        g_invalidation_sequence.load(
+            std::memory_order_acquire);
+    return sequence_before == sequence_after &&
+        (sequence_after & 1u) == 0u;
+}
 
 struct lookup_tls_cache_entry {
     const void *model = nullptr;
     std::uint64_t epoch = 0u;
+    std::uint64_t insert_epoch = 0u;
     std::array<std::uint8_t,32> sha{};
     bool present = false;
 };
 
 // Selector order interleaves many FLVER owners in one frame. A single-entry
 // TLS cache degenerates to the global mutex/map path whenever A/B/C owners
-// alternate. Keep the same global mutation epoch (parse/destroy still
-// invalidates every cached verdict), but retain enough per-thread identities
-// to make steady interleaved selector traffic lock-free.
+// alternate. Retain enough per-thread identities to keep steady interleaved
+// selector traffic lock-free. Positive entries survive unrelated model
+// invalidations via the journal above; negative entries additionally track the
+// insertion generation so parser publication cannot leave a stale miss.
 constexpr std::size_t k_lookup_tls_cache_sets = 128u;
 constexpr std::size_t k_lookup_tls_cache_ways = 4u;
 constexpr std::size_t k_lookup_tls_cache_size =
@@ -126,8 +242,7 @@ std::size_t lookup_tls_cache_set(
 }
 
 lookup_tls_cache_entry *lookup_tls_cache_hit(
-    const void *model,
-    std::uint64_t epoch) noexcept
+    const void *model) noexcept
 {
     const auto set =
         lookup_tls_cache_set(model);
@@ -139,8 +254,7 @@ lookup_tls_cache_entry *lookup_tls_cache_hit(
          ++way) {
         auto &entry =
             g_lookup_cache[base + way];
-        if (entry.model == model &&
-            entry.epoch == epoch)
+        if (entry.model == model)
             return &entry;
     }
 
@@ -178,6 +292,9 @@ std::atomic<std::uint64_t> g_tls_hits{0},g_mutex_fallbacks{0};
 } // namespace
 
 bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t readable_bytes) noexcept {
+#if defined(_WIN32)
+    qpc_bisect::scope qpc_scope(qpc_bisect::stage::flver_parse);
+#endif
     if(!model||!raw||readable_bytes<0x18u){++g_invalid;return false;}
     const auto *bytes=static_cast<const std::uint8_t*>(raw);
     constexpr std::array<std::uint8_t,6> magic={'F','L','V','E','R',0};
@@ -185,22 +302,28 @@ bool flver_identity_observe_parse(const void *model,const void *raw,std::size_t 
     std::uint32_t data_offset=0,data_length=0;std::memcpy(&data_offset,bytes+0x0c,4);std::memcpy(&data_length,bytes+0x10,4);
     const std::uint64_t total=static_cast<std::uint64_t>(data_offset)+data_length;
     if(data_offset<0x40u||total<data_offset||total>k_max_flver_bytes||total>readable_bytes){++g_invalid;return false;}
+#if defined(_WIN32)
+    const auto sha=[&]() noexcept { qpc_bisect::scope qpc_hash(qpc_bisect::stage::flver_digest); return digest(raw,static_cast<std::size_t>(total)); }();
+#else
     const auto sha=digest(raw,static_cast<std::size_t>(total));
+#endif
     try {
+#if defined(_WIN32)
+        qpc_bisect::scope qpc_register(qpc_bisect::stage::flver_registry);
+#endif
         std::lock_guard<std::mutex> lock(g_mutex);
         const auto found =
             g_by_model.find(model);
         if (found == g_by_model.end()) {
-            // Loading an unrelated FLVER cannot invalidate cached identities
-            // for already-live models. Pointer reuse is covered by the
-            // destructor path, which advances the global epoch before a new
-            // object at that address can become authoritative.
+            // Positive identities for unrelated live models remain valid, but
+            // cached negative lookups must observe this new publication.
             g_by_model.emplace(model, sha);
-        } else if (found->second != sha) {
-            found->second = sha;
-            g_epoch.fetch_add(
+            g_insert_epoch.fetch_add(
                 1u,
                 std::memory_order_release);
+        } else if (found->second != sha) {
+            found->second = sha;
+            publish_invalidation_locked(model);
         }
     } catch (...) {
         ++g_invalid;
@@ -215,9 +338,7 @@ void flver_identity_observe_destroy(const void *model) noexcept {
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     if (g_by_model.erase(model) != 0u) {
-        g_epoch.fetch_add(
-            1u,
-            std::memory_order_release);
+        publish_invalidation_locked(model);
         ++g_erases;
     }
 }
@@ -239,24 +360,35 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     const auto *model=
         reinterpret_cast<const void*>(
             address-k_container_offset);
-    const auto epoch=
-        g_epoch.load(
-            std::memory_order_acquire);
 
     if (auto *cached =
-            lookup_tls_cache_hit(
-                model,
-                epoch);
+            lookup_tls_cache_hit(model);
         cached != nullptr) {
-        if (!cached->present) {
-            telemetry::hot_count(g_misses);
-            return false;
-        }
+        std::uint64_t current_epoch = 0u;
+        if (cached_epoch_survives_for_model(
+                model,
+                cached->epoch,
+                current_epoch)) {
+            const auto insert_epoch =
+                g_insert_epoch.load(
+                    std::memory_order_acquire);
+            if (cached->present ||
+                cached->insert_epoch ==
+                    insert_epoch) {
+                cached->epoch = current_epoch;
+                cached->insert_epoch = insert_epoch;
 
-        sha256 = cached->sha;
-        telemetry::hot_count(g_hits);
-        telemetry::hot_count(g_tls_hits);
-        return true;
+                if (!cached->present) {
+                    telemetry::hot_count(g_misses);
+                    return false;
+                }
+
+                sha256 = cached->sha;
+                telemetry::hot_count(g_hits);
+                telemetry::hot_count(g_tls_hits);
+                return true;
+            }
+        }
     }
 
     telemetry::hot_count(g_mutex_fallbacks);
@@ -264,11 +396,17 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     auto &cached =
         lookup_tls_cache_slot(model);
     const auto it=g_by_model.find(model);
+    const auto epoch =
+        g_epoch.load(
+            std::memory_order_relaxed);
+    const auto insert_epoch =
+        g_insert_epoch.load(
+            std::memory_order_relaxed);
     if(it==g_by_model.end()){
         cached={
             model,
-            g_epoch.load(
-                std::memory_order_relaxed),
+            epoch,
+            insert_epoch,
             {},
             false
         };
@@ -279,12 +417,49 @@ bool flver_identity_lookup(const void *selector_container,std::array<std::uint8_
     sha256=it->second;
     cached={
         model,
-        g_epoch.load(
-            std::memory_order_relaxed),
+        epoch,
+        insert_epoch,
         sha256,
         true
     };
     telemetry::hot_count(g_hits);
+    return true;
+}
+bool flver_identity_lookup_direct_parser_model(
+    const void *candidate_model,
+    std::array<std::uint8_t,32> &sha256) noexcept
+{
+    if (candidate_model == nullptr)
+        return false;
+
+    // V350-RC1 performance port of the V328 exact parser SHA cache.
+    // Only positive parser-registered FLVER identities can bypass g_mutex.
+    // The same-model invalidation journal is consulted before every reuse.
+    // Material slot and exact MTD checks remain in the selector consumer.
+    if (auto *cached = lookup_tls_cache_hit(candidate_model);
+        cached != nullptr && cached->present) {
+        std::uint64_t current_epoch = 0u;
+        if (cached_epoch_survives_for_model(
+                candidate_model, cached->epoch, current_epoch)) {
+            cached->epoch = current_epoch;
+            sha256 = cached->sha;
+            return true;
+        }
+    }
+
+    // Uncertain lifetime/miss/reset always falls back to the locked parser
+    // registry; never infer a model from texture or material identity.
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto &cached = lookup_tls_cache_slot(candidate_model);
+    const auto it = g_by_model.find(candidate_model);
+    const auto epoch = g_epoch.load(std::memory_order_relaxed);
+    const auto insert_epoch = g_insert_epoch.load(std::memory_order_relaxed);
+    if (it == g_by_model.end()) {
+        cached = { candidate_model, epoch, insert_epoch, {}, false };
+        return false;
+    }
+    sha256 = it->second;
+    cached = { candidate_model, epoch, insert_epoch, sha256, true };
     return true;
 }
 bool flver_identity_enrich_owner(const void *selector_container,std::uint32_t material_slot,actual_material_owner_observation &observation) noexcept {
@@ -302,7 +477,8 @@ bool flver_identity_enrich_owner(const void *selector_container,std::uint32_t ma
 void flver_identity_reset() noexcept {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_by_model.clear();
-    g_epoch.fetch_add(
+    publish_invalidation_locked(nullptr);
+    g_insert_epoch.fetch_add(
         1u,
         std::memory_order_release);
     g_lookup_cache = {};
@@ -314,6 +490,30 @@ std::uint64_t flver_identity_epoch() noexcept
 {
     return g_epoch.load(
         std::memory_order_acquire);
+}
+
+bool flver_identity_cache_epoch_survives(
+    const void *selector_container,
+    std::uint64_t cached_epoch,
+    std::uint64_t &current_epoch) noexcept
+{
+    current_epoch = 0u;
+    if (selector_container == nullptr)
+        return false;
+
+    const auto address =
+        reinterpret_cast<std::uintptr_t>(
+            selector_container);
+    if (address < k_container_offset)
+        return false;
+
+    const auto *model =
+        reinterpret_cast<const void *>(
+            address - k_container_offset);
+    return cached_epoch_survives_for_model(
+        model,
+        cached_epoch,
+        current_epoch);
 }
 
 } // namespace dsrrl::runtime

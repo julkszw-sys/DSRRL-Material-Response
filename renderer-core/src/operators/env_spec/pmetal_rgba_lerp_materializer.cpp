@@ -2145,4 +2145,464 @@ materialize_pmetal_rgba_lerp_receiver(
     return outcome;
 }
 
+
+#if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB)
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+namespace { thread_local std::uint32_t v346_last_reject = 0u; }
+std::uint32_t v346_lerp_reject_stage() noexcept { return v346_last_reject; }
+#define DSRRL_V346_FAIL(STAGE) (v346_last_reject = (STAGE), false)
+#else
+#define DSRRL_V346_FAIL(STAGE) false
+#endif
+
+bool materialize_nonmetal_lerp_r8_spec_linear_candidate(
+    const std::uint8_t *r19_source,
+    std::size_t r19_size,
+    std::vector<std::uint8_t> &output) noexcept
+{
+#if defined(DSRRL_V346_LERP_REJECT_STAGE)
+    v346_last_reject = 0u;
+#endif
+    output.clear();
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::size_t code_index = static_cast<std::size_t>(-1);
+    if (!parse_dxbc(r19_source, r19_size, chunks, code_index, words))
+        return DSRRL_V346_FAIL(1u);
+
+    std::vector<instruction_view> ins;
+    if (!decode(words, ins))
+        return DSRRL_V346_FAIL(2u);
+
+    // The exact R19 Lerp receiver contains IF b0[85].x. Only its ELSE
+    // branch has this 5/10/5 LOG-MUL(2.2)-EXP SPEC-domain transfer.
+    // Stable R8 already removes this very operator in RX33/34/35.
+    constexpr std::uint32_t k_f22 = 0x400ccccdu;
+    constexpr std::uint32_t k_nop = 0x0100003au;
+    std::size_t matches = 0u;
+    std::size_t gamma_log = 0u;
+    std::size_t gamma_exp = 0u;
+    std::size_t material_if_matches = 0u;
+
+    for (std::size_t i=0u; i<ins.size(); ++i) {
+        const auto &branch = ins[i];
+        if (branch.opcode != 0x1fu || branch.length != 4u ||
+            branch.offset + 3u >= words.size() ||
+            words[branch.offset+1u] != 0x0020800au ||
+            words[branch.offset+2u] != 0u ||
+            words[branch.offset+3u] != 85u)
+            continue;
+        ++material_if_matches;
+        std::size_t depth = 0u;
+        bool in_else = false;
+        for (std::size_t j=i+1u; j<ins.size(); ++j) {
+            const auto &cur = ins[j];
+            if (cur.opcode == 0x1fu) {++depth;continue;}
+            if (cur.opcode == 0x15u) {
+                if (depth == 0u) break;
+                --depth;continue;
+            }
+            if (cur.opcode == 0x12u && depth==0u) {
+                in_else = true;
+                continue;
+            }
+            if (!in_else || depth!=0u || cur.opcode!=0x2fu ||
+                cur.length!=5u || j+2u >= ins.size())
+                continue;
+            const auto &mul=ins[j+1u];
+            const auto &exp=ins[j+2u];
+            if (mul.offset!=cur.offset+cur.length ||
+                exp.offset!=mul.offset+mul.length ||
+                mul.opcode!=0x38u || mul.length!=10u ||
+                exp.opcode!=0x19u || exp.length!=5u ||
+                exp.offset+5u > words.size())
+                continue;
+            const auto reg = words[cur.offset+2u];
+            if (words[cur.offset+1u]!=0x00100072u ||
+                words[cur.offset+3u]!=0x00100246u ||
+                words[cur.offset+4u]!=reg ||
+                words[mul.offset+1u]!=0x00100072u ||
+                words[mul.offset+2u]!=reg ||
+                words[mul.offset+3u]!=0x00100246u ||
+                words[mul.offset+4u]!=reg ||
+                words[mul.offset+5u]!=0x00004002u ||
+                words[mul.offset+6u]!=k_f22 ||
+                words[mul.offset+7u]!=k_f22 ||
+                words[mul.offset+8u]!=k_f22 ||
+                words[mul.offset+9u]!=0u ||
+                words[exp.offset+1u]!=0x00100072u ||
+                words[exp.offset+3u]!=0x00100246u ||
+                words[exp.offset+4u]!=reg)
+                continue;
+            ++matches;
+            gamma_log=cur.offset;
+            gamma_exp=exp.offset;
+        }
+    }
+    if (material_if_matches!=1u || matches!=1u ||
+        gamma_exp<=gamma_log)
+        return DSRRL_V346_FAIL(3u);
+
+    // Exact Stable R8 semantic topology, not an arbitrary gain:
+    // keep the already-computed SPEC carrier register, NOP LOG and MUL,
+    // MOV it into the original EXP live-out. Every other instruction,
+    // register, RDEF, CB and resource slot remains unchanged.
+    std::fill(words.begin()+static_cast<std::ptrdiff_t>(gamma_log),
+              words.begin()+static_cast<std::ptrdiff_t>(gamma_exp),
+              k_nop);
+    words[gamma_exp]=(words[gamma_exp]&~0x7ffu)|0x36u;
+
+    // V326 nonmetal-only PTDE SpecRGB cut. The base R19 t10 sample is a
+    // clone of native DSR t1 and inherits wxyz from stock SpecTex encoding.
+    // The exact PTDE sidecar requires direct RGB, as Stable P_Metal R4 does.
+    // Preserve R19 for P_Metal, native t1 alpha/roughness, UV/sampler and
+    // every unrelated renderer operator. Fail open on unknown ABI.
+    constexpr std::size_t no_t10 = static_cast<std::size_t>(-1);
+    std::size_t exact_t10 = no_t10;
+    std::size_t native_t1_count = 0u;
+    for (const auto &sample : ins) {
+        if (sample.opcode < 0x45u || sample.opcode > 0x4au ||
+            sample.length != 11u || sample.offset + 10u >= words.size())
+            continue;
+        const auto slot = words[sample.offset + 8u];
+        if (slot == 1u)
+            ++native_t1_count;
+        if (slot != 10u)
+            continue;
+        if (exact_t10 != no_t10)
+            return DSRRL_V346_FAIL(4u);
+        exact_t10 = sample.offset;
+    }
+    if (native_t1_count != 1u || exact_t10 == no_t10 ||
+        words[exact_t10 + 3u] != 0x001000e2u ||
+        words[exact_t10 + 7u] != 0x00107936u)
+        return DSRRL_V346_FAIL(5u);
+    // V338: preserve the native ELSE consumer's semantic RGB carrier.
+    // Original t1 is swizzled wxyz into rSpec.xyzw, so rSpec.yzw=RGB.
+    // The PTDE t10 clone writes YZW ONLY. Its original wxyz source
+    // likewise produces rSpec.yzw=PTDE RGB while preserving rSpec.x
+    // (the independent stock-t1 alpha/material lane).
+    //
+    // V326 changed only the source swizzle to xyzw, thereby writing
+    // [PTDE G,PTDE B,PTDE A] to rSpec.yzw. Restoring the original
+    // wxyz source is necessary, but R19 also inserts a raw-c101
+    // MUL on rSpec.xyz; that multiplies the unrelated X lane and
+    // leaves the SpecRGB B component unscaled. Move this one MUL
+    // to the PTDE RGB carrier yzw and broadcast raw c101.x.
+    // This is nonmetal R8 only: R19/P_Metal, Stable, native t1,
+    // EnvDiffuse and EnvSpec A/B remain byte-identical.
+    const std::uint32_t ptde_rgb_reg =
+        words[exact_t10 + 4u];
+    constexpr std::uint32_t k_c101_mul_words = 8u;
+    const std::size_t c101_mul_word = exact_t10 + 11u;
+    if (c101_mul_word + k_c101_mul_words > words.size() ||
+        words[c101_mul_word] != 0x08000038u ||
+        words[c101_mul_word + 1u] != 0x00100072u ||
+        words[c101_mul_word + 2u] != ptde_rgb_reg ||
+        words[c101_mul_word + 3u] != 0x00100246u ||
+        words[c101_mul_word + 4u] != ptde_rgb_reg ||
+        words[c101_mul_word + 5u] != 0x00208246u ||
+        words[c101_mul_word + 6u] != 12u ||
+        words[c101_mul_word + 7u] != 0u)
+        return DSRRL_V346_FAIL(6u);
+
+    // Require the exactly matched native nonmetal ELSE consumer:
+    // MUL r1.xyz, rSpec.yzw, cb0[10].xyz. It must retain yzw;
+    // overwriting its read to xyz would consume stock-t1 alpha.
+    std::size_t else_rgb_reads = 0u;
+    bool inside_material = false;
+    bool inside_material_else = false;
+    std::size_t inner_depth = 0u;
+    for (const auto &cur : ins) {
+        if (!inside_material) {
+            if (cur.opcode == 0x1fu &&
+                cur.length == 4u &&
+                cur.offset + 3u < words.size() &&
+                words[cur.offset + 1u] == 0x0020800au &&
+                words[cur.offset + 2u] == 0u &&
+                words[cur.offset + 3u] == 85u)
+                inside_material = true;
+            continue;
+        }
+        if (cur.opcode == 0x1fu) {
+            ++inner_depth;
+            continue;
+        }
+        if (cur.opcode == 0x15u) {
+            if (inner_depth == 0u)
+                break;
+            --inner_depth;
+            continue;
+        }
+        if (cur.opcode == 0x12u && inner_depth == 0u) {
+            inside_material_else = true;
+            continue;
+        }
+        if (!inside_material_else || inner_depth != 0u ||
+            cur.opcode != 0x38u || cur.length != 8u ||
+            cur.offset + 7u >= words.size() ||
+            words[cur.offset + 1u] != 0x00100072u ||
+            words[cur.offset + 3u] != 0x00100796u ||
+            words[cur.offset + 4u] != ptde_rgb_reg ||
+            words[cur.offset + 5u] != 0x00208246u ||
+            words[cur.offset + 6u] != 0u ||
+            words[cur.offset + 7u] != 10u)
+            continue;
+        ++else_rgb_reads;
+    }
+    if (!inside_material || !inside_material_else ||
+        else_rgb_reads != 1u)
+        return DSRRL_V346_FAIL(7u);
+
+    // Keep the t10 sample's wxyz swizzle and YZW destination.
+    // All other consumers retain native swizzles. Scale exactly
+    // the resulting PTDE RGB carrier, broadcasting b12[0].x=c101.
+    words[c101_mul_word + 1u] = 0x001000e2u;
+    words[c101_mul_word + 3u] = 0x00100796u;
+    words[c101_mul_word + 5u] = 0x00208006u;
+
+
+#if defined(DSRRL_V344_PTDE_LERP_SPEC_POST_ENV)
+    // V344 exact PTDE SpecRGB operator island (RX33/RX34/RX35 ONLY).
+    // The R19 EnvSpec RGBA(A/B, beta) operator leaves its live-out in r1.xyz
+    // immediately before the exact PTDE EnvDiffuse A/B block.
+    // Do not overwrite the native DSR SpecTex r5.yzw *before* cb0[85].x
+    // MaterialWorkflow. Leave t1 fully stock, including alpha/F0/roughness.
+    // Instead move the verified PTDE t10 sample to an isolated r13 register
+    // after EnvSpec A/B has been decoded and blended; perform exactly
+    //    EnvSpec.rgb *= PTDE_SpecRGB.rgb * c101.rgb * COLOR0.rgb
+    // in the PTDE signal domain before the EnvDiffuse/common merge.
+    // No extra double spec gain, no global PBL/Fresnel disable.
+
+    // COLOR0 register differs between the original DSR receiver signatures:
+    // RX33, RX35: v6; RX34 (Sdw): v7. Require exact ISGN semantic identity.
+    std::optional<std::uint32_t> v344_color_reg;
+    std::size_t v344_isgn_count = 0u;
+    for (const auto &current : chunks) {
+        if (std::memcmp(current.tag.data(), "ISGN", 4u) != 0)
+            continue;
+        ++v344_isgn_count;
+        const auto &sig = current.payload;
+        if (sig.size() < 8u)
+            return DSRRL_V346_FAIL(8u);
+        const auto count = read_u32(sig.data());
+        if (count == 0u || count > 32u ||
+            static_cast<std::size_t>(count) * 24u > sig.size() - 8u)
+            return DSRRL_V346_FAIL(9u);
+        for (std::uint32_t i = 0u; i < count; ++i) {
+            const auto at = 8u + static_cast<std::size_t>(i) * 24u;
+            const auto name_off =
+                static_cast<std::size_t>(read_u32(sig.data() + at));
+            const auto semantic_index = read_u32(sig.data() + at + 4u);
+            const auto input_reg = read_u32(sig.data() + at + 16u);
+            const auto mask = sig[at + 20u];
+            if (name_off > sig.size() ||
+                sig.size() - name_off < 6u)
+                return DSRRL_V346_FAIL(10u);
+            if (std::memcmp(sig.data() + name_off, "COLOR", 6u) != 0 ||
+                semantic_index != 0u)
+                continue;
+            if (v344_color_reg.has_value() ||
+                (input_reg != 6u && input_reg != 7u) ||
+                (mask & 0x07u) != 0x07u)
+                return DSRRL_V346_FAIL(11u);
+            v344_color_reg = input_reg;
+        }
+    }
+    if (v344_isgn_count != 1u || !v344_color_reg)
+        return DSRRL_V346_FAIL(12u);
+
+    // R19 EXPLICIT EnvDiffuse RGB/A port relocates t11 SAMPLE to the
+    // six-NOP prefix preceding stock t11 without moving EnvSpec t12.
+    // Therefore the real post-R19 SHEX delta is 129-6 = 123 DWORDs.
+    // 129 belongs only to the original non-ported EnvDiffuse topology.
+    // These exact guards still require unique t12/t14/t11 samples,
+    // sufficient NOP room and byte-for-byte PTDE EnvSpec A/B identity.
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    constexpr std::size_t v344_expected_t11_delta =
+        129u - k_ptde_envdiffuse_lerp_prefix_words;
+#else
+    constexpr std::size_t v344_expected_t11_delta = 129u;
+#endif
+    constexpr std::size_t v344_none = static_cast<std::size_t>(-1);
+    std::size_t v344_t12 = v344_none;
+    std::size_t v344_t11 = v344_none;
+    std::size_t v344_t12_count = 0u;
+    std::size_t v344_t11_count = 0u;
+    std::size_t v344_t14_count = 0u;
+    for (const auto &entry : ins) {
+        if (entry.opcode < 0x45u || entry.opcode > 0x4au ||
+            entry.length != 13u || entry.offset + 12u >= words.size())
+            continue;
+        if (words[entry.offset + 8u] == 12u) {
+            v344_t12 = entry.offset;
+            ++v344_t12_count;
+        }
+        if (words[entry.offset + 8u] == 11u) {
+            v344_t11 = entry.offset;
+            ++v344_t11_count;
+        }
+        if (words[entry.offset + 8u] == 14u)
+            ++v344_t14_count;
+    }
+    if (v344_t12_count != 1u || v344_t11_count != 1u ||
+        v344_t14_count != 1u ||
+        v344_t12 == v344_none || v344_t11 == v344_none ||
+        v344_t11 != v344_t12 + v344_expected_t11_delta ||
+        v344_t12 + k_ptde_rgba_envspec_chain.size() >
+            v344_t11 - 6u ||
+        v344_t12 + k_ptde_rgba_envspec_chain.size() + 33u >
+            v344_t11 - 6u)
+        return DSRRL_V346_FAIL(13u);
+
+    // Verify the *actual ported PTDE* A/B chain rather than assuming any
+    // t12/t14 user shares the same operator. Reflection coordinate
+    // register is the only receiver-dependent part of this 74-DWORD cut.
+    for (std::size_t i = 0u; i <
+         k_ptde_rgba_envspec_chain.size(); ++i) {
+        if (i == 6u || i == 38u)
+            continue;
+        if (words[v344_t12 + i] != k_ptde_rgba_envspec_chain[i])
+            return DSRRL_V346_FAIL(14u);
+    }
+    if (words[v344_t12 + 6u] != words[v344_t12 + 38u] ||
+        words[v344_t12 + 6u] < 5u ||
+        words[v344_t12 + 6u] > 7u)
+        return DSRRL_V346_FAIL(15u);
+
+    const auto v344_insertion =
+        v344_t12 + k_ptde_rgba_envspec_chain.size();
+    for (std::size_t i = v344_insertion;
+         i < v344_t11 - 6u; ++i)
+        if (words[i] != 0x0100003au)
+            return DSRRL_V346_FAIL(16u);
+
+    // Keep exactly one t10 sample. Relocate it rather than duplicating
+    // it, then NOP its original raw-c101 multiply. Its declaration,
+    // RDEF resource binding, UV coordinates and sampler remain unchanged.
+    // This restores the stock t1 Sample r5.xyzw for every DSR workflow
+    // branch while dedicating an independent scratch r13 to PTDE RGB.
+    if (words[exact_t10 + 3u] != 0x001000e2u ||
+        words[exact_t10 + 7u] != 0x00107936u ||
+        words[exact_t10 + 8u] != 10u ||
+        words[exact_t10 + 10u] != 1u ||
+        words[c101_mul_word + 1u] != 0x001000e2u ||
+        words[c101_mul_word + 3u] != 0x00100796u ||
+        words[c101_mul_word + 5u] != 0x00208006u ||
+        c101_mul_word != exact_t10 + 11u)
+        return DSRRL_V346_FAIL(17u);
+
+    std::array<std::uint32_t,11> v344_late_sample{};
+    std::copy_n(
+        words.begin() +
+            static_cast<std::ptrdiff_t>(exact_t10),
+        v344_late_sample.size(),
+        v344_late_sample.begin());
+    v344_late_sample[3u] = 0x001000f2u; // r13.xyzw, not r5.yzw
+    v344_late_sample[4u] = 13u;
+#if defined(DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX)
+    // t1 WXYZ was correct only for its YZW write mask. The relocated
+    // isolated r13 XYZW write must consume PTDE SpecRGB texel XYZW.
+    // Exact input t10 WXYZ is attested by the existing guard 17.
+    v344_late_sample[7u] = 0x00107e46u; // t10.xyzw -> r13.xyzw
+#endif
+
+    // The original shader and R19 compose exactly 13 temporary registers
+    // (r0..r12). Claim r13 only for this exact isolated operator island.
+    std::size_t v344_temps_word = v344_none;
+    for (const auto &entry : ins) {
+        if (entry.opcode != 0x68u || entry.length != 2u ||
+            words[entry.offset + 1u] != 13u)
+            continue;
+        if (v344_temps_word != v344_none)
+            return DSRRL_V346_FAIL(18u);
+        v344_temps_word = entry.offset;
+    }
+    if (v344_temps_word == v344_none)
+        return DSRRL_V346_FAIL(19u);
+
+    const std::array<std::uint32_t,22> v344_modulate{{
+        // PTDE c101 carries a scalar raw value in b12[0].x.
+        // Broadcast verified X instead of reading unrelated Y/Z.
+        0x08000038u,0x00100072u,13u,0x00100246u,13u,
+#if defined(DSRRL_V348_PTDE_LERP_SPECRGB_RGB_FIX)
+        0x00208006u,12u,0u, // cb12[0].xxxx
+#else
+        0x00208246u,12u,0u, // V347 cb12[0].xyz
+#endif
+        // r13.xyz = r13.xyz * COLOR0.xyz (v6 or v7 from ISGN)
+        0x07000038u,0x00100072u,13u,0x00100246u,13u,
+        0x00101246u,*v344_color_reg,
+        // EnvSpec RGBA PTDE chain stores RGB in r1.YZW, not r1.XYZ.
+        // V344-V348 incorrectly wrote X,Y,Z: it polluted the alpha/X
+        // carrier, multiplied red by green and green by blue, while
+        // leaving B in W unscaled. Preserve r1.x and multiply the
+        // exactly proven PTDE RGB live-out YZW component-wise.
+#if defined(DSRRL_V350_PTDE_LERP_RGB_COMPONENT_SWIZZLE)
+        // DXBC maps source swizzle by *absolute destination channel*.
+        // For dest r1.YZW:
+        //  src1 identity XYZW gives r1.Y, r1.Z, r1.W (PTDE R,G,B)
+        //  src2 XXYZ     gives r13.X,r13.Y,r13.Z (SpecRGB R,G,B).
+        //  r1.X stays unchanged (independent scalar/alpha lane).
+        0x07000038u,0x001000e2u,1u,0x00100e46u,1u,
+        0x00100906u,13u
+#elif defined(DSRRL_V349_PTDE_LERP_ENVSPEC_YZW_FIX)
+        // V349 regression: src r1.YZWY / r13.XYZX is wrong with
+        // destination mask YZW: effective channels are Z/W/Y and Y/Z/X.
+        0x07000038u,0x001000e2u,1u,0x00100796u,1u,
+        0x00100246u,13u
+#else
+        0x07000038u,0x00100072u,1u,0x00100246u,1u,
+        0x00100246u,13u
+#endif
+    }};
+
+    // Instruction-size exact: no offset shifts or replay, and no changes
+    // to original EnvDiffuse A/B, native t1 or post-merge DSR receiver.
+    std::fill(
+        words.begin() + static_cast<std::ptrdiff_t>(exact_t10),
+        words.begin() + static_cast<std::ptrdiff_t>(
+            c101_mul_word + k_c101_mul_words),
+        0x0100003au);
+    std::copy(
+        v344_late_sample.begin(),v344_late_sample.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(v344_insertion));
+    std::copy(
+        v344_modulate.begin(),v344_modulate.end(),
+        words.begin() + static_cast<std::ptrdiff_t>(
+            v344_insertion + v344_late_sample.size()));
+    words[v344_temps_word + 1u] = 14u;
+
+    // Postcondition before rebuild: exactly one relocated t10 sample and
+    // scratch-register declaration, with all 19 original t10/c101 DWORDs
+    // now NOPs. Never silently accept a different producer/consumer.
+    for (std::size_t i = exact_t10;
+         i < c101_mul_word + k_c101_mul_words; ++i)
+        if (words[i] != 0x0100003au)
+            return DSRRL_V346_FAIL(20u);
+    if (words[v344_insertion + 3u] != 0x001000f2u ||
+        words[v344_insertion + 4u] != 13u ||
+        words[v344_temps_word + 1u] != 14u ||
+        words[v344_insertion + v344_late_sample.size() +
+            v344_modulate.size() - 1u] != 13u)
+        return DSRRL_V346_FAIL(21u);
+#endif
+
+    std::vector<instruction_view> after;
+    if (!decode(words, after))
+        return DSRRL_V346_FAIL(22u);
+    if (!rebuild(r19_source,r19_size,std::move(chunks),
+                 code_index,words,output)) {
+        output.clear();
+        return DSRRL_V346_FAIL(23u);
+    }
+    if (!legacy_plan::dxbc::checksum_container_valid(
+            output.data(),output.size()))
+        return DSRRL_V346_FAIL(99u);
+    return true;
+}
+#undef DSRRL_V346_FAIL
+
+#endif
+
 } // namespace dsrrl::operators::env_spec
