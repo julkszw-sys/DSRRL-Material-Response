@@ -1,0 +1,49 @@
+name: V230 stable HemEnv REMO pair diagnostic
+on:
+  push:
+    branches: [diagnostic/v230-cutscene-stable-pair-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python overlay and pinned release identity
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_cutscene_trace.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --help || true
+          grep -q '232ac131' renderer-core/data/releases/v2.3.0_audit_and_release_gates.md || true
+
+  single-addon-win64:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Native MSVC ReShade addon build from pinned v230
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify and mark distinct diagnostic PE
+        shell: pwsh
+        run: |
+          $src='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $src)) { throw 'Diagnostic addon missing' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $src))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE' }
+          $raw=[Text.Encoding]::ASCII.GetString($bytes)
+          if (!$raw.Contains('[DSRRL V230 CUTSCENE]')) { throw 'Cutscene observer was not compiled' }
+          Copy-Item $src 'out-v230-release/DSRRL_v230_STABLE_REMO_TRACE.addon64'
+          Get-FileHash 'out-v230-release/DSRRL_v230_STABLE_REMO_TRACE.addon64' -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-v230-RX33-RX34-REMO-TRACE
+          path: out-v230-release/DSRRL_v230_STABLE_REMO_TRACE.addon64
+          if-no-files-found: error
