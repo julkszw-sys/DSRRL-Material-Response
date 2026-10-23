@@ -2,6 +2,8 @@ name: V230 armor V13 supplement and source1 RX34 frontier
 on:
   push:
     branches: [feature/ptde-armor-all-slot-route-classification-20261023]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
