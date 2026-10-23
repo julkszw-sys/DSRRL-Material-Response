@@ -13,7 +13,8 @@ static_assert(
 enum class normal_route_authority : std::uint8_t {
     none = 0,
     homologous_material_route,
-    safe_exact_resource_tuple
+    safe_exact_resource_tuple,
+    exact_bound_t2 // independent exact stock t2 resource route
 };
 
 enum class normal_action : std::uint8_t {
@@ -67,8 +68,8 @@ struct normal_bridge_decision {
 // HemEnv receivers 24..35.
 //
 // Legal authorization:
-//   A) exact homologous Bmp material route, OR
-//   B) certified safe exact application-bound t0+t1+t2 tuple.
+//   A) live exact t2 identity on a certified Bmp receiver, OR
+//   B) prior material/tuple routes where independently required.
 //
 // Both paths additionally require the actual bound t2 identity, an exact PTDE
 // normal sidecar resolving to one unambiguous logical target, and a ready PTDE
