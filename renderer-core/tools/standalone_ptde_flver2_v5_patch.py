@@ -42,6 +42,7 @@ def flver2(data):
     if not mat_count or not mesh_count:
         # Valid empty/invisible FLVER2 placeholders occur in stock DSR.
         return []
+    # These are serialized consecutively following the 0x80 header.
     mat_start = 0x80 + dummy_count * 0x40
     node_start = mat_start + mat_count * 0x20
     mesh_start = node_start + node_count * 0x80
