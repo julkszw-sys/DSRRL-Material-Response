@@ -6179,6 +6179,31 @@ bool prepare_island_batch(
                 material, decision,
                 static_cast<std::uint32_t>(envspec_family));
 #endif
+            // P_Metal EnvSpec/SpecRGB is not permission for independent
+            // Diffuse/Normal texture resources. Failed shader/probe/source
+            // must not suppress a correct live t0/t2 companion transaction.
+            auto *resource_context = reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+            if (resource_context != nullptr &&
+                decision.receiver_id >= 24u && decision.receiver_id <= 35u) {
+                dsrrl::operators::material_response::mtd_semantic_query q{};
+                q.material = material;
+                q.receiver_id = decision.receiver_id;
+                (void)g_material_resources.prepare_draw_requests(
+                    resource_context, decision.receiver_id, q, false, false,
+                    prepared.resources);
+                for (std::uint32_t i = 0u;
+                     i < prepared.resources.request_count; ++i) {
+                    if (dsrrl::runtime::append_island_draw_request(
+                            prepared.batch, prepared.resources.requests[i]) !=
+                        dsrrl::runtime::island_draw_batch_result::ready) {
+                        release_prepared_island_batch(prepared);
+                        return false;
+                    }
+                }
+                if (prepared.resources.request_count != 0u)
+                    return true;
+            }
             return false;
         }
 
