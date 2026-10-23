@@ -339,17 +339,13 @@ def main():
         "core_.features().enabled(",
         "PMetal exact-route prefilter")
 
-    # Generic resource bridges all require exact owner authority. Receiver-only
-    # draws must not do PSGetShaderResources/COM retains or texture lookups.
+    # t0/t2 texture replacement is resource-authorized by the current stock
+    # SRV, not by FLVER/MTD; reject impossible receiver families before PSGet.
     resource_prepare=function_body(
         resources,
         "prepare_draw_requests(",
         "prepare_fixed_pointlight_material_requests(")
-    require_before(
-        resource_prepare,
-        "if (!exact_material)",
-        "context->PSGetShaderResources(",
-        "resource exact-owner prefilter")
+    require(resource_prepare,"if (!spec_rgb_consumer_ready","resource receiver prefilter")
     require_before(
         resource_prepare,
         "if (!spec_rgb_consumer_ready",
@@ -740,7 +736,7 @@ def main():
     print("  disabled_islands=no HemDir3/Subsurface routes; no U/L/HemDir3 create materializers")
     print("  motion_blur=compute-stage prefilter before mutex")
     print("  pmetal=exact material/route prefilter before feature reads")
-    print("  resources=exact-owner/impossible-receiver prefilter before PSGetShaderResources")
+    print("  resources=receiver prefilter; exact stock SRV for t0/t2, owner retained for SpecRGB")
     print("  ownerless_draws=stop before batch preparation under current policy")
     print("  draw_replay=Context1 TLS cache; QueryInterface cold-path only")
     print("  material_owner=256-entry TLS caches use optional legacy token or cheap SHA fold; full SHA authority retained")
