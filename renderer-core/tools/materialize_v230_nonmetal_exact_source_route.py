@@ -47,17 +47,11 @@ rep="""    // Exact raw-MTD route canonicalization: retail producer reports rout
         epoch);"""
 assert s.count(anchor)==1,("BEGIN_KEY_DRIFT",s.count(anchor))
 s=s.replace(anchor,rep,1)
-old="""        pmetal_producer_state_publish(
-            material,
-            next,
-            epoch);"""
+old="""        pmetal_producer_state_publish(material,next,epoch);"""
 assert s.count(old)==1,("SHADOW_PUBLISH_DRIFT",s.count(old))
-s=s.replace(old,old.replace("            material,","            source_key_material,"),1)
-old="""    pmetal_producer_state_publish(
-        material,
-        next,
-        epoch);"""
+s=s.replace(old,old.replace("material,next,epoch","source_key_material,next,epoch"),1)
+old="""    pmetal_producer_state_publish(material,next,epoch);"""
 assert s.count(old)==1,("FINAL_PUBLISH_DRIFT",s.count(old))
-s=s.replace(old,old.replace("        material,","        source_key_material,"),1)
+s=s.replace(old,old.replace("material,next,epoch","source_key_material,next,epoch"),1)
 p.write_text(s,"utf-8")
 print("V230_NONMETAL_EXACT_SOURCE_ROUTE_PASS scope=dullleather+edge owner+MTD+slot")
