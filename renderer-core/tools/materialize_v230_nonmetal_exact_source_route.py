@@ -3,11 +3,7 @@
 from pathlib import Path
 p=Path("renderer-core/src/runtime/pmetal_env_source_runtime.cpp")
 s=p.read_text("utf-8")
-anchor="""    // This exact material now owns the next synchronized source publication.
-    // Invalidate any older selector fallback before downstream decode.
-    pmetal_producer_state_begin(
-        material,
-        epoch);"""
+anchor="""    pmetal_producer_state_begin(material, epoch);"""
 rep="""    // Exact raw-MTD route canonicalization: retail producer reports route=0
     // for these two MTDs while the corresponding RX34 draw consumer carries
     // the material census route. Preserve FLVER SHA / slot / MTD / epoch.
