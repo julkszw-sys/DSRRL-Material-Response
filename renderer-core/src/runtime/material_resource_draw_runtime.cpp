@@ -1744,36 +1744,39 @@ prepare_draw_requests_bound(
          receiver_id > 35u))
         return true;
 
-    const companion_lookup_request
-        companion_requests[3]{
-            {views[0], asset_class::diffuse},
-            {views[1], asset_class::specular},
-            {views[2], asset_class::normal}
-        };
+    // Only inspect stock textures actually consumed by enabled operators.
+    // Exact resource identity authorizes a t0/t2 swap; equipment t10
+    // additionally requires the exact material and its own PTDE consumer.
+    // Material Response/EnvSpec compositional completeness is verified by
+    // the private HemEnv shader before the combined draw, NOT by this
+    // sidecar transport. This also allows other attested SpecRGB consumers
+    // (e.g. local specular) to request t10 without borrowing HemEnv c100.
+    const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
+    const bool spec_receiver = receiver_id >= 24u && receiver_id <= 47u;
+    const bool want_diffuse = bmp_receiver &&
+        core_.features().enabled(core::operator_id::diffuse);
+    const bool want_normal = bmp_receiver &&
+        core_.features().enabled(core::operator_id::normal);
+    const bool want_spec_rgb = exact_material && spec_receiver &&
+        spec_rgb_consumer_ready &&
+        core_.features().enabled(core::operator_id::spec_rgb);
+    if (!want_diffuse && !want_normal && !want_spec_rgb)
+        return true;
+
+    const companion_lookup_request companion_requests[3]{
+        {want_diffuse ? views[0] : nullptr, asset_class::diffuse},
+        {want_spec_rgb ? views[1] : nullptr, asset_class::specular},
+        {want_normal ? views[2] : nullptr, asset_class::normal}
+    };
     std::uint64_t hashes[3]{};
     ID3D11ShaderResourceView *companions[3]{};
-    inspect_many(
-        companion_requests,
-        3u,
-        hashes,
-        companions);
+    inspect_many(companion_requests, 3u, hashes, companions);
 
     const auto h0 = hashes[0];
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
 
-    // Unlike a texture-only t0/t2 swap, equipment SpecRGB is consumed by
-    // the certified PTDE material-response shader. This local t10 carrier
-    // cannot advertise an isolated PTDE appearance without that consumer.
-    // EnvSpec verifies the matching PTDE cubemap before calling this route;
-    // the two operator components remain independent failure domains.
-    if (exact_material &&
-        full_material_response_ready &&
-        spec_rgb_consumer_ready &&
-        core_.features().enabled(
-            core::operator_id::spec_rgb) &&
-        receiver_id >= 24u &&
-        receiver_id <= 47u) {
+    if (want_spec_rgb) {
         auto *replacement =
             companions[1];
         companions[1] = nullptr;
@@ -1870,15 +1873,10 @@ prepare_draw_requests_bound(
             replacement->Release();
     }
 
-    const bool bmp_receiver =
-        receiver_id >= 24u &&
-        receiver_id <= 35u;
-
     // Resource-local exact binding: each bound stock SRV carries its own
     // logical target. Diffuse never needs t1; Normal never needs t0/t1.
     const bool diffuse_target = h0 != 0u && companions[0] != nullptr;
-    if (bmp_receiver && diffuse_target &&
-        core_.features().enabled(core::operator_id::diffuse)) {
+    if (want_diffuse && diffuse_target) {
         auto *replacement = companions[0];
         companions[0] = nullptr;
         operators::resource_bridges::diffuse_bridge_context ctx{};
@@ -1907,8 +1905,7 @@ prepare_draw_requests_bound(
     }
 
     const bool normal_target = h2 != 0u && companions[2] != nullptr;
-    if (bmp_receiver && normal_target &&
-        core_.features().enabled(core::operator_id::normal)) {
+    if (want_normal && normal_target) {
         auto *replacement = companions[2];
         companions[2] = nullptr;
         operators::resource_bridges::normal_bridge_context ctx{};
