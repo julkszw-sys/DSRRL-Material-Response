@@ -1,0 +1,77 @@
+name: V230 armor V13 validated pairs triples
+on:
+  push:
+    branches: [feature/ptde-armor-all-slot-route-classification-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm generated route supplement source is reproducible
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
+          python3 renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
+          python3 renderer-core/tests/test_armor_v13_resource_tables.py
+          cat renderer-core/data/census/armor_v13_20261023_report.json
+      - name: Verify generated C++ header compiles standalone with GCC
+        shell: bash
+        run: |
+          cat >/tmp/dsrrl_armor_v13_header.cpp <<'CPP'
+          #include "dsrrl/runtime/generated_armor_v13_base_exact.hpp"
+          static_assert(dsrrl::runtime::armor_v13::p.size()==34);
+          static_assert(dsrrl::runtime::armor_v13::t.size()==1);
+          static_assert(dsrrl::runtime::armor_v13::pair_ok(0xe9c532be429d6f7eull,0xcc1735c736ad61fcull));
+          static_assert(dsrrl::runtime::armor_v13::triple_ok(0xcc1735c736ad61fcull,0xe9c532be429d6f7eull,0xe9c53fbe429d8595ull));
+          int main(){return 0;}
+          CPP
+          g++ -std=c++17 -Wall -Wextra -Werror -fsyntax-only -Irenderer-core/include /tmp/dsrrl_armor_v13_header.cpp
+      - name: Publish manifest and exact modified renderer source
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-ARMOR-V13-VALIDATED-SOURCE
+          path: |
+            renderer-core/data/census/armor_v13_20261023_report.json
+            renderer-core/include/dsrrl/runtime/generated_armor_v13_base_exact.hpp
+            renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          if-no-files-found: error
+  windows-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Materialize and retest exact armor routes in Windows workspace
+        shell: pwsh
+        run: |
+          python renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
+          if ($LASTEXITCODE -ne 0) { throw "V13 source generation failed" }
+          python renderer-core/tests/test_armor_v13_resource_tables.py
+          if ($LASTEXITCODE -ne 0) { throw "V13 table validation failed" }
+      - name: Build one integrated v230 addon with V13 resource source delta
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if ($LASTEXITCODE -ne 0) { throw "V230 native addon build failed" }
+      - name: Verify exactly one native addon PE
+        shell: pwsh
+        run: |
+          $src="out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64"
+          if (!(Test-Path $src)) { throw "Integrated addon missing" }
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
+          if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) { throw "Not a compiled PE addon" }
+          $dest="out-v230-release/DSRRL_V230_ARMOR_V13_VALIDATED_SOURCE.addon64"
+          Copy-Item $src $dest
+          Get-FileHash $dest -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V230-ARMOR-V13-ONE-ADDON
+          path: out-v230-release/DSRRL_V230_ARMOR_V13_VALIDATED_SOURCE.addon64
+          if-no-files-found: error
