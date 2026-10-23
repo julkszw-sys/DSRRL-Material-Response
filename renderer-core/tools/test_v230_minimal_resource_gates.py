@@ -51,3 +51,9 @@ for cls in ("diffuse","normal"):
     assert f"sidecar_path(asset_class::{cls}, logical_name)" in registration
     assert f"{cls}_name_hash_allowed_v12(" not in registration
     assert f"{cls}_target_hash_allowed_v12(" not in registration
+
+# Stable PTDE EnvDiffuse has no B consumer, so B must not be an input gate.
+env=(root/"src/runtime/envspec_resource_runtime.cpp").read_text("utf-8")
+stable=env.split("bool envspec_resource_runtime::prepare_envdiffuse(",1)[1].split("void envspec_resource_runtime::release(",1)[0]
+assert "(probe_b_required && probe_b >= env::k_legacy_envspec_probe_count)" in stable
+assert "if (!probe_b_required)" in stable and "probe_b = probe_a;" in stable
