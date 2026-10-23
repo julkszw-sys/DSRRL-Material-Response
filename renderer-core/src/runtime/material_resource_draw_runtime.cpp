@@ -1691,10 +1691,6 @@ prepare_draw_requests(
         g_quarantined.load())
         return false;
 
-    const bool exact_material =
-        query.material.valid &&
-        query.material.owner_tuple_exact;
-
     // Independent texture replacements do not need FLVER-owner attestation.
     if (!spec_rgb_consumer_ready &&
         (receiver_id < 24u ||
