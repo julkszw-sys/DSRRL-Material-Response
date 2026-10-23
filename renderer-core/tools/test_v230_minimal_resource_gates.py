@@ -44,3 +44,10 @@ assert "exact_bound_t2" in head
 assert "if (!context.actual_bound_t2_verified)" in norm
 assert "if (!context.preserve_stock_s2)" in norm
 print("V230_MINIMAL_RESOURCE_GATES_PASS exact_live_t0 exact_live_t2 independent_transfers")
+
+# Resource registration needs its own same-name DDS, no static name allowlist.
+registration=src.split("void on_init_resource_view(",1)[1].split("void on_destroy_resource_view(",1)[0]
+for cls in ("diffuse","normal"):
+    assert f"sidecar_path(asset_class::{cls}, logical_name)" in registration
+    assert f"{cls}_name_hash_allowed_v12(" not in registration
+    assert f"{cls}_target_hash_allowed_v12(" not in registration
