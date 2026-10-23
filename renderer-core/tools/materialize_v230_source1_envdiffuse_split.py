@@ -181,17 +181,17 @@ patch(RTC,'''if(!env_only) {
         prepared.request.srvs''',
           '''if(!env_only || use_ptde_envdiffuse_island) {
         prepared.request.srvs''')
-patch(RTC,'''if (!env_only) {
+patch(RTC,'''        if(!env_only) {
             prepared.request.srvs''',
-          '''if (!env_only || use_ptde_envdiffuse_island) {
+          '''        if(!env_only || use_ptde_envdiffuse_island) {
             prepared.request.srvs''')
 patch(RTC,'''if(!env_only) {
         prepared.request.samplers''',
           '''if(!env_only || use_ptde_envdiffuse_island) {
         prepared.request.samplers''')
-patch(RTC,'''if (!env_only) {
+patch(RTC,'''        if(!env_only) {
             prepared.request.samplers''',
-          '''if (!env_only || use_ptde_envdiffuse_island) {
+          '''        if(!env_only || use_ptde_envdiffuse_island) {
             prepared.request.samplers''')
 # Stable HemEnv construct: two variants are registered from the *same*
 # exact PS SHA. Patch only the first stable registration in the compiled unit,
