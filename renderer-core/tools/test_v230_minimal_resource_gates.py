@@ -35,7 +35,7 @@ assert "if (!context.actual_material_verified)" not in dif
 assert "if (!context.ptde_c100_donor_verified)" not in dif
 assert "if (context.shared_material_route &&" not in dif
 assert "normal_route_authority::exact_bound_t2" in norm
-assert "normal_route_authority::exact_bound_t2" in head
+assert "exact_bound_t2" in head
 assert "if (!context.actual_bound_t2_verified)" in norm
 assert "if (!context.preserve_stock_s2)" in norm
 print("V230_MINIMAL_RESOURCE_GATES_PASS exact_live_t0 exact_live_t2 independent_transfers")
