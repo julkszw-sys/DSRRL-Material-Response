@@ -252,6 +252,9 @@ def edit_all(name, old, new, expected):
     src = file.read_text("utf-8")
     count = src.count(old)
     if count != expected:
+        for needle in ("g_raw_draw_replay_recursing = false;", "dispatch_island_draw_batch(", "dispatch_island_draw_indexed_batch(", "draw_tx_issued(dispatch.transaction)", "#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)"):
+            at = src.find(needle)
+            print("V230_TRACE_DEBUG",needle,"COUNT",src.count(needle),"EXCERPT",repr(src[max(0,at-130):at+160]))
         raise RuntimeError(f"V230 CUTSCENE callsite drift {name}: expected {expected}, got {count}")
     file.write_text(src.replace(old, new), "utf-8")
 
