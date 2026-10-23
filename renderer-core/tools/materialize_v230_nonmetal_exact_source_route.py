@@ -5,11 +5,11 @@ p=Path("renderer-core/src/runtime/pmetal_env_source_runtime.cpp")
 s=p.read_text("utf-8")
 anchor_include='#include "dsrrl/operators/material_response/mtd_semantic_census.hpp"'
 assert s.count(anchor_include)==1
-s=s.replace(anchor_include,anchor_include+'\\n#include "dsrrl/operators/material_response/generated_routes_v1.hpp"',1)
+s=s.replace(anchor_include,anchor_include+'\n#include "dsrrl/operators/material_response/generated_routes_v1.hpp"',1)
 anchor="""    pmetal_producer_state_begin(material, epoch);"""
 rep="""    // Exact raw-MTD route canonicalization: retail producer reports route=0
-    // for these two MTDs while the corresponding RX34 draw consumer carries
-    // the material census route. Preserve FLVER SHA / slot / MTD / epoch.
+    // for exact MTDs while downstream draws carry the canonical route.
+    // Preserve FLVER SHA / slot / MTD / epoch.
     auto source_key_material = material;
 #if defined(DSRRL_V230_EXACT_NONMETAL_SOURCE_ROUTE)
     if (material.route_index == 0u && material.valid &&
