@@ -64,3 +64,20 @@ assert producer.count("if (donor_ok)\n        publish_hook_source(")==2
 assert "next.envdiffuse_linear_valid = envdiffuse_valid;" in producer
 assert producer.count("            envdiffuse_ok,")==2
 assert "bool latest_hook_source(" in producer # protected fallback unchanged
+
+# PTDE SpecRGB material pixels are composite, unlike independent t0/t2 DDS.
+# A valid SpecRGB sidecar never proves the correct cubemap + MR result alone.
+composed=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text("utf-8")
+assert "const bool material_chain_ready =" in composed
+for name in ("material_response","diffuse_material_domain","spec_rgb"):
+    assert f"core::operator_id::{name}" in composed.split("const bool material_chain_ready =",1)[1].split("const bool lerp_terminal_ready",1)[0]
+assert "const bool lerp_terminal_ready =" in composed
+assert composed.index("const bool env_resource_ready =") < composed.index("const bool material_ready =")
+assert "if (!env_resource_ready)" in composed
+assert "!prepared.material_resources.spec_rgb" in composed
+assert "source.envdiffuse_linear_valid" in composed
+spec_region=draw.split("if (exact_material &&",1)[1].split("const bool bmp_receiver =",1)[0]
+assert "full_material_response_ready &&" in spec_region
+assert "spec_equipment_allowed(" in spec_region
+assert "stock_t1_preserved =" in spec_region
+assert "native_t10_transport_ready =" in spec_region
