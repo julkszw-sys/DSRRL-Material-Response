@@ -1,0 +1,66 @@
+name: V230 armor V13 supplement and source1 RX34 frontier
+on:
+  push:
+    branches: [feature/ptde-armor-all-slot-route-classification-20261023]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit source certified PTDE armor against V12 pair/triple
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_rx34_frontier.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_repair.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_source1_exact_hit_provenance.py
+          python3 renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py
+          python3 renderer-core/tools/materialize_v230_rx34_frontier.py
+          grep -F 'armor_v13::pair_ok(h1,h0)' renderer-core/src/runtime/material_resource_draw_runtime.cpp
+          grep -F '[DSRRL RX34 FRONTIER]' renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp
+  build:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Enable v230 source1 exact producer provenance and RX34 bounded frontier
+        shell: pwsh
+        run: |
+          python renderer-core/tools/enable_v230_source1_provenance_ci.py
+          if ($LASTEXITCODE -ne 0) { throw 'Source1 provenance activation failed' }
+          $p='renderer-core/tools/build_v230_production.ps1'
+          $s=[IO.File]::ReadAllText($p)
+          $old='/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE '
+          if (!$s.Contains($old)) { throw 'Expected source1 flags absent' }
+          $s=$s.Replace($old,'/DDSRRL_V230_SOURCE1_EXACT_PROVENANCE /DDSRRL_V230_RX34_FRONTIER ')
+          [IO.File]::WriteAllText($p,$s,[Text.UTF8Encoding]::new($false))
+      - name: Build single addon (V13 source routes plus repaired Source1)
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify PE and runtime marker
+        shell: pwsh
+        run: |
+          $src='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $src)) {throw 'Missing built addon'}
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $src))
+          if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'Invalid PE'}
+          $s=[Text.Encoding]::ASCII.GetString($b)
+          foreach($mark in @('[DSRRL SOURCE1 HIT]','[DSRRL RX34 FRONTIER]')) {
+            if (!$s.Contains($mark)) {throw "Missing diagnostic marker $mark"}
+          }
+          $dest='out-v230-release/DSRRL_V230_ARMOR_V13_SOURCE1_FRONTIER.addon64'
+          Copy-Item $src $dest
+          Get-FileHash $dest -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-v230-ARMOR-V13-SOURCE1-FRONTIER
+          path: out-v230-release/DSRRL_V230_ARMOR_V13_SOURCE1_FRONTIER.addon64
+          if-no-files-found: error
