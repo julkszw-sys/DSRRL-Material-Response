@@ -2274,16 +2274,18 @@ void __fastcall envspec_blend_hook_entry(
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    const bool envdiffuse_ok =
+    // A zero-beta PTDE Lerp has no B contribution. Match the existing
+    // EnvSpec donor A=B rule; never demand an unused second EnvDiffuse
+    // endpoint. Nonzero blends still decode and verify both endpoints.
+    bool envdiffuse_ok =
         donor_ok &&
-        exact_envdiffuse_endpoint(
-            bank_a,
-            row_a,
-            envdiffuse_a) &&
-        exact_envdiffuse_endpoint(
-            bank_b,
-            row_b,
-            envdiffuse_b);
+        exact_envdiffuse_endpoint(bank_a, row_a, envdiffuse_a);
+    if (envdiffuse_ok && endpoints.beta == 0.0f) {
+        envdiffuse_b = envdiffuse_a;
+    } else if (envdiffuse_ok) {
+        envdiffuse_ok =
+            exact_envdiffuse_endpoint(bank_b, row_b, envdiffuse_b);
+    }
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
