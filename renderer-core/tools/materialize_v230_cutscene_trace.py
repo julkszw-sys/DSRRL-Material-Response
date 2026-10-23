@@ -246,7 +246,17 @@ edit("integrated",
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {''')
 
-edit("integrated",
+# Both non-indexed and indexed draw dispatch callsites need the same witness.
+# An RX33/RX34 indexed draw must not disappear from the diagnostic.
+def edit_all(name, old, new, expected):
+    file = paths[name]
+    src = file.read_text("utf-8")
+    count = src.count(old)
+    if count != expected:
+        raise RuntimeError(f"V230 CUTSCENE callsite drift {name}: expected {expected}, got {count}")
+    file.write_text(src.replace(old, new), "utf-8")
+
+edit_all("integrated",
      """    if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
@@ -262,6 +272,6 @@ edit("integrated",
         dsrrl::runtime::draw_tx_issued(dispatch.transaction));
 #endif
 
-#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)""")
+#if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)""", 2)
 
 print("V230_CUTSCENE_TRACE_OVERLAY_PASS source_kind+exact c86+GI ordinal+post_draw")
