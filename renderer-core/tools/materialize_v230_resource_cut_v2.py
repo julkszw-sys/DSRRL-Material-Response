@@ -106,7 +106,7 @@ patch(p,'''    // std::wstring move is noexcept: do not introduce allocations or
     // std::wstring move is noexcept: do not introduce allocations or''')
 patch(p,'''    const auto h2 = hashes[2];
 
-    const bool v13_owner =''',
+#if defined(DSRRL_V230_DUAL_FRONTIER)''',
 '''    const auto h2 = hashes[2];
 #if defined(DSRRL_V230_RESOURCE_CUT_V2)
     const bool rc_source1 =
@@ -144,7 +144,7 @@ patch(p,'''    const auto h2 = hashes[2];
     }
 #endif
 
- #if defined(DSRRL_V230_DUAL_FRONTIER)''')
+#if defined(DSRRL_V230_DUAL_FRONTIER)''')
 
 # Record which route 345 RX34 SRV read path is taken. The shadow snapshot
 # is a thread-local descriptor observer; a successful snapshot may still
