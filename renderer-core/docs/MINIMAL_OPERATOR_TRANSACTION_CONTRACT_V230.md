@@ -143,7 +143,7 @@ TLS/global fallback is unchanged.
   and beta. The witness reads native state with `PSGet*`, and additionally compares the t11 handle against the ReShade descriptor shadow (`shadow`, `shadow_t11`, `same`). It does **not** write
   `PSSet*`, bind replacement SRVs, create a shader or establish a PTDE
   probe alias. A non-NULL t11 is not proof of PTDE asset homology.
-  The witness does not run if an earlier material/source gate rejects. On a deferred context, native PSGet state may differ from the ReShade descriptor shadow; a NULL native t11 alone must not be interpreted as absence of the shader-visible t11.
+  The witness records source-ready and source-rejected cases separately, capped at six samples per case. A source-rejected draw remains rejected. On a deferred context, native PSGet state may differ from the ReShade descriptor shadow; a NULL native t11 alone must not be interpreted as absence of the shader-visible t11.
 
 The two witnesses intentionally answer different questions: `t0/t1/t2`
 companion admission is not `t11` EnvDiffuse identity, and a source donor
