@@ -511,3 +511,9 @@ assert "return canonical;" in sidecar_path_fn
 assert "spec_equipment_allowed(logical_hash)" in v230_resources
 assert "texture_identity_transport::snapshot_raw(" in v230_resources
 print("V230_EXACT_FOLDER_MANIFEST_FALLBACK_PASS original_stock_name_and_protect")
+
+assert "spec_disk_present = std::filesystem::is_regular_file(" in v230_resources
+assert "v230_disk_mask" in v230_resources
+assert "disk_mask=%u" in generated_v323
+assert "static_cast<unsigned>(origin.disk_mask)" in generated_v323
+print("V230_INSTALLED_DDS_VS_ALLOWLIST_WITNESS_PASS")
