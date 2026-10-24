@@ -81,7 +81,7 @@ def patch_v230_view_witness(s: str) -> str:
         "sidecar=%u reason=%s\",",
         "sidecar=%u reason=%s\"\n"
         "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
-        "            \" view_init=%s backing=%016llx name=%016llx eligible=%u uploaded=%u\"\n"
+        "            \" view_init=%s backing=%016llx name=%016llx eligible=%u uploaded=%u disk_mask=%u\"\n"
         "#endif\n            ,")
     witness=once(witness,
         "            reason);",
