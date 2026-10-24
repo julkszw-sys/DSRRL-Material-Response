@@ -2007,6 +2007,30 @@ prepare_draw_requests_bound(
     if (!want_diffuse && !want_normal && !want_spec_rgb)
         return true;
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Certified negative owner match. This native t1 belongs to an original
+    // DSR chr/chrbnd texture, not player parts/partsbnd. Leave all t0/t1/t2
+    // stock; do not issue or count an equipment SpecRGB replacement attempt.
+    if (receiver_id == 34u && query.material.route_index == 345u &&
+        views[1] != nullptr) {
+        const auto key = static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(views[1]));
+        bool character_t1 = false;
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto it = g_v230_view_origin.find(key);
+            character_t1 = it != g_v230_view_origin.end() &&
+                it->second.stage ==
+                    v230_view_stage::verified_character_not_equipment &&
+                v230_observed_character_t1(it->second.logical_hash);
+        }
+        if (character_t1) {
+            prepared.verified_character_not_equipment = true;
+            return true;
+        }
+    }
+#endif
+
     const companion_lookup_request companion_requests[3]{
         {want_diffuse ? views[0] : nullptr, asset_class::diffuse},
         {want_spec_rgb ? views[1] : nullptr, asset_class::specular},
