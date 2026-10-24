@@ -65,28 +65,25 @@ replace(res,"        g_native_resources.reserve(\n            env::k_legacy_envs
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
         g_v358_lifetime_probes.reserve(512u);
 #endif''',"init reserve")
-replace(res,'''    if (!extract_tight_bc6h(
-            desc,
-            initial_data,
-            tight)) {
-        ++g_native_hash_miss;''',
-'''    if (!extract_tight_bc6h(
-            desc,
-            initial_data,
-            tight)) {
-        ++g_native_hash_miss;
+replace(res,'''    if (!extract_tight_bc6h(desc, initial_data, tight)) {
+        if (spec) ++g_native_hash_miss;
+        return;''',
+'''    if (!extract_tight_bc6h(desc, initial_data, tight)) {
+        if (spec) {
+            ++g_native_hash_miss;
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
-        {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            if (device_ptr==g_device) {
-                v358_lifetime_probe_record item{};
-                item.serial=g_v358_lifetime_next.fetch_add(
-                    1u,std::memory_order_relaxed);
-                // Absent initial data is explicitly NOT a valid hash.
-                g_v358_lifetime_probes[resource_handle.handle]=item;
+            {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                if (device_ptr==g_device) {
+                    v358_lifetime_probe_record item{};
+                    item.serial=g_v358_lifetime_next.fetch_add(
+                        1u,std::memory_order_relaxed);
+                    g_v358_lifetime_probes[resource_handle.handle]=item;
+                }
             }
+#endif
         }
-#endif''',"missing BC6H initial data")
+        return;''',"missing BC6H initial data")
 replace(res,'''    const auto probe =
         env::legacy_native_probe_for_sha(
             digest);
