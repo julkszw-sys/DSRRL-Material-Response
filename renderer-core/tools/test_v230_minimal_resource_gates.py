@@ -492,3 +492,6 @@ assert "v214_resource_provenance::status::ambiguous" in generated_v323
 assert "resource_exact" in generated_v323
 assert "g_cache.emplace(" in generated_v323
 print("V230_V323_EXECUTED_GENERATOR_BRIDGE_PASS same_native_resource_scope_and_unique_rx34")
+
+assert '[DSRRL V230 PROBE FAIL CUT]' in pmetal_rt
+print('V230_PROBE_FAIL_WITNESS_PASS')
