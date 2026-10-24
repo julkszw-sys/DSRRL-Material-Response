@@ -495,3 +495,19 @@ print("V230_V323_EXECUTED_GENERATOR_BRIDGE_PASS same_native_resource_scope_and_u
 
 assert '[DSRRL V230 PROBE FAIL CUT]' in pmetal_rt
 print('V230_PROBE_FAIL_WITNESS_PASS')
+
+# Sidecar directory selection is a *filesystem* transport detail, not an
+# additional name/MTD/receiver permission. No recursive or fuzzy mapping.
+sidecar_path_fn = v230_resources.split(
+    "std::filesystem::path sidecar_path(", 1
+)[1].split("template <typename T>", 1)[0]
+assert "const auto canonical = base / class_dir(cls) / filename;" in sidecar_path_fn
+assert "std::filesystem::exists(canonical, ec) || ec" in sidecar_path_fn
+for alternative in ('L"Speculars"', 'L"Normal"', 'L"Diffuses"'):
+    assert alternative in sidecar_path_fn
+assert "std::filesystem::is_regular_file(exact_alternative, ec)" in sidecar_path_fn
+assert "recursive_directory_iterator" not in sidecar_path_fn
+assert "return canonical;" in sidecar_path_fn
+assert "spec_equipment_allowed(logical_hash)" in v230_resources
+assert "texture_identity_transport::snapshot_raw(" in v230_resources
+print("V230_EXACT_FOLDER_MANIFEST_FALLBACK_PASS original_stock_name_and_protect")
