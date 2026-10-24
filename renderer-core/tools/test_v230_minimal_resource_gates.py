@@ -624,9 +624,12 @@ assert "warrior_9360_stage::selector_not_authenticated" in warrior_owner
 assert "warrior_9360_stage::selector_published" in warrior_owner
 assert "warrior_9360_stage::pre_route" in integrated
 assert integrated.count("warrior_9360_stage::pre_route") == 2
-for gate in ("no_pipeline_route", "no_dynamic_route", "identity_reject",
+for gate in ("no_pipeline_route", "no_dynamic_route",
              "identity_ready", "prepare_reject", "prepared"):
     assert integrated.count("warrior_9360_stage::" + gate) == 2
+# Two indexed/non-indexed branches, each handles valid material and pending
+# owner fallback on identity rejection, so four occurrences are intentional.
+assert integrated.count("warrior_9360_stage::identity_reject") == 4
 route_a = integrated.index("bool on_draw(")
 route_b = integrated.index("bool on_draw_indexed(")
 for fn in (integrated[route_a:route_b], integrated[route_b:]):
