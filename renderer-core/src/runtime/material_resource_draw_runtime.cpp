@@ -622,10 +622,32 @@ std::filesystem::path sidecar_path(
             L".dds") != 0)
         filename += L".dds";
 
-    return root /
-        L"DSRRL" /
-        class_dir(cls) /
-        filename;
+    const auto base = root / L"DSRRL";
+    const auto canonical = base / class_dir(cls) / filename;
+
+    // The owner's exact-name manifest scanner also recognizes the older
+    // Speculars and Normal directory spellings. File identity is unchanged:
+    // select only the *same* leaf after V323 native resource/name routing
+    // and the existing receiver/MTD/SpecRGB allowlist have authorized it.
+    // Never search recursively, infer a basename, or replace a conflicting
+    // canonical file with the alternative directory.
+    std::error_code ec{};
+    if (std::filesystem::exists(canonical, ec) || ec)
+        return canonical;
+
+    const wchar_t *legacy = nullptr;
+    switch (cls) {
+    case asset_class::specular: legacy = L"Speculars"; break;
+    case asset_class::normal: legacy = L"Normal"; break;
+    case asset_class::diffuse: legacy = L"Diffuses"; break;
+    }
+    if (legacy != nullptr) {
+        const auto exact_alternative = base / legacy / filename;
+        ec.clear();
+        if (std::filesystem::is_regular_file(exact_alternative, ec) && !ec)
+            return exact_alternative;
+    }
+    return canonical;
 }
 
 template <typename T>
