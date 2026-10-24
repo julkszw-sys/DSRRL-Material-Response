@@ -1418,6 +1418,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                       prepared.env_resources);
 
     if (!env_resource_ready) {
+        if (shader != nullptr)
+            shader->Release();
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
         // An EnvSpec probe reject is not a SpecRGB sidecar reject.
         // Record source A/B and the current verified pack/sampler state
@@ -1463,8 +1465,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             }
         }
 #endif
-        if (shader != nullptr)
-            shader->Release();
         telemetry::hot_count(probe_rejects_);
         effect_fail(
             effect_fail_mask_,
