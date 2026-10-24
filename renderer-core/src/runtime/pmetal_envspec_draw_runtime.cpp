@@ -2023,69 +2023,45 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffer_count =
         1u;
 
+    // The complete operator has four possible carrier slots:
+    //   t11 = PTDE EnvDiffuse A (or native DSR A in legacy diagnostic),
+    //   t12 = exact EnvSpec A cubemap,
+    //   t13 = PTDE EnvDiffuse B for verified Lerp only,
+    //   t14 = exact EnvSpec B cubemap (B=A when beta is exactly zero).
+    // EnvSpec slots are common to every mode, including native-DSR
+    // falsifiers. Independent t0/t2/t10 sidecars are appended elsewhere.
     std::uint32_t request_srv_count = 0u;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.srvs[
-        request_srv_count++] = {
-            11u,
-            prepared.envdiffuse_resources.ptde_a
-        };
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
-        prepared.request.srvs[
-            request_srv_count++] = {
-                13u,
-                prepared.envdiffuse_resources.ptde_b
-            };
-    }
-#endif
-    prepared.request.srvs[
-        request_srv_count++] = {
-            12u,
-            prepared.env_resources.ptde_a
-        };
-    prepared.request.srvs[
-        request_srv_count++] = {
-            14u,
-            prepared.env_resources.ptde_b
-        };
+    prepared.request.srvs[request_srv_count++] = {
+        11u, prepared.envdiffuse_resources.ptde_a
+    };
 #elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
-    prepared.request.srvs[
-        request_srv_count++] = {
-            11u,
-            prepared.native_dsr_envdiffuse_a
-        };
-    prepared.request.srvs[
-        request_srv_count++] = {
-            12u,
-            prepared.env_resources.ptde_a
-        };
-    if (native_envdiffuse_b_required) {
-        prepared.request.srvs[
-            request_srv_count++] = {
-                13u,
-                prepared.native_dsr_envdiffuse_b
-            };
-    }
-    prepared.request.srvs[
-        request_srv_count++] = {
-            14u,
-            prepared.env_resources.ptde_b
-        };
-#else
-    prepared.request.srvs[
-        request_srv_count++] = {
-            12u,
-            prepared.env_resources.ptde_a
-        };
-    prepared.request.srvs[
-        request_srv_count++] = {
-            14u,
-            prepared.env_resources.ptde_b
+    prepared.request.srvs[request_srv_count++] = {
+        11u, prepared.native_dsr_envdiffuse_a
+    };
+#endif
+
+    prepared.request.srvs[request_srv_count++] = {
+        12u, prepared.env_resources.ptde_a
+    };
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (family == pmetal_envspec_receiver_family::hemenvlerp)
+        prepared.request.srvs[request_srv_count++] = {
+            13u, prepared.envdiffuse_resources.ptde_b
         };
 #endif
+#elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    if (native_envdiffuse_b_required)
+        prepared.request.srvs[request_srv_count++] = {
+            13u, prepared.native_dsr_envdiffuse_b
+        };
+#endif
+
+    prepared.request.srvs[request_srv_count++] = {
+        14u, prepared.env_resources.ptde_b
+    };
     prepared.request.srv_count =
         request_srv_count;
 
