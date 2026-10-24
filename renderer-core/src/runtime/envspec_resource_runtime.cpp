@@ -791,6 +791,28 @@ void on_destroy_resource_view(
             std::memory_order_release);
 }
 
+// All DSR stock-view -> canonical probe ordinal lookups share this
+// exact registry cut. Call only while g_mutex is held; the view lifecycle
+// callback invalidates the lookup and TLS epoch under the same mutex.
+// The caller owns whether an out-of-range ordinal is rejected.
+bool resolve_tracked_probe_locked(
+    ID3D11ShaderResourceView *view,
+    std::uint16_t &probe) noexcept
+{
+    if (view == nullptr)
+        return false;
+
+    const auto key =
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(view));
+    const auto found = g_resource_by_view.find(key);
+    if (found == g_resource_by_view.end())
+        return false;
+
+    probe = found->second.probe_ordinal;
+    return true;
+}
+
 bool probe_for_native_view(
     ID3D11ShaderResourceView *view,
     std::uint16_t &probe) noexcept
@@ -882,27 +904,6 @@ bool snapshot_ready_envspec(
         return true;
     }
 
-    const auto resolve_probe_locked =
-        [](ID3D11ShaderResourceView *view,
-           std::uint16_t &probe) noexcept {
-            if (view == nullptr)
-                return false;
-
-            const auto view_key =
-                static_cast<std::uint64_t>(
-                    reinterpret_cast<std::uintptr_t>(
-                        view));
-            const auto by_view =
-                g_resource_by_view.find(view_key);
-            if (by_view ==
-                g_resource_by_view.end())
-                return false;
-
-            probe =
-                by_view->second.probe_ordinal;
-            return true;
-        };
-
     std::lock_guard<std::mutex> lock(g_mutex);
 
     if (g_device == nullptr ||
@@ -911,13 +912,13 @@ bool snapshot_ready_envspec(
         g_sampler.handle == 0u)
         return false;
 
-    if (!resolve_probe_locked(
+    if (!resolve_tracked_probe_locked(
             stock_a,
             probe_a))
         return false;
 
     if (probe_b_required) {
-        if (!resolve_probe_locked(
+        if (!resolve_tracked_probe_locked(
                 stock_b,
                 probe_b))
             return false;
@@ -1581,40 +1582,18 @@ bool envspec_resource_runtime::prepare_native_dsr(
         std::lock_guard<std::mutex> lock(
             g_mutex);
 
-        const auto resolve_probe_locked =
-            [](ID3D11ShaderResourceView *view,
-               std::uint16_t &probe) noexcept {
-                if (view == nullptr)
-                    return false;
-
-                const auto key =
-                    static_cast<std::uint64_t>(
-                        reinterpret_cast<std::uintptr_t>(
-                            view));
-                const auto found =
-                    g_resource_by_view.find(key);
-
-                if (found ==
-                    g_resource_by_view.end())
-                    return false;
-
-                probe =
-                    found->second.probe_ordinal;
-                return
-                    probe <
-                    env::k_legacy_envspec_probe_count;
-            };
-
         if (g_device != nullptr &&
             g_sampler_ready &&
             g_sampler.handle != 0u &&
-            resolve_probe_locked(
+            resolve_tracked_probe_locked(
                 stock_a,
                 probe_a) &&
+            probe_a < env::k_legacy_envspec_probe_count &&
             (!probe_b_required ||
-             resolve_probe_locked(
+             (resolve_tracked_probe_locked(
                  stock_b,
-                 probe_b))) {
+                 probe_b) &&
+              probe_b < env::k_legacy_envspec_probe_count))) {
             if (!probe_b_required)
                 probe_b = probe_a;
 
