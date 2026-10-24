@@ -295,7 +295,11 @@ print("V230_PROBE_RESOLVER_UNIFIED_PASS PTDE_cube_native_DSR_same_tracked_view_g
 loader = env.split("bool load_exact_cube_pack(", 1)[1].split(
     "bool is_native_envspec_desc(", 1
 )[0]
-assert loader.count("hashing::sha256(bytes.data(), bytes.size())") == 1
+# The independent native-t11 SHA atlas has its OWN verified source hash;
+# count only the shared exact PTDE pack-reader hash, not the atlas loader.
+pack_reader = loader.split("bool load_pack(", 1)[0]
+assert pack_reader.count("hashing::sha256(bytes.data(), bytes.size())") == 1
+assert "load_native_diffuse_hash_atlas(" in loader
 assert "size != expected_size" in loader
 assert "expected_digest" in loader
 assert "out.clear();" in loader
