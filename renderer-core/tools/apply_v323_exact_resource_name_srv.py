@@ -38,6 +38,12 @@ def patch(source: str) -> str:
         '    reshade::api::resource,\n    reshade::api::resource_usage usage,',
         '    reshade::api::resource source_resource,\n    reshade::api::resource_usage usage,')
 
+    # Keep diagnostic handles bound to the V323-certified source argument.
+    s=s.replace('v230_observe_view(view.handle, resource_handle.handle,',
+                'v230_observe_view(view.handle, source_resource.handle,')
+    s=s.replace('v230_observe_view(view.handle,resource_handle.handle,',
+                'v230_observe_view(view.handle,source_resource.handle,')
+
     anchor='void on_init_resource_view(\n'
     producer="""// Exact native ID3D11Resource is the transport key. This does not infer the
 // GPU identity from a similar texture name or MTD. The ReShade callback may
