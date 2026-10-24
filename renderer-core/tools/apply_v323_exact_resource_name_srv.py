@@ -95,6 +95,12 @@ def patch_v230_view_witness(s: str) -> str:
         "            static_cast<unsigned>(origin.uploaded_mask)\n"
         "#endif\n            );")
     s=s[:begin]+witness+s[end:]
+    s=once(s,
+        "        if (g_ambiguous_view_device.erase(key) != 0u)",
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "        g_v230_view_origin.erase(key);\n"
+        "#endif\n"
+        "        if (g_ambiguous_view_device.erase(key) != 0u)")
     return s
 
 
