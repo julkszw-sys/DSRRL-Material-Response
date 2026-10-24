@@ -280,3 +280,35 @@ assert "probe_b_required ? 3u : 1u" in native_resolution
 assert "if (!probe_b_required)\n                probe_b = probe_a;" in native_resolution
 assert "if (!probe_b_required)\n        stock_b->AddRef();" in native_resolution
 print("V230_PROBE_RESOLVER_UNIFIED_PASS PTDE_cube_native_DSR_same_tracked_view_guard")
+
+# EnvSpec (342*4 RGBA8 cubes) and EnvDiffuse (342 RGBA8 cubes)
+# are distinct exact PTDE assets. They may share a file-reader algorithm,
+# but NOT their path, byte length, SHA, cache or receiver/ordinal routing.
+loader = env.split("bool load_exact_cube_pack(", 1)[1].split(
+    "bool is_native_envspec_desc(", 1
+)[0]
+assert loader.count("hashing::sha256(bytes.data(), bytes.size())") == 1
+assert "size != expected_size" in loader
+assert "expected_digest" in loader
+assert "out.clear();" in loader
+assert loader.count("return load_exact_cube_pack(") == 2
+envspec_load = loader.split("bool load_pack(", 1)[1].split(
+    "bool load_envdiffuse_pack(", 1
+)[0]
+envdiffuse_load = loader.split("bool load_envdiffuse_pack(", 1)[1]
+for constant in (
+    "k_legacy_packed_gi_relative_path",
+    "k_legacy_packed_gi_size",
+    "k_legacy_packed_gi_sha256",
+):
+    assert constant in envspec_load and constant not in envdiffuse_load
+for constant in (
+    "k_ptde_envdiffuse_packed_gi_relative_path",
+    "k_ptde_envdiffuse_packed_gi_size",
+    "k_ptde_envdiffuse_packed_gi_sha256",
+):
+    assert constant in envdiffuse_load and constant not in envspec_load
+assert "#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)" in envdiffuse_load
+assert "g_ptde_cubes" in env and "g_ptde_envdiffuse_cubes" in env
+assert "k_ptde_slots = 4u" in env
+print("V230_EXACT_PACK_LOADERS_SHARED_PASS independent_envspec_envdiffuse_paths_sizes_sha")
