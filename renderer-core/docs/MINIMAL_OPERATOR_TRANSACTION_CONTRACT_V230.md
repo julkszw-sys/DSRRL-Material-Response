@@ -195,7 +195,11 @@ The next cleanup also removes duplicate source-code mechanics in
   identity in the tracked view map for either PTDE cube replacement or the
   explicitly requested native-DSR V13 diagnostic. The original caller-specific
   range checks and the exact `beta == 0` A/B alias remain; the read always
-  occurs under `g_mutex`, with lifetime epochs intact.
+  occurs under `g_mutex`, with lifetime epochs intact. **Build materializer
+  V356 still inserts its independently SHA-certified native BC6H backing
+  fallback here, only when the PTDE path passes `allow_verified_alias=true`.**
+  The native-DSR diagnostic passes `false`, retaining its original stricter
+  known-view-only rule. Earlier pre-V230 sources retain the old V356 anchor.
 - A single `load_exact_cube_pack` implements file-size and SHA-256 checks.
   EnvSpec and EnvDiffuse continue to pass **different** paths, byte lengths
   and digests and have different readiness flags.
