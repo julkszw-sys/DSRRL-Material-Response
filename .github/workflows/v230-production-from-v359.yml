@@ -13,7 +13,7 @@ jobs:
       - name: Static source and optimizer contract
         shell: bash
         run: |
-          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py renderer-core/tools/test_v230_minimal_resource_gates.py renderer-core/tools/audit_v230_asset_shader_tx_contract.py
+          python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py renderer-core/tools/test_v230_minimal_resource_gates.py renderer-core/tools/audit_v230_asset_shader_tx_contract.py renderer-core/tools/parse_warrior_9360_runtime.py
           python3 renderer-core/tools/test_v230_minimal_resource_gates.py
           python3 renderer-core/tools/verify_v230_runtime_log.py --selftest
           python3 renderer-core/tools/audit_v230_asset_shader_tx_contract.py
@@ -45,7 +45,7 @@ jobs:
           $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
           if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE output' }
           $raw=[Text.Encoding]::ASCII.GetString($bytes)
-          foreach($marker in @('2.3.0','v230_production')) {
+          foreach($marker in @('2.3.0','v230_production','[DSRRL WARRIOR 9360 FIRST CUT]')) {
             if (!$raw.Contains($marker)) { throw "Missing identity $marker" }
           }
           foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]')) {
@@ -56,4 +56,37 @@ jobs:
         with:
           name: DSRRL-v2.3.0-V359-single-addon-CANDIDATE
           path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error
+
+      - name: Package Warrior 9360 runtime telemetry candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $source='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          $dst='out-v230-release/warrior-9360-telemetry'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item $source "$dst/DSRRL_Warrior_9360_Telemetry_CANDIDATE.addon64"
+          Copy-Item renderer-core/tools/parse_warrior_9360_runtime.py "$dst/parse_warrior_9360_runtime.py"
+          $checksum=(Get-FileHash $source -Algorithm SHA256).Hash.ToLowerInvariant()
+          @"
+          DSRRL Warrior 9360 Runtime Telemetry (TEST CANDIDATE)
+          HEAD=$env:GITHUB_SHA
+          SHA256=$checksum
+          This package has ONE integrated .addon64. Do not install two DSRRL addons.
+          Keep a backup of your previous addon and the frozen V359-RC1 package.
+          Place the addon in the existing ReShade add-on location for Dark Souls Remastered.
+          Equip the Warrior/Standard Helm (HD_M_9360), render, and save ReShade.log.
+          Search log for [DSRRL WARRIOR 9360 FIRST CUT].
+          Use: python parse_warrior_9360_runtime.py ReShade.log
+          Captured states: selector, first pipeline route gate, identity, prepare.
+          Runtime PASS is not PTDE pixel PASS. Stock fail-open remains intentional.
+          DarkSoulsRemastered.exe is not changed.
+          "@ | Set-Content -Path "$dst/README.txt" -Encoding utf8
+          if ((Get-ChildItem $dst -Filter *.addon64).Count -ne 1) {
+            throw 'Expected exactly one packaged integrated addon'
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-Warrior-9360-Runtime-Telemetry-V359-CANDIDATE
+          path: out-v230-release/warrior-9360-telemetry/*
           if-no-files-found: error
