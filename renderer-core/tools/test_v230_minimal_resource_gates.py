@@ -186,5 +186,5 @@ assert 'witness_rx34_native_envdiffuse(' in composed
 assert 'cmd_list, native_context, source, false);' in composed
 assert 'material.route_index == 345u' in composed
 assert 'witness_rx34_native_envdiffuse(cmd_list, context, source, true);' in composed
-assert composed.index('witness_rx34_native_envdiffuse(cmd_list, context, source, true);') < composed.index('ID3D11PixelShader *shader = nullptr;')
+assert 'witness_rx34_native_envdiffuse(cmd_list, context, source, true);\n\n    ID3D11PixelShader *shader = nullptr;' in composed
 print("V230_RX34_T11_DOMAIN_WITNESS_PASS exact_material_readonly_t11_s11_b12")
