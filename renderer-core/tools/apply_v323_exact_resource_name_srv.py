@@ -30,15 +30,15 @@ def patch_v230_view_witness(s: str) -> str:
     witness=s[begin:end]
     witness=once(witness,
         "        std::uint64_t registry_hash = 0u;",
-        "        std::uint64_t registry_hash = 0u;\\n"
-        "        v230_view_origin origin{};\\n"
+        "        std::uint64_t registry_hash = 0u;\n"
+        "        v230_view_origin origin{};\n"
         "        bool origin_found = false;")
     witness=once(witness,
         "            const auto found = g_cache.find(key);",
-        "            const auto observed = g_v230_view_origin.find(key);\\n"
-        "            if (observed != g_v230_view_origin.end()) {\\n"
-        "                origin=observed->second; origin_found=true;\\n"
-        "            }\\n"
+        "            const auto observed = g_v230_view_origin.find(key);\n"
+        "            if (observed != g_v230_view_origin.end()) {\n"
+        "                origin=observed->second; origin_found=true;\n"
+        "            }\n"
         "            const auto found = g_cache.find(key);")
     s=s[:begin]+witness+s[end:]
     return s
@@ -228,23 +228,23 @@ void on_destroy_resource(
     # fallback. Normalize the original callback stanza before V323 routing;
     # the no-name evidence is added only AFTER both certified sources fail.
     diagnostic_old=old.replace(
-        '            logical_name_length))\\n        return;',
-        '            logical_name_length)) {\\n'
-        '#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\\n'
-        '        v230_observe_view(view.handle, source_resource.handle, 0u,\\n'
-        '            v230_view_stage::no_name_scope, 0u, 0u);\\n'
-        '#endif\\n        return;\\n    }')
+        '            logical_name_length))\n        return;',
+        '            logical_name_length)) {\n'
+        '#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n'
+        '        v230_observe_view(view.handle, source_resource.handle, 0u,\n'
+        '            v230_view_stage::no_name_scope, 0u, 0u);\n'
+        '#endif\n        return;\n    }')
     if diagnostic_old in s:
         s=once(s,diagnostic_old,old)
         # Only after V214's native resource/SRV equality path failed is the
         # stock view truly without a certified name. This is diagnostic only.
         new=new.replace(
-            '            source_len==0u)\\n            return;',
-            '            source_len==0u) {\\n'
-            '#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\\n'
-            '            v230_observe_view(view.handle,source_resource.handle,0u,\\n'
-            '                v230_view_stage::no_name_scope,0u,0u);\\n'
-            '#endif\\n            return;\\n        }')
+            '            source_len==0u)\n            return;',
+            '            source_len==0u) {\n'
+            '#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n'
+            '            v230_observe_view(view.handle,source_resource.handle,0u,\n'
+            '                v230_view_stage::no_name_scope,0u,0u);\n'
+            '#endif\n            return;\n        }')
     s=once(s,old,new)
 
     s=once(s,
