@@ -218,17 +218,36 @@ bool enrich_exact_owner_mtd_identity(
     if (exact_extension != nullptr) {
         raw_mtd_sha =
             exact_extension->raw_mtd_sha256;
-    } else if (
-        !mr::generated::dsr_mtd_identity_resolve(semantic_hash, raw_mtd_sha) &&
-        !mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)) {
-        cached = {
-            observation.flver_sha256,
-            observation.material_slot,
-            {},
-            true,
-            false
-        };
-        return false;
+    } else {
+        // The partial 43-entry loose-MTD registry has stale raw digests
+        // for two uniquely identified MTDs in the authenticated original
+        // DSR Mtd.mtdbnd.dcx. Prefer the source-verified, generated
+        // supplement ONLY for these two exact semantic names. Other names
+        // retain the original generic-first policy; in particular
+        // P_DullLeather[DSB].mtd has TWO different raw files under the
+        // same name and must not be silently made globally authoritative.
+        const bool source_unique_bnd_override =
+            semantic_hash ==
+                mr::mtd_semantic_hash("Ps_Body[DSB].mtd") ||
+            semantic_hash ==
+                mr::mtd_semantic_hash("P_DullLeather[DSB]_Edge.mtd");
+        const bool sha_resolved = source_unique_bnd_override
+            ? mr::generated::dsr_mtd_identity_supplement_resolve(
+                  semantic_hash, raw_mtd_sha)
+            : (mr::generated::dsr_mtd_identity_resolve(
+                    semantic_hash, raw_mtd_sha) ||
+               mr::generated::dsr_mtd_identity_supplement_resolve(
+                    semantic_hash, raw_mtd_sha));
+        if (!sha_resolved) {
+            cached = {
+                observation.flver_sha256,
+                observation.material_slot,
+                {},
+                true,
+                false
+            };
+            return false;
+        }
     }
 
     resolved.valid = true;
