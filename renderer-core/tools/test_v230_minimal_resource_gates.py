@@ -550,6 +550,11 @@ view_init = v230_resources.split("void on_init_resource_view(", 1)[1].split(
     "void on_destroy_resource_view(", 1
 )[0]
 assert "g_v230_character_view_device[key] = native;" in view_init
+assert "g_v230_character_view_device.erase(" in view_init
+assert view_init.index("g_v230_character_view_device.erase(") < view_init.index(
+    "texture_identity_transport::snapshot_raw(")
+# If a new exact stock view reuses a retired pointer but has no loader TLS,
+# the previous chr classification must already have been discarded.
 view_destroy = v230_resources.split("void on_destroy_resource_view(", 1)[1].split(
     "void on_destroy_device(", 1
 )[0]
