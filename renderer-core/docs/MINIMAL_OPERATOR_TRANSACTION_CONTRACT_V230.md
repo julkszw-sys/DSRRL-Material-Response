@@ -140,7 +140,7 @@ TLS/global fallback is unchanged.
   RX34 post-source reads of actual PS slots t11, s11, b12 and the native
   t11 resource descriptor (view/texture format, width, height, mip count,
   array count and misc flags), plus exact source EnvDiffuse readiness
-  and beta. The witness reads state with `PSGet*`; it does **not** write
+  and beta. The witness reads native state with `PSGet*`, and additionally compares the t11 handle against the ReShade descriptor shadow (`shadow`, `shadow_t11`, `same`). It does **not** write
   `PSSet*`, bind replacement SRVs, create a shader or establish a PTDE
   probe alias. A non-NULL t11 is not proof of PTDE asset homology.
   The witness does not run if an earlier material/source gate rejects. On a deferred context, native PSGet state may differ from the ReShade descriptor shadow; a NULL native t11 alone must not be interpreted as absence of the shader-visible t11.
