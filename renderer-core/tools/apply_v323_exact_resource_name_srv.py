@@ -31,14 +31,18 @@ def patch_v230_view_witness(s: str) -> str:
     witness=once(witness,
         "        std::uint64_t registry_hash = 0u;",
         "        std::uint64_t registry_hash = 0u;\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
         "        v230_view_origin origin{};\n"
-        "        bool origin_found = false;")
+        "        bool origin_found = false;\n"
+        "#endif")
     witness=once(witness,
         "            const auto found = g_cache.find(key);",
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
         "            const auto observed = g_v230_view_origin.find(key);\n"
         "            if (observed != g_v230_view_origin.end()) {\n"
         "                origin=observed->second; origin_found=true;\n"
         "            }\n"
+        "#endif\n"
         "            const auto found = g_cache.find(key);")
     s=s[:begin]+witness+s[end:]
     return s
