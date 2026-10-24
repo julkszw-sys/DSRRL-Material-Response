@@ -5734,6 +5734,8 @@ void v230_rt_probe_once(
     std::uint32_t spec_rgb = 0u;
     std::uint16_t probe_a = 0u;
     std::uint16_t probe_b = 0u;
+    std::uint16_t diffuse_probe_a = 0u;
+    std::uint16_t diffuse_probe_b = 0u;
     if (prepared != nullptr && prepared->ready) {
         const auto &req = prepared->request;
         shader_ready = req.pixel_shader != nullptr ? 1u : 0u;
@@ -5745,6 +5747,8 @@ void v230_rt_probe_once(
             prepared->material_resources.spec_rgb ? 1u : 0u;
         probe_a = prepared->env_resources.probe_a;
         probe_b = prepared->env_resources.probe_b;
+        diffuse_probe_a = prepared->envdiffuse_resources.probe_a;
+        diffuse_probe_b = prepared->envdiffuse_resources.probe_b;
         for (std::uint32_t i = 0u; i < req.srv_count; ++i) {
             if (req.srvs[i].slot < 32u && req.srvs[i].srv != nullptr)
                 srv_mask |= 1u << req.srvs[i].slot;
@@ -5765,10 +5769,13 @@ void v230_rt_probe_once(
         "[DSRRL V230 RUNTIME] stage=%s rx=%u route=%u family=%s "
         "exact_owner=1 shader=%u cb12=%u envspec_ready=%u "
         "envdiffuse_ready=%u spec_rgb=%u probe_a=%u probe_b=%u "
+        "diff_probe_a=%u diff_probe_b=%u "
         "srv_mask=0x%08X sampler_mask=0x%08X pixel_pass=0",
         stage,rx,route,lerp ? "LERP" : "STABLE",
         shader_ready,owned_cb12,pack_envspec,pack_envdiffuse,spec_rgb,
         static_cast<unsigned>(probe_a),static_cast<unsigned>(probe_b),
+        static_cast<unsigned>(diffuse_probe_a),
+        static_cast<unsigned>(diffuse_probe_b),
         srv_mask,sampler_mask);
     reshade::log::message(reshade::log::level::warning,line);
 }
