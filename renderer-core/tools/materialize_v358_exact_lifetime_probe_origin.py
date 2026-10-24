@@ -87,7 +87,9 @@ replace(res,'''#endif
     }
     const auto digest = hashing::sha256(tight.data(),tight.size());''',"missing BC6H initial data")
 replace(res,'''    if (!probe.has_value()) {
-        if (spec) {''',
+        if (spec) ++g_native_hash_miss;
+        return;
+    }''',
 '''#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
     if (spec) {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -106,9 +108,8 @@ replace(res,'''    if (!probe.has_value()) {
 
     if (!probe.has_value()) {
         if (spec) ++g_native_hash_miss;
-        return;''',"certified and unknown native creation SHA"
-    if (!probe.has_value()) {
-        if (spec) {''',"certified and unknown native creation SHA")
+        return;
+    }''',"certified and unknown native creation SHA")
 replace(res,'''    g_native_resources.erase(
         resource_handle.handle);
 
