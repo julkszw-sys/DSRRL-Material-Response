@@ -38,6 +38,34 @@ namespace {
 namespace mr = operators::material_response;
 namespace hashing = operators::legacy_plan::hashing;
 
+// The materialized PS is not an immutable file. Record its final DXBC
+// digest AFTER the exact receiver/materializer and optional Lerp composition,
+// once per successfully-created PS. This is a create-time identity witness;
+// it neither changes shader bytes nor grants the draw any authority.
+void log_final_pmetal_shader_digest(
+    const char *family,
+    std::uint32_t receiver,
+    const hashing::sha256_digest &digest,
+    std::size_t byte_count) noexcept
+{
+    constexpr char alphabet[] = "0123456789abcdef";
+    char hex[65]{};
+    for (std::size_t i = 0u; i < digest.size(); ++i) {
+        hex[i * 2u] = alphabet[digest[i] >> 4u];
+        hex[i * 2u + 1u] = alphabet[digest[i] & 0x0fu];
+    }
+    char line[256]{};
+    std::snprintf(
+        line, sizeof(line),
+        "[DSRRL PS PAYLOAD AUTHORITY] family=%s rx=%u bytes=%zu final_dxbc_sha256=%s created=1 pixel_pass=0",
+        family,
+        static_cast<unsigned>(receiver),
+        byte_count,
+        hex);
+    reshade::log::message(
+        reshade::log::level::warning, line);
+}
+
 constexpr std::uint32_t k_pmetal_route_index = 345u;
 constexpr const char *k_pmetal_name =
     "P_Metal[DSB].mtd";
@@ -635,6 +663,9 @@ register_replacement(
         payload_sha256;
     record.payload_size =
         dxbc_size;
+    log_final_pmetal_shader_digest(
+        "StableHemEnv", outcome.receiver_id,
+        payload_sha256, dxbc_size);
 
     ++replacement_register_ok_;
     return true;
@@ -786,6 +817,9 @@ register_lerp_replacement(
     lerp_replacement_size_[
         outcome.semantic_receiver_id] =
         dxbc_size;
+    log_final_pmetal_shader_digest(
+        "HemEnvLerp", outcome.semantic_receiver_id,
+        payload_sha256, dxbc_size);
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
     char log[256]{};
     std::snprintf(log,sizeof(log),
