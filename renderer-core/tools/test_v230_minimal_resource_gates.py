@@ -528,7 +528,29 @@ assert "verified_character_not_equipment" in v230_resources
 assert "VERIFIED_CHR_NOT_PLAYER_EQUIPMENT" in v230_resources
 assert "v230_view_stage::verified_character_not_equipment" in v230_resources
 assert "prepared.verified_character_not_equipment = true;" in v230_resources
-assert "v230_observed_character_t1(it->second.logical_hash)" in v230_resources
+# Guard must stay effective in builds with runtime telemetry compiled out.
+# Only a proven native (view, device) lifetime may exclude this equipment draw.
+assert "g_v230_character_view_device" in v230_resources
+assert "k_v230_character_views_max" in v230_resources
+view_init = v230_resources.split("void on_init_resource_view(", 1)[1].split(
+    "void on_destroy_resource_view(", 1
+)[0]
+assert "g_v230_character_view_device[key] = native;" in view_init
+view_destroy = v230_resources.split("void on_destroy_resource_view(", 1)[1].split(
+    "void on_destroy_device(", 1
+)[0]
+assert "g_v230_character_view_device.erase(key)" in view_destroy
+assert "g_v230_view_origin.erase(key)" in view_destroy
+assert "g_v230_character_view_device.clear();" in v230_resources
+assert "it = g_v230_character_view_device.erase(it);" in v230_resources
+prepare_negative = v230_resources.split(
+    "// Certified negative chr owner view:", 1
+)[1].split("const companion_lookup_request companion_requests", 1)[0]
+assert "DSRRL_V230_RUNTIME_TELEMETRY" not in prepare_negative
+assert "registered_device == bound_device" in prepare_negative
+assert "bound_device->Release();" in prepare_negative
+assert "prepared.verified_character_not_equipment = true;" in prepare_negative
+assert "g_v230_view_origin.find(key)" not in prepare_negative
 assert "if (prepared.material_resources.verified_character_not_equipment)" in pmetal_rt
 assert '"character_not_equipment_stock"' in pmetal_rt
 assert pmetal_rt.index("if (prepared.material_resources.verified_character_not_equipment)") < pmetal_rt.index("if (!material_ready ||")
