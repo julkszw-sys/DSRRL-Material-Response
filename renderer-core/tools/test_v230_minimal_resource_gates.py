@@ -796,3 +796,21 @@ print("V230_DSR_RAW_MTD_SOURCE_CENSUS_PASS 35 routes, 33 exact registrable, "
       "2 quarantined (ambiguous, bad route digest); 30 source-verified repairs "
       "and exactly 2 stale-unique overrides, pixel OPEN")
 
+
+# Source-only diagnostic for ALL non-metal routes, including cloth/leather/wet.
+# Existing release INFO logs do not prove individual material joins.
+_v230_addon=(root / "integrated/integrated_addon.cpp").read_text("utf-8")
+assert "[DSRRL NONMETAL FIRST CUT]" in _v230_addon
+assert "g_v230_nonmetal_route_logged" in _v230_addon
+assert "material.route_index == 345u || material.route_index == 229u" in _v230_addon
+assert "material.route_index >= 512u" in _v230_addon
+assert "pixel_pass=0" in _v230_addon
+for _v230_stage in ("identity_visible", "mr_evaluated", "generic_candidate",
+                   "lerp_mr_prepared", "stable_mr_prepared", "generic_mr_not_prepared"):
+    assert _v230_stage in _v230_addon
+assert "v230_nonmetal_route_trace(0u, receiver_id, out_material, out_decision)" in _v230_addon
+assert "v230_nonmetal_route_trace(1u, receiver_id, out_material, out_decision)" in _v230_addon
+assert "v230_nonmetal_route_trace(2u, receiver_id, material, decision)" in _v230_addon
+assert "v230_nonmetal_route_trace(3u, receiver_id, material, decision)" in _v230_addon
+assert "prepared.mr_in_batch ? 4u : 5u" in _v230_addon
+print("V230_ALL_NONMETAL_FIRST_CUT_SOURCE_PASS route specific diagnostic only; no new shader permissions")
