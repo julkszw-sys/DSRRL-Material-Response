@@ -67,6 +67,31 @@ inline bool spec_equipment_allowed(std::uint64_t hash) noexcept
 #endif
 }
 
+// Negative-only RX34 source witness: these *exact* bound t1 identities were
+// reverse-joined to DSR chr/*.chrbnd FLVER, not parts/*.partsbnd equipment.
+// No basename/MTD inference or positive replacement authorization.
+inline bool v230_observed_character_t1(std::uint64_t h) noexcept
+{
+    switch (h) {
+    case 0x03f695a24f8f9be0ull:
+    case 0x236adf2eb0a2afccull: // c2500_wp_a_0200_s
+    case 0x2d2fc5a100f0b05dull:
+    case 0x370ad6a106dc1480ull:
+    case 0x4afb32a9129e6896ull:
+    case 0x6f6c845ad6e9c1d4ull:
+    case 0x82f8f87655320badull:
+    case 0x8629e77c1b231175ull:
+    case 0x8f94806ba5d2be1bull:
+    case 0x903b214ffd5bdb01ull:
+    case 0xa283bf761630b10bull:
+    case 0xfe12c9d08265290aull:
+    case 0xfe2aa6373d1213faull:
+        return true;
+    default:
+        return false;
+    }
+}
+
 enum class asset_class : std::uint8_t {
     specular = 0,
     diffuse,
