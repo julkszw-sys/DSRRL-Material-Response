@@ -638,3 +638,38 @@ for fn in (integrated[route_a:route_b], integrated[route_b:]):
 # Witness never changes operator authority or the business logic return path.
 assert "warrior_9360_trace" not in src
 print("V230_WARRIOR_9360_FIRST_CUT_PASS 8 SHA full owner both Draw variants no authority widening")
+
+
+# Two source-joined Standard Helm variants: narrow, executable, fail-open
+# nonmetal P_Metal EnvSpec-family operator with exact PTDE t1 provenance.
+manifest = (root / "include/dsrrl/runtime/v203_equipment_flver_slot_spec_manifest.hpp").read_text("utf-8")
+nonmetal = (root / "include/dsrrl/runtime/v203_equipment_envspec36_gate.hpp").read_text("utf-8")
+assert "sizeof(k_proven_parts_specs[0]) == 38u" in manifest
+helm_entries = (
+    ('"bfbef63e9611bd8b753f8197e5cabeabbf08ec400e098f2191561bdc5ce7396b", 0u, "C_Metal[DSB].mtd", "hd_m_9360_s"', "0xe9c532be429d6f7eull"),
+    ('"59c937ced4aaf41ba3f6db4a351d47b41dabd176224ecca4123b72a11d23baee", 0u, "P_Metal[DSB]_Edge.mtd", "hd_f_9360_s"', "0xb73e2e38d914a8f1ull"),
+)
+for source_row, logical_hash in helm_entries:
+    assert manifest.count(source_row) == 1
+    assert v230_resources.count(logical_hash) == 1
+assert "if (!exact_proven_owner_slot(query))" in nonmetal
+assert "classify_mtd_envspec_semantics(query)" in nonmetal
+assert "decision.receiver_id >= 33u" in nonmetal
+assert "decision.receiver_id <= 35u" in nonmetal
+assert "material.route_index == 345u" in nonmetal
+bound = v230_resources.split(
+    "bool material_resource_draw_runtime::\nprepare_draw_requests_bound(", 1
+)[1].split(
+    "bool material_resource_draw_runtime::\nprepare_fixed_pointlight_material_requests(", 1
+)[0]
+assert "v203_equipment::exact_proven_slot_spec_hash(query, h1)" in bound
+assert bound.index("v203_equipment::exact_proven_slot_spec_hash(query, h1)") < bound.index(
+    "context_spec.exact_name_ptde_companion_verified =")
+assert "spec_equipment_allowed(h1)" not in bound  # two-line C++ layout
+assert "spec_equipment_allowed(\\n                    h1)" in bound
+assert "if (exact_nonmetal)" in bound
+assert "spec_rgb_consumer_ready" in bound
+assert "material.owner_tuple_exact" in bound or "const bool exact_material" in bound
+assert "g_material_resources.prepare_draw_requests" in integrated
+assert "material_resource_draw_runtime" in integrated
+print("V230_WARRIOR_HELM_NARROW_OPERATOR_PASS exact FLVER slot MTD t1 plus receiver fail-open")
