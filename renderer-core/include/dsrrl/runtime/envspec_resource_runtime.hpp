@@ -93,6 +93,16 @@ public:
     // Full-PTDE HemEnv resource cut. Probe identity is supplied by the already
     // authenticated t12/t14 EnvSpec carrier; this method does not infer an
     // independent probe assignment from t11/t13.
+    // EnvDiffuse's OWN source identity: stock t11/t13 native SHA + COM
+    // lifetime, independent of EnvSpec t12/t14 probe ordinals or pack.
+    // Only one-to-one authenticated DSR t11 -> PTDE EnvDiffuse probe
+    // identity is admitted; absent/ambiguous host resources fail-open.
+    bool prepare_envdiffuse_bound(
+        ID3D11ShaderResourceView *stock_t11,
+        ID3D11ShaderResourceView *stock_t13,
+        bool probe_b_required,
+        prepared_envdiffuse_resources &prepared) noexcept;
+
     bool prepare_envdiffuse(
         std::uint16_t probe_a,
         std::uint16_t probe_b,
