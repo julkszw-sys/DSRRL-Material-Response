@@ -419,3 +419,33 @@ assert "dsrrl::runtime::draw_tx_issued(dispatch.transaction)" in integrated_rt
 assert "dsrrl::runtime::draw_tx_result::issued_restore_failed" in integrated_rt
 assert "probe_resolver_boundary" in hot_audit
 print("V230_RUNTIME_TELEMETRY_WIRING_PASS source_scope_native_one_addon_bounded_failopen_restore")
+
+# Native-current P_Metal does NOT use normal replay callback for all paths.
+# Arm is merely tentative. Verify four actual D3D11 original draws and
+# restoration outcomes, logging only AFTER the original invocation and
+# only when the pending mutation includes the EnvSpec operator.
+native_draw_rt = (root/"src/runtime/pmetal_native_draw_bridge.cpp").read_text("utf-8")
+runtime_body = native_draw_rt.split("void v230_native_rt_once(",1)[1].split(
+    "void retain_mutation(",1
+)[0]
+assert "core::operator_id::env_spec" in runtime_body
+assert "g_v230_native_rt_seen.fetch_or(" in runtime_body
+assert "pixel_pass=0" in runtime_body
+assert "original_draw_reached=%u restored=%u" in runtime_body
+for draw, lane in (
+    ("draw",0),
+    ("draw_indexed",1),
+    ("draw_instanced",2),
+    ("draw_indexed_instanced",3),
+):
+    fn="pmetal_native_draw_bridge::"+draw+"_hook("
+    assert fn in native_draw_rt
+    region=native_draw_rt.split(fn,1)[1]
+    # A second method cannot inadvertently satisfy the checks.
+    region=region.split("release_pending_draw(\n        pending);\n}",1)[0]
+    for outcome, stage in ((0,"capture_fail_stock"),(1,"restore_failed_quarantine"),(2,"draw_applied_restored")):
+        assert f'v230_native_rt_once({lane}u,{outcome}u,"{draw}"' in region
+        assert f'"{stage}",pending.mutation)' in region
+    assert "original(" in region and "restore_state(" in region
+assert native_draw_rt.count("v230_native_rt_once(") == 13
+print("V230_NATIVE_DRAW_POST_RESTORE_WITNESS_PASS 4_paths_no_arm_as_pass")
