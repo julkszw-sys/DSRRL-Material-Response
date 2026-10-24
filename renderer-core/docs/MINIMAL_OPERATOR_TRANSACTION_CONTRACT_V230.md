@@ -216,3 +216,59 @@ These are **construction-level** refactors, with no shader logic changes.
 Static contracts and Windows CI must pass for each new HEAD before treating
 the refactor as build-compatible. Device/runtime and PTDE-visible pixel
 equivalence remain independent, open gates.
+
+
+## Live runtime evidence protocol (V230 telemetry)
+
+The one-addon V230 **candidate** build enables
+`DSRRL_V230_RUNTIME_TELEMETRY`. Its warnings are session-capped and
+survive ordinary release INFO-log stripping. They never perform PSGet/PSSet
+or texture readback.
+
+The actual owner game must be launched with the newly-built addon and
+the same exact external asset sidecars as the baseline. Without the
+matching PTDE PackedGI EnvSpec *and* EnvDiffuse packs at the two paths
+above, the bridge must fail open. Do not substitute one pack for the
+other or assume that DLL compilation includes those external files.
+
+The captured ReShade log is evaluated with:
+
+```powershell
+python renderer-core/tools/verify_v230_runtime_log.py "ReShade.log"
+```
+
+The command requires an **actual recorded DSR session**. A separately
+provided `--selftest` only checks the parser on synthetic rows and is
+**not** runtime evidence. Save the addon SHA, the exact asset hashes,
+ReShade log and matched PTDE-vs-DSR scene/motion/time exposure setup.
+
+Evidence ladder:
+
+- `[DSRRL PS PAYLOAD AUTHORITY]`: final create-time DXBC hash and RX
+  identity; not evidence that the shader was bound or drew.
+- `[DSRRL ENVSPEC APPLY]`: bounded prepare stage and fail-open reason,
+  present as a warning in this instrumented V230 candidate.
+- `[DSRRL V230 RUNTIME]`: exact route 345 RX33–35 Stable/Lerp
+  `prepare_reject`, `batch_ready`, `native_armed`,
+  `draw_issued`/`indexed_issued`, failure or `restore_failed`.
+  The prepared row includes b12 and t11/t12/t13/t14 + matching sampler
+  slot bitmasks and explicit EnvSpec/EnvDiffuse resource readiness.
+- `[DSRRL V230 NATIVE DRAW]`: instrumented *native D3D11 hook* after
+  the real original Draw path, for draw, indexed, instanced and indexed
+  instanced. Distinguishes capture failure, original executed with
+  restore failure (quarantine), and original executed with successful
+  state restoration. This record carries operator ownership and draw
+  kind, but does not itself identify RX or prove matched pixels.
+- **Pixel behavior:** always OPEN until the owner supplies matched
+  PTDE/DSR screenshots/video and the operator-local delta is measured.
+  A build, shader hash, SRV mask, hook arm or a restored Draw is NOT pixel
+  equivalence.
+
+A native-armed log without `draw_applied_restored` or an actual
+`draw_issued` is *not* a successful bridge activation. A single native
+post-draw owner record must not be attributed to a particular RX without
+explicit same-draw correlation evidence.
+
+No executable modification on disk; the output stays one
+`DSRRL_Restored_Lighting_v2.3.0.addon64` candidate plus the independently
+hashed PTDE sidecars.
