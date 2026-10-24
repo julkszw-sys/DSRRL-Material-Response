@@ -5612,6 +5612,81 @@ void observe_equipment_specrgb_carrier(
     }
 }
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+// Session-bounded RX33-35 runtime bridge witness, not pixel proof.
+// Only exact P_Metal route 345. One row per receiver/family/stage.
+// No D3D state reads/writes: all resource and slot data are from the
+// already-prepared transaction, captured before release.
+std::atomic<std::uint64_t> g_v230_rt_probe_seen{0u};
+
+void v230_rt_probe_once(
+    unsigned phase,
+    const char *stage,
+    std::uint32_t rx,
+    std::uint32_t route,
+    bool lerp,
+    const dsrrl::runtime::prepared_pmetal_envspec_draw *prepared) noexcept
+{
+    if (rx < 33u || rx > 35u || route != 345u || phase >= 8u)
+        return;
+    // 8 phases x 2 families x 3 RX would exceed 64 bits. Use 8 phases
+    // per receiver and share Stable/Lerp through a 48-bit bounded mask.
+    const unsigned index = (rx - 33u) * 16u +
+        (lerp ? 8u : 0u) + phase;
+    const std::uint64_t bit = 1ull << index;
+    if ((g_v230_rt_probe_seen.fetch_or(
+            bit, std::memory_order_relaxed) & bit) != 0u)
+        return;
+
+    std::uint32_t srv_mask = 0u;
+    std::uint32_t sampler_mask = 0u;
+    std::uint32_t owned_cb12 = 0u;
+    std::uint32_t shader_ready = 0u;
+    std::uint32_t pack_envspec = 0u;
+    std::uint32_t pack_envdiffuse = 0u;
+    std::uint32_t spec_rgb = 0u;
+    std::uint16_t probe_a = 0u;
+    std::uint16_t probe_b = 0u;
+    if (prepared != nullptr && prepared->ready) {
+        const auto &req = prepared->request;
+        shader_ready = req.pixel_shader != nullptr ? 1u : 0u;
+        pack_envspec =
+            prepared->env_resources.ready ? 1u : 0u;
+        pack_envdiffuse =
+            prepared->envdiffuse_resources.ready ? 1u : 0u;
+        spec_rgb =
+            prepared->material_resources.spec_rgb ? 1u : 0u;
+        probe_a = prepared->env_resources.probe_a;
+        probe_b = prepared->env_resources.probe_b;
+        for (std::uint32_t i = 0u; i < req.srv_count; ++i) {
+            if (req.srvs[i].slot < 32u && req.srvs[i].srv != nullptr)
+                srv_mask |= 1u << req.srvs[i].slot;
+        }
+        for (std::uint32_t i = 0u; i < req.sampler_count; ++i) {
+            if (req.samplers[i].slot < 32u &&
+                req.samplers[i].sampler != nullptr)
+                sampler_mask |= 1u << req.samplers[i].slot;
+        }
+        for (std::uint32_t i = 0u; i < req.constant_buffer_count; ++i) {
+            if (req.constant_buffers[i].slot == 12u &&
+                req.constant_buffers[i].buffer != nullptr)
+                owned_cb12 = 1u;
+        }
+    }
+    char line[460]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V230 RUNTIME] stage=%s rx=%u route=%u family=%s "
+        "exact_owner=1 shader=%u cb12=%u envspec_ready=%u "
+        "envdiffuse_ready=%u spec_rgb=%u probe_a=%u probe_b=%u "
+        "srv_mask=0x%08X sampler_mask=0x%08X pixel_pass=0",
+        stage,rx,route,lerp ? "LERP" : "STABLE",
+        shader_ready,owned_cb12,pack_envspec,pack_envdiffuse,spec_rgb,
+        static_cast<unsigned>(probe_a),static_cast<unsigned>(probe_b),
+        srv_mask,sampler_mask);
+    reshade::log::message(reshade::log::level::warning,line);
+}
+#endif
+
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     bool fixed_pointlight_bound,
@@ -6173,6 +6248,13 @@ bool prepare_island_batch(
                 decision,
                 envspec_family,
                 prepared.envspec)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+            v230_rt_probe_once(0u,"prepare_reject",
+                decision.receiver_id,material.route_index,
+                envspec_family ==
+                    dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp,
+                nullptr);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
             dsrrl::runtime::v287_nonmetal_trace::log(
                 "atomic_prepare_fail",
@@ -6252,6 +6334,13 @@ bool prepare_island_batch(
         dsrrl::runtime::v287_nonmetal_trace::log(
             "atomic_batch_ready", material, decision,
             static_cast<std::uint32_t>(envspec_family));
+#endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_rt_probe_once(1u,"batch_ready",
+            decision.receiver_id,material.route_index,
+            envspec_family ==
+                dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp,
+            &prepared.envspec);
 #endif
         return true;
     }
@@ -6953,6 +7042,12 @@ bool on_draw(
             dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
                 "native_armed",material,decision,prepared.envspec);
 #endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (prepared.envspec_in_batch)
+            v230_rt_probe_once(2u,"native_armed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade continues into its single original
@@ -7048,6 +7143,17 @@ bool on_draw(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.envspec_in_batch) {
+        const bool issued =
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+        v230_rt_probe_once(
+            issued ? 3u : 4u,
+            issued ? "draw_issued" : "draw_failopen",
+            decision.receiver_id,material.route_index,
+            hemenvlerp_bound,&prepared.envspec);
+    }
+#endif
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
@@ -7490,6 +7596,12 @@ bool on_draw_indexed(
             dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
                 "native_armed",material,decision,prepared.envspec);
 #endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (prepared.envspec_in_batch)
+            v230_rt_probe_once(2u,"native_armed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade executes exactly one original
@@ -7538,6 +7650,17 @@ bool on_draw_indexed(
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.envspec_in_batch) {
+        const bool issued =
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+        v230_rt_probe_once(
+            issued ? 5u : 6u,
+            issued ? "indexed_issued" : "indexed_failopen",
+            decision.receiver_id,material.route_index,
+            hemenvlerp_bound,&prepared.envspec);
+    }
+#endif
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
