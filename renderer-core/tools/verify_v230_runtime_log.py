@@ -144,6 +144,7 @@ def evaluate(log: str) -> dict:
         "ptde_pixel_behavior": "UNVERIFIED_REQUIRES_MATCHED_PTDE_AB",
         "scope_note": "Native post-draw EnvSpec owner and RX-level arm may not refer to the same draw; no RX-level correlation claimed.",
         "receivers": detail,
+        "rx34_sidecar_names": get_rx34_sidecar_rows(log),
     }
 
 
