@@ -426,9 +426,17 @@ bool material_response_draw_runtime::register_replacement_record(
             dxbc_size
         });
 
-    // Registration is append-only for a (bank, receiver) key. Existing TLS
-    // entries own strong shader references and remain valid when an unrelated
-    // replacement is added, so do not globally invalidate the draw cache.
+    // Fix exact MR shader registration visibility. acquire_replacement()
+    // caches absent (bank, receiver) keys as present=false with the current
+    // epoch. Without invalidation, a thread which asked for the key before
+    // this create-time registration can fail-open FOREVER even after the
+    // exact shader has been registered. Advance only when a NEW replacement
+    // is installed. Existing TLS AddRef references remain safe; the next
+    // lookup refreshes once using the verified live registry. No operator,
+    // receiver, material or resource permission is widened.
+    resource_epoch_.fetch_add(
+        1u,
+        std::memory_order_release);
     ++ok_counter;
     return true;
 }
