@@ -169,6 +169,7 @@ struct v230_view_origin {
     v230_view_stage stage = v230_view_stage::unknown;
     std::uint8_t class_mask = 0u;
     std::uint8_t uploaded_mask = 0u;
+    std::uint8_t disk_mask = 0u;
 };
 std::unordered_map<std::uint64_t, v230_view_origin> g_v230_view_origin;
 constexpr std::size_t k_v230_view_origin_max = 16384u;
