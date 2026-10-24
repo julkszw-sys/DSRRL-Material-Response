@@ -183,7 +183,8 @@ marker='''        if (spec) ++g_native_hash_miss;
         return;
     }
     const auto digest = hashing::sha256(tight.data(),tight.size());'''
-repl='''        ++g_native_hash_miss;
+repl='''        if (spec) {
+            ++g_native_hash_miss;
 #if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
         const auto n=g_v357_missing_bc6h_init.fetch_add(
             1u,std::memory_order_relaxed);
@@ -197,11 +198,10 @@ repl='''        ++g_native_hash_miss;
             reshade::log::message(reshade::log::level::info,line);
         }
 #endif
+        }
         return;
     }
-
-    const auto digest =
-        hashing::sha256('''
+    const auto digest = hashing::sha256(tight.data(),tight.size());'''
 apply(p,marker,repl,"producer extraction unknown")
 marker='''    if (!probe.has_value()) {
         ++g_native_hash_miss;
