@@ -33,6 +33,8 @@ def get_rx34_sidecar_rows(log):
         slot, key = v.get("slot"), v.get("name")
         if slot in ("t0", "t1", "t2") and key:
             rows.setdefault((slot, key), v)
+    if not rows:
+        return []
     # Certify PTDE sidecar membership, not material/MTD permission.
     from generate_sidecar_spec_whitelist_20261010 import (
         load_names, fnv1a_ascii_lower,
