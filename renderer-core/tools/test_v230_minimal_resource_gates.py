@@ -255,7 +255,7 @@ registry = env.split("bool resolve_tracked_probe_locked(", 1)[1].split(
     "bool snapshot_ready_envspec(", 1
 )[0]
 ptde_resolution = env.split("bool snapshot_ready_envspec(", 1)[1].split(
-    "bool get_ptde_cube(", 1
+    "bool probe_for_native_view(", 1
 )[0]
 native_resolution = env.split(
     "bool envspec_resource_runtime::prepare_native_dsr(", 1
