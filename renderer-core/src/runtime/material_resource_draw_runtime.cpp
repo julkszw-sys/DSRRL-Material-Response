@@ -2132,9 +2132,15 @@ prepare_draw_requests_bound(
                     h1) &&
             replacement != nullptr;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-        // Full owner/slot/MTD + currently bound stock t1 logical identity.
-        // SpecRGB existence alone never authorizes a nonmetal consumer.
-        // Full Oct10 resource allowlist + bound t1 identity: no static 36-slot veto.
+        // The PTDE nonmetal consumer requires a SAME-OWNER stock t1 name.
+        // A globally eligible SpecRGB DDS and matching MTD are not enough:
+        // bind only this FLVER's exact source g_Specular for this slot.
+        const bool exact_nonmetal =
+            v203_equipment::exact_envspec36_material(query.material);
+        if (exact_nonmetal)
+            exact_companion =
+                exact_companion &&
+                v203_equipment::exact_proven_slot_spec_hash(query, h1);
 #endif
 
         operators::resource_bridges::
@@ -2170,10 +2176,8 @@ prepare_draw_requests_bound(
             true;
 
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-        const bool exact_nonmetal =
-            v203_equipment::exact_envspec36_material(query.material);
-        // Only exact 36-owner dedicated PTDE PS may bypass the generic
-        // MTD census, which intentionally blocks PTDE RGB -> DSR PBL.
+        // Only the source-attested dedicated PTDE PS can bypass the
+        // generic MR census (which forbids PTDE RGB -> host DSR PBL).
         const auto decision =
             exact_nonmetal
                 ? operators::resource_bridges::
