@@ -247,3 +247,36 @@ for slot, resource in (
 assert "shadow_sampler" in sampler_bindings
 assert "if (family == pmetal_envspec_receiver_family::hemenvlerp)" in sampler_bindings
 print("V230_CUBEMAP_SAMPLER_UNIFICATION_PASS exact_s11_s12_s13_s14_shadow_s7")
+
+# Both full-PTDE packed-cubemap and native-DSR V13 diagnostic must resolve
+# stock SRV -> canonical probe ID through the *same* tracked-view registry.
+# This removes a duplicate resolver, not an asset/resource equivalence gate.
+registry = env.split("bool resolve_tracked_probe_locked(", 1)[1].split(
+    "bool snapshot_ready_envspec(", 1
+)[0]
+ptde_resolution = env.split("bool snapshot_ready_envspec(", 1)[1].split(
+    "bool get_ptde_cube(", 1
+)[0]
+native_resolution = env.split(
+    "bool envspec_resource_runtime::prepare_native_dsr(", 1
+)[1].split(
+    "bool envspec_resource_runtime::prepare_envdiffuse(", 1
+)[0]
+assert "g_resource_by_view.find(key)" in registry
+assert "probe = found->second.probe_ordinal;" in registry
+assert "if (view == nullptr)" in registry
+assert ptde_resolution.count("resolve_tracked_probe_locked(") == 2
+assert native_resolution.count("resolve_tracked_probe_locked(") == 2
+assert "probe_for_native_view(" not in env
+assert "const auto resolve_probe_locked =" not in env
+assert "probe_a >=\n            env::k_legacy_envspec_probe_count" in ptde_resolution
+assert "probe_b >=\n            env::k_legacy_envspec_probe_count" in ptde_resolution
+assert "probe_a < env::k_legacy_envspec_probe_count" in native_resolution
+assert "probe_b < env::k_legacy_envspec_probe_count" in native_resolution
+assert "std::lock_guard<std::mutex> lock(g_mutex)" in ptde_resolution
+assert "std::lock_guard<std::mutex> lock(\n            g_mutex)" in native_resolution
+assert native_resolution.count("context->PSGetShaderResources(") == 1
+assert "probe_b_required ? 3u : 1u" in native_resolution
+assert "if (!probe_b_required)\n                probe_b = probe_a;" in native_resolution
+assert "if (!probe_b_required)\n        stock_b->AddRef();" in native_resolution
+print("V230_PROBE_RESOLVER_UNIFIED_PASS PTDE_cube_native_DSR_same_tracked_view_guard")
