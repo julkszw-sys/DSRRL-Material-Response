@@ -370,3 +370,14 @@ assert "same_device" in v356_materializer
 assert 'once(anchor,impl+anchor,"helper")' in v356_materializer
 assert 'once(before,after,"probe_for_native_view")' in v356_materializer
 print("V230_V356_ALIAS_MATERIALIZER_COMPAT_PASS exact_resource_backing_still_in_unified_resolver")
+
+# No authority escalation: V356 permitted same-backing rescue for the PTDE
+# PackedGI materializer, NOT the old native V13 falsifier. Shared lookup
+# mechanically routes both but explicitly marks the original receiver scope.
+assert "bool allow_verified_alias) noexcept" in registry
+assert ptde_resolution.count("probe_a,\n            true))") == 1
+assert ptde_resolution.count("probe_b,\n                true))") == 1
+assert native_resolution.count("probe_a,\n                false) &&") == 1
+assert native_resolution.count("probe_b,\n                 false) &&") == 1
+assert "if (allow_verified_alias)\n        return v356_resolve_exact_native_backing_locked(view,probe);" in unified_v356
+print("V230_V356_ALIAS_SCOPE_PASS ptde_only_native_v13_stays_strict")
