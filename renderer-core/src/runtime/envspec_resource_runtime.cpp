@@ -203,119 +203,44 @@ std::filesystem::path process_dir()
         buffer).parent_path();
 }
 
-bool load_pack(
+// The two PTDE PackedGI families have different contents, cardinalities
+// and semantic consumers. Share only the mechanics of reading a regular
+// file with exact size and SHA-256 validation; never share pack identity
+// or infer a probe ordinal from an EnvDiffuse/native LegacyGI texture.
+bool load_exact_cube_pack(
+    const char *relative_path,
+    std::uint64_t expected_size,
+    const hashing::sha256_digest &expected_digest,
     std::vector<std::uint8_t> &out)
 {
     out.clear();
 
     try {
-        const auto root =
-            process_dir();
-        if (root.empty())
+        const auto root = process_dir();
+        if (root.empty() || relative_path == nullptr)
             return false;
 
         const auto path =
-            root /
-            std::filesystem::path(
-                env::k_legacy_packed_gi_relative_path);
+            root / std::filesystem::path(relative_path);
 
         std::error_code ec;
-        const auto size =
-            std::filesystem::file_size(
-                path,
-                ec);
-
-        if (ec ||
-            size != env::k_legacy_packed_gi_size)
+        const auto size = std::filesystem::file_size(path, ec);
+        if (ec || size != expected_size)
             return false;
 
-        std::ifstream stream(
-            path,
-            std::ios::binary);
+        std::ifstream stream(path, std::ios::binary);
         if (!stream)
             return false;
 
         std::vector<std::uint8_t> bytes(
             static_cast<std::size_t>(size));
-
         if (!stream.read(
-                reinterpret_cast<char *>(
-                    bytes.data()),
-                static_cast<std::streamsize>(
-                    bytes.size())))
+                reinterpret_cast<char *>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size())))
             return false;
 
-        const auto digest =
-            hashing::sha256(
-                bytes.data(),
-                bytes.size());
-
-        if (digest !=
-            env::k_legacy_packed_gi_sha256)
-            return false;
-
-        out =
-            std::move(bytes);
-        return true;
-    } catch (...) {
-        out.clear();
-        return false;
-    }
-}
-
-
-bool load_envdiffuse_pack(
-    std::vector<std::uint8_t> &out)
-{
-    out.clear();
-
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    return false;
-#else
-    try {
-        const auto root =
-            process_dir();
-        if (root.empty())
-            return false;
-
-        const auto path =
-            root /
-            std::filesystem::path(
-                env::k_ptde_envdiffuse_packed_gi_relative_path);
-
-        std::error_code ec;
-        const auto size =
-            std::filesystem::file_size(
-                path,
-                ec);
-
-        if (ec ||
-            size != env::k_ptde_envdiffuse_packed_gi_size)
-            return false;
-
-        std::ifstream stream(
-            path,
-            std::ios::binary);
-        if (!stream)
-            return false;
-
-        std::vector<std::uint8_t> bytes(
-            static_cast<std::size_t>(size));
-
-        if (!stream.read(
-                reinterpret_cast<char *>(
-                    bytes.data()),
-                static_cast<std::streamsize>(
-                    bytes.size())))
-            return false;
-
-        const auto digest =
-            hashing::sha256(
-                bytes.data(),
-                bytes.size());
-
-        if (digest !=
-            env::k_ptde_envdiffuse_packed_gi_sha256)
+        if (hashing::sha256(bytes.data(), bytes.size()) !=
+            expected_digest)
             return false;
 
         out = std::move(bytes);
@@ -324,6 +249,28 @@ bool load_envdiffuse_pack(
         out.clear();
         return false;
     }
+}
+
+bool load_pack(std::vector<std::uint8_t> &out)
+{
+    return load_exact_cube_pack(
+        env::k_legacy_packed_gi_relative_path,
+        env::k_legacy_packed_gi_size,
+        env::k_legacy_packed_gi_sha256,
+        out);
+}
+
+bool load_envdiffuse_pack(std::vector<std::uint8_t> &out)
+{
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    out.clear();
+    return false;
+#else
+    return load_exact_cube_pack(
+        env::k_ptde_envdiffuse_packed_gi_relative_path,
+        env::k_ptde_envdiffuse_packed_gi_size,
+        env::k_ptde_envdiffuse_packed_gi_sha256,
+        out);
 #endif
 }
 
