@@ -184,3 +184,31 @@ source-only refactor of `pmetal_envspec_draw_runtime.cpp` now writes
 common t12/t14 and s12/s14 mappings once, preserving slot order and
 mode-specific t11/t13 and s11/s13 routes. No D3D11 transaction permission
 or shader bytecode is changed here.
+
+
+### Reused implementation, independent asset authority
+
+The next cleanup also removes duplicate source-code mechanics in
+`envspec_resource_runtime.cpp`:
+
+- A single `resolve_tracked_probe_locked` looks up exact native stock SRV
+  identity in the tracked view map for either PTDE cube replacement or the
+  explicitly requested native-DSR V13 diagnostic. The original caller-specific
+  range checks and the exact `beta == 0` A/B alias remain; the read always
+  occurs under `g_mutex`, with lifetime epochs intact.
+- A single `load_exact_cube_pack` implements file-size and SHA-256 checks.
+  EnvSpec and EnvDiffuse continue to pass **different** paths, byte lengths
+  and digests and have different readiness flags.
+- A single `create_ptde_rgba_cube` creates the six-face 32×32 RGBA8 GPU
+  resource/SRV after copying 24 KiB from the correct pack while holding the
+  registry lock. The callers continue to insert into different maps
+  (`g_ptde_cubes` vs `g_ptde_envdiffuse_cubes`) and validate carrier
+  liveness, retaining the exact original failure accounting.
+- The native DSR diagnostic retains stock SRVs and never consumes the PTDE
+  EnvDiffuse pack by virtue of sharing lookup mechanics. This does not resolve
+  unknown native `t11` / LegacyGI resource identity.
+
+These are **construction-level** refactors, with no shader logic changes.
+Static contracts and Windows CI must pass for each new HEAD before treating
+the refactor as build-compatible. Device/runtime and PTDE-visible pixel
+equivalence remain independent, open gates.
