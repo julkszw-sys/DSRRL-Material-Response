@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Static invariants: each texture is authorized by its OWN bound SRV."""
 from pathlib import Path
+import re
 root = Path(__file__).resolve().parents[1]
 src = (root / "src/runtime/material_resource_draw_runtime.cpp").read_text("utf-8")
 dif = (root / "src/operators/resource_bridges/diffuse_bridge.cpp").read_text("utf-8")
@@ -524,6 +525,19 @@ print("V230_INSTALLED_DDS_VS_ALLOWLIST_WITNESS_PASS")
 char_source = "0x236adf2eb0a2afccull"
 assert char_source in v230_resources
 assert "v230_observed_character_t1" in v230_resources
+# Full exact bound-t1 source census (2026-10-24), not name-prefix guessing.
+# Negative classifier is the 13 source-joined chr/chrbnd identities ONLY;
+# 11 observed player parts/partsbnd t1 are never put in this list.
+chr_switch = v230_resources.split(
+    "inline bool v230_observed_character_t1(", 1
+)[1].split("enum class asset_class", 1)[0]
+negative_t1 = set(re.findall(r"case (0x[0-9a-f]{16}ull):", chr_switch))
+source_confirmed_chr_t1 = {"0x03f695a24f8f9be0ull", "0x236adf2eb0a2afccull", "0x2d2fc5a100f0b05dull", "0x370ad6a106dc1480ull", "0x4afb32a9129e6896ull", "0x6f6c845ad6e9c1d4ull", "0x82f8f87655320badull", "0x8629e77c1b231175ull", "0x8f94806ba5d2be1bull", "0x903b214ffd5bdb01ull", "0xa283bf761630b10bull", "0xfe12c9d08265290aull", "0xfe2aa6373d1213faull"}
+source_confirmed_parts_t1 = {"0x409676c83f3dbf70ull", "0x47e4afc842fe2f4bull", "0x644555ce9c04b58cull", "0x6ce2d3ff65aa3dd2ull", "0x7ddcf9d737353ea7ull", "0x877dac9e867b292dull", "0x96ea43ceb853c1f6ull", "0x9ff70f9e93ea9ca6ull", "0xc916b4715f9e5422ull", "0xdc1dd5dff91bfeeaull", "0xf9f4e98643b0c3c7ull"}
+assert negative_t1 == source_confirmed_chr_t1
+assert len(source_confirmed_parts_t1) == 11
+assert not (negative_t1 & source_confirmed_parts_t1)
+
 assert "verified_character_not_equipment" in v230_resources
 assert "VERIFIED_CHR_NOT_PLAYER_EQUIPMENT" in v230_resources
 assert "v230_view_stage::verified_character_not_equipment" in v230_resources
