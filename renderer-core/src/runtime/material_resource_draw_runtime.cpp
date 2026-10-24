@@ -1667,7 +1667,8 @@ void on_init_resource_view(
         v230_uploaded_mask == 0u
             ? v230_view_stage::registered_without_upload :
               v230_view_stage::registered,
-        v230_class_mask,v230_uploaded_mask);
+        v230_class_mask,v230_uploaded_mask,
+        v230_disk_mask);
 #endif
     ++g_named_views;
 }
