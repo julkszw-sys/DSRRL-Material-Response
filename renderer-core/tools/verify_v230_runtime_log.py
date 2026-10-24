@@ -33,6 +33,17 @@ def get_rx34_sidecar_rows(log):
         slot, key = v.get("slot"), v.get("name")
         if slot in ("t0", "t1", "t2") and key:
             rows.setdefault((slot, key), v)
+    # Certify PTDE sidecar membership, not material/MTD permission.
+    from generate_sidecar_spec_whitelist_20261010 import (
+        load_names, fnv1a_ascii_lower,
+    )
+    base = Path(__file__).resolve().parents[1]
+    names = load_names(base/"data/provenance/sidecar_specular_20261010_names.b85")
+    ptde = {f"{fnv1a_ascii_lower(n):016x}": n for n in names}
+    for v in rows.values():
+        if v["slot"] == "t1":
+            v["ptde_spec_name"] = ptde.get(v["name"])
+            v["in_ptde_1295"] = v["name"] in ptde
     return sorted(rows.values(), key=lambda r: (r["slot"], r["name"]))
 
 def evaluate(log: str) -> dict:
