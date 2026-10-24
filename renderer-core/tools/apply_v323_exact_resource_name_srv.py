@@ -213,6 +213,15 @@ void on_destroy_resource(
         '#endif\\n        return;\\n    }')
     if diagnostic_old in s:
         s=once(s,diagnostic_old,old)
+        # Only after V214's native resource/SRV equality path failed is the
+        # stock view truly without a certified name. This is diagnostic only.
+        new=new.replace(
+            '            source_len==0u)\\n            return;',
+            '            source_len==0u) {\\n'
+            '#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\\n'
+            '            v230_observe_view(view.handle,source_resource.handle,0u,\\n'
+            '                v230_view_stage::no_name_scope,0u,0u);\\n'
+            '#endif\\n            return;\\n        }')
     s=once(s,old,new)
 
     s=once(s,
