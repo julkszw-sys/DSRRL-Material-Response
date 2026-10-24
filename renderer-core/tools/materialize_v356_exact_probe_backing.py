@@ -76,6 +76,45 @@ bool v356_resolve_exact_native_backing_locked(
 #endif
 
 '''
+# The simplified V230 source has a single exact tracked-view resolver,
+# shared by the PTDE RGBA PackedGI path and the native-DSR BC6H falsifier.
+# Install the EXISTING V356 same-backing SHA/resource check at that common
+# semantic cut, not by restoring the now-dead probe_for_native_view().
+# Original V350/V359 sources without this helper keep the legacy anchors.
+if "bool resolve_tracked_probe_locked(" in s:
+    unified_anchor='''bool resolve_tracked_probe_locked(
+    ID3D11ShaderResourceView *view,
+    std::uint16_t &probe) noexcept
+{'''
+    once(unified_anchor,impl+unified_anchor,"unified helper")
+    before_unified='''    const auto found = g_resource_by_view.find(key);
+    if (found == g_resource_by_view.end())
+        return false;
+
+    probe = found->second.probe_ordinal;
+    return true;
+}
+
+bool snapshot_ready_envspec('''
+    after_unified='''#if defined(DSRRL_V356_EXACT_BACKING_SRV_ALIAS)
+    (void)key;
+    return v356_resolve_exact_native_backing_locked(view,probe);
+#else
+    const auto found = g_resource_by_view.find(key);
+    if (found == g_resource_by_view.end())
+        return false;
+
+    probe = found->second.probe_ordinal;
+    return true;
+#endif
+}
+
+bool snapshot_ready_envspec('''
+    once(before_unified,after_unified,"unified resolver")
+    p.write_text(s,encoding="utf8")
+    print("V356_ENVSPEC_NATIVE_BC6H_SHA_RESOURCE_SRV_ALIAS_PATCH_PASS source=UNIFIED_TRACKED_VIEW")
+    raise SystemExit(0)
+
 once(anchor,impl+anchor,"helper")
 before='''    const auto by_view =
         g_resource_by_view.find(key);
