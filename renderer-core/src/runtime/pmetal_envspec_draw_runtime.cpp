@@ -1418,6 +1418,51 @@ bool pmetal_envspec_draw_runtime::prepare(
                       prepared.env_resources);
 
     if (!env_resource_ready) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        // An EnvSpec probe reject is not a SpecRGB sidecar reject.
+        // Record source A/B and the current verified pack/sampler state
+        // without asking a similar texture/probe to stand in. No mutation.
+        if (decision.receiver_id >= 33u &&
+            decision.receiver_id <= 35u &&
+            material.route_index == 345u) {
+            static std::atomic<std::uint32_t> seen{0u};
+            const auto sample = seen.fetch_add(
+                1u,std::memory_order_relaxed);
+            if (sample < 32u) {
+                const auto env_t =
+                    env_resources_.telemetry();
+                char line[460]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V230 PROBE FAIL CUT] sample=%u rx=%u "
+                    "family=%u env_slot=%u beta=%.9g "
+                    "b_required=%u native_feed=%u shadow_ready=%u "
+                    "shadow_a=%p shadow_b=%p "
+                    "pack_ready=%u sampler_ready=%u "
+                    "native_candidates=%llu native_matches=%llu "
+                    "view_matches=%llu pixel_pass=0",
+                    sample+1u,
+                    static_cast<unsigned>(decision.receiver_id),
+                    static_cast<unsigned>(family),
+                    static_cast<unsigned>(env_semantics.envspc_slot),
+                    static_cast<double>(source.beta),
+                    probe_b_required?1u:0u,
+                    k_native_dsr_cubemap_feed?1u:0u,
+                    shadow_env_ready?1u:0u,
+                    static_cast<void *>(shadow_env[0]),
+                    static_cast<void *>(shadow_env[2]),
+                    env_t.pack_ready?1u:0u,
+                    env_t.sampler_ready?1u:0u,
+                    static_cast<unsigned long long>(
+                        env_t.native_candidates),
+                    static_cast<unsigned long long>(
+                        env_t.native_matches),
+                    static_cast<unsigned long long>(
+                        env_t.view_matches));
+                reshade::log::message(
+                    reshade::log::level::warning,line);
+            }
+        }
+#endif
         if (shader != nullptr)
             shader->Release();
         telemetry::hot_count(probe_rejects_);
