@@ -23,6 +23,18 @@ STAGE_RE = re.compile(r"\bstage=([a-z_]+)\b")
 VALUE_RE = re.compile(r"\b([a-z][a-z0-9_]*)=([^\s]+)")
 
 
+
+def get_rx34_sidecar_rows(log):
+    rows = {}
+    for line in log.splitlines():
+        if "[DSRRL RX34 RESOURCE ID WITNESS]" not in line:
+            continue
+        v = dict(VALUE_RE.findall(line.split("WITNESS]", 1)[1]))
+        slot, key = v.get("slot"), v.get("name")
+        if slot in ("t0", "t1", "t2") and key:
+            rows.setdefault((slot, key), v)
+    return sorted(rows.values(), key=lambda r: (r["slot"], r["name"]))
+
 def evaluate(log: str) -> dict:
     rows = []
     native_rows = []
