@@ -159,3 +159,27 @@ assert 'prepared.spec_rgb' not in witness
 assert 'prepared.diffuse' not in witness
 assert 'prepared.normal' not in witness
 print("V230_RX34_IDENTITY_WITNESS_PASS scoped_readonly_capped_failopen")
+
+# Exact P_Metal RX34 native t11/s11/b12 census precedes all mutations.
+# Resource class is measured from the live view/texture, not guessed from
+# EnvSpec probe ordinal or a coincidentally named PTDE file.
+assert 'void witness_rx34_native_envdiffuse(' in composed
+t11_witness = composed.split('void witness_rx34_native_envdiffuse(', 1)[1].split('std::atomic_bool g_source_cut_logged', 1)[0]
+for read in (
+    'context->PSGetShaderResources(11u, 1u, &t11);',
+    'context->PSGetSamplers(11u, 1u, &s11);',
+    'context->PSGetConstantBuffers(12u, 1u, &b12);',
+    't11->GetDesc(&srv_desc);',
+    'texture->GetDesc(&texture_desc);',
+    'cb_desc.ByteWidth',
+    'source.envdiffuse_linear_valid',
+    'sample >= 8u',
+):
+    assert read in t11_witness
+for write in ('PSSetShaderResources(', 'PSSetSamplers(', 'PSSetConstantBuffers(', 'PSSetShader('):
+    assert write not in t11_witness
+assert 'decision.receiver_id == 34u &&' in composed
+assert 'material.route_index == 345u' in composed
+assert 'witness_rx34_native_envdiffuse(context, source);' in composed
+assert composed.index('witness_rx34_native_envdiffuse(context, source);') < composed.index('ID3D11PixelShader *shader = nullptr;')
+print("V230_RX34_T11_DOMAIN_WITNESS_PASS exact_material_readonly_t11_s11_b12")
