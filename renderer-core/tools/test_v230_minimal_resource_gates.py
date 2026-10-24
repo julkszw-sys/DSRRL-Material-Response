@@ -208,3 +208,25 @@ assert "merge_slot_bindings(\n            staged.mutation.samplers," in atomic_a
 assert "++staged.island_count;" in atomic_append
 assert "++batch.island_count;" not in atomic_append
 print("V230_ATOMIC_BATCH_APPEND_PASS no_partial_mutation_on_late_conflict")
+
+# Cubemap transport is part of the complete shader transaction. Every
+# supported variant binds its EnvSpec A/B pair exactly once; the dependent
+# PTDE EnvDiffuse t11/t13 pair is still mode/receiver-specific. This checks
+# slot routing only, not stock view mapping or PTDE pixel equivalence.
+srv_bindings = composed.split(
+    "    std::uint32_t request_srv_count = 0u;", 1
+)[1].split("    prepared.request.srv_count =", 1)[0]
+assert srv_bindings.count("12u, prepared.env_resources.ptde_a") == 1
+assert srv_bindings.count("14u, prepared.env_resources.ptde_b") == 1
+assert srv_bindings.count("11u, prepared.envdiffuse_resources.ptde_a") == 1
+assert srv_bindings.count("13u, prepared.envdiffuse_resources.ptde_b") == 1
+assert "11u, prepared.native_dsr_envdiffuse_a" in srv_bindings
+assert "13u, prepared.native_dsr_envdiffuse_b" in srv_bindings
+assert srv_bindings.index("11u, prepared.envdiffuse_resources.ptde_a") < srv_bindings.index("12u, prepared.env_resources.ptde_a")
+assert srv_bindings.index("12u, prepared.env_resources.ptde_a") < srv_bindings.index("13u, prepared.envdiffuse_resources.ptde_b")
+assert srv_bindings.index("13u, prepared.envdiffuse_resources.ptde_b") < srv_bindings.index("14u, prepared.env_resources.ptde_b")
+assert "if (family == pmetal_envspec_receiver_family::hemenvlerp)" in srv_bindings
+assert "if (native_envdiffuse_b_required)" in srv_bindings
+assert "DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG" in srv_bindings
+assert "DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG" in srv_bindings
+print("V230_CUBEMAP_BIND_UNIFICATION_PASS t11_t12_t13_t14_order_and_modes")
