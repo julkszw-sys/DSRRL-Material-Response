@@ -112,10 +112,10 @@ assert "out.base_b = out.base_a;" in selector_code
 assert "out.beta_bits = beta_bits;" in selector_code
 
 
-// The native blend hook receives the ORIGINAL source pointers. Selecting B
-// with beta >= 1 must update both the selector and the bank pointer. Without
-// this, select() returns (B,B,0) but the hook reads B's row out of A's bank.
-// This is separate from the exact zero-beta / same-selector reduction above.
+# The native blend hook receives the ORIGINAL source pointers. Selecting B
+# with beta >= 1 must update both the selector and the bank pointer. Without
+# this, select() returns (B,B,0) but the hook reads B's row out of A's bank.
+# This is separate from the exact zero-beta / same-selector reduction above.
 policy = (root / "include/dsrrl/runtime/pmetal_selector_policy.hpp").read_text("utf-8")
 assert "inline bool selects_only_b(" in policy
 b_only_code = policy.split("inline bool selects_only_b(", 1)[1].split("struct endpoints", 1)[0]
