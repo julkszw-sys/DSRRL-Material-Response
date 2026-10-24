@@ -243,6 +243,51 @@ std::atomic_bool g_mr_once_receiver_hit{false};
 std::atomic_bool g_mr_once_owner_join{false};
 std::atomic_bool g_mr_once_decision_active{false};
 std::atomic_bool g_mr_once_identity{false};
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+// Diagnostic-only: bounded per exact MR route and stage. No admission,
+// graphics state mutation or material/source reclassification.
+std::array<std::atomic_bool, 4096u> g_v230_nonmetal_route_logged{};
+void v230_nonmetal_route_trace(
+    std::uint32_t stage,
+    std::uint32_t receiver,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision) noexcept
+{
+    if (!material.valid || material.semantic_name_hash == 0u ||
+        material.route_index == 345u || material.route_index == 229u ||
+        material.route_index >= 512u || stage >= 8u)
+        return;
+    const auto key = static_cast<std::size_t>(material.route_index) * 8u + stage;
+    if (g_v230_nonmetal_route_logged[key].exchange(
+            true, std::memory_order_relaxed))
+        return;
+    static const char *const names[8] = {
+        "identity_visible", "mr_evaluated", "generic_candidate",
+        "lerp_mr_prepared", "stable_mr_prepared",
+        "generic_mr_not_prepared", "reserved6", "reserved7"
+    };
+    char msg[496]{};
+    std::snprintf(msg, sizeof(msg),
+        "[DSRRL NONMETAL FIRST CUT] stage=%s route=%u rx=%u sem=%016llx "
+        "slot=%u owner=%u actual_mtd=%u mat_valid=%u "
+        "active=%u reason=%u ops=%08x raw_mtd=%02x%02x%02x%02x pixel_pass=0",
+        names[stage], static_cast<unsigned>(material.route_index),
+        static_cast<unsigned>(receiver),
+        static_cast<unsigned long long>(material.semantic_name_hash),
+        static_cast<unsigned>(material.material_slot),
+        material.owner_tuple_exact ? 1u : 0u,
+        material.actual_material_exact ? 1u : 0u,
+        material.valid ? 1u : 0u,
+        decision.active ? 1u : 0u,
+        static_cast<unsigned>(decision.reason),
+        static_cast<unsigned>(decision.certified_operations),
+        material.raw_mtd_sha256[0],material.raw_mtd_sha256[1],
+        material.raw_mtd_sha256[2],material.raw_mtd_sha256[3]);
+    reshade::log::message(reshade::log::level::warning, msg);
+}
+#endif
+
 std::atomic_bool g_mr_once_batch_ready{false};
 std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
@@ -2739,6 +2784,10 @@ bool observe_draw_identity(
     if (owner_ok)
         hot_count(g_draw_owner_hits);
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (owner_ok && (stable_receiver || hemenvlerp_receiver))
+        v230_nonmetal_route_trace(0u, receiver_id, out_material, out_decision);
+#endif
     if (!receiver_ok) {
         if (owner_ok)
             hot_count(g_draw_owner_only);
@@ -2927,6 +2976,10 @@ bool observe_draw_identity(
             true, out_material, out_decision);
     }
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (stable_receiver || hemenvlerp_receiver)
+        v230_nonmetal_route_trace(1u, receiver_id, out_material, out_decision);
+#endif
     return true;
 }
 
@@ -6230,6 +6283,10 @@ bool prepare_island_batch(
     }
 #endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (!exact_pmetal_envspec)
+        v230_nonmetal_route_trace(2u, receiver_id, material, decision);
+#endif
     if (exact_pmetal_envspec) {
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
@@ -6404,6 +6461,9 @@ bool prepare_island_batch(
         }
 
         if (lerp_mr_prepared) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+            v230_nonmetal_route_trace(3u, receiver_id, material, decision);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
             dsrrl::runtime::v287_nonmetal_trace::log(
                 "lerp_diffuse_only_ready", material, decision, 1u);
@@ -6571,6 +6631,12 @@ bool prepare_island_batch(
             prepared.mr)) {
         prepared.mr_in_batch = true;
     }
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    v230_nonmetal_route_trace(
+        prepared.mr_in_batch ? 4u : 5u,
+        receiver_id, material, decision);
+#endif
 
     dsrrl::operators::material_response::mtd_semantic_query query{};
     query.material = material;
