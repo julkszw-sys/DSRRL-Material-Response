@@ -831,3 +831,21 @@ assert _v230_addon.count("v230_nonmetal_route_trace(9u, receiver_id, material, d
 assert "draw_tx_issued(dispatch.transaction) ? 7u : 8u" in _v230_addon
 assert "draw_tx_issued(dispatch.transaction) ? 10u : 11u" in _v230_addon
 print("V230_NONMETAL_RECEIVER_SLOT_DOWNSTREAM_PASS per RX/slot actual issued marker and fail-open")
+
+# MR negative TLS cache would retain present=false forever after a later
+# registration of that exact bank/receiver. Invalidate on new materialization
+# only, not per draw or per route, preserving fail-open authentication.
+_v230_mr_tx=(root / "src/runtime/material_response_draw_transaction.cpp").read_text("utf-8")
+_v230_register = _v230_mr_tx[_v230_mr_tx.index(
+    "bool material_response_draw_runtime::register_replacement_record("):
+    _v230_mr_tx.index("void material_response_draw_runtime::release_resources()")]
+assert "if (!cached.present ||" in _v230_mr_tx
+assert "cached.shader == nullptr)" in _v230_mr_tx
+assert "bank.emplace(" in _v230_register
+assert _v230_register.index("bank.emplace(") < _v230_register.index(
+    "resource_epoch_.fetch_add(")
+assert _v230_register.count("resource_epoch_.fetch_add(") == 1
+assert "std::memory_order_release" in _v230_register
+assert _v230_register.index("resource_epoch_.fetch_add(") < _v230_register.index(
+    "++ok_counter;")
+print("V230_MR_NEGATIVE_TLS_INVALIDATE_SOURCE_PASS new exact shader only, no broadened material admission")
