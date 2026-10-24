@@ -456,3 +456,16 @@ for draw, lane in (
     assert "original(" in region and "restore_state(" in region
 assert native_draw_rt.count("v230_native_rt_once(") == 13
 print("V230_NATIVE_DRAW_POST_RESTORE_WITNESS_PASS 4_paths_no_arm_as_pass")
+
+# Exact SRV lifecycle diagnostic does not authorize a guessed sidecar.
+# A shader-resource usage bit may be combined with other ReShade usage flags.
+v230_resources = (root/"src/runtime/material_resource_draw_runtime.cpp").read_text("utf-8")
+assert "enum class v230_view_stage" in v230_resources
+assert "k_v230_view_origin_max = 16384u" in v230_resources
+assert "texture_identity_transport::snapshot_raw(" in v230_resources
+assert "v230_view_stage::no_name_scope" in v230_resources
+assert "v230_view_stage::no_target_sidecar" in v230_resources
+assert "v230_view_stage::conflicting_view_identity" in v230_resources
+assert "reshade::api::resource_usage::undefined" in v230_resources
+assert "usage !=\n            reshade::api::resource_usage::shader_resource" not in v230_resources
+print("V230_RESOURCE_VIEW_LIFECYCLE_DIAG_SOURCE_PASS exact_only_no_alias")
