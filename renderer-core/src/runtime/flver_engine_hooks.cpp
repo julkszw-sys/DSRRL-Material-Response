@@ -957,8 +957,25 @@ void __fastcall parse_entry(void*m,const void*r) noexcept {
   const std::uint64_t n=static_cast<std::uint64_t>(o)+l;
   constexpr std::uint64_t k_live_flver_cap=16ull*1024ull*1024ull;
   if(n>=0x40u&&n<=k_live_flver_cap&&n<=SIZE_MAX&&
-     range_ok(r,static_cast<std::size_t>(n)))
-   (void)flver_identity_observe_parse(m,r,static_cast<std::size_t>(n));
+     range_ok(r,static_cast<std::size_t>(n))) {
+   const bool parser_registered =
+      flver_identity_observe_parse(m,r,static_cast<std::size_t>(n));
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+   // Read-only FIRST source cut, before any selector material/MTD gate.
+   // The digest comes exclusively from the exact live FLVER parse registry.
+   // A positive match is diagnostic, not operator admission.
+   if (parser_registered) {
+    core::sha256_digest parsed_flver{};
+    if (flver_identity_lookup_direct_parser_model(m,parsed_flver)) {
+     operators::material_response::material_identity diagnostic{};
+     diagnostic.flver_sha256=parsed_flver;
+     warrior_9360_trace(
+         warrior_9360_stage::parser_registered,
+         diagnostic,0u,0u);
+    }
+   }
+#endif
+  }
  }
  if(g_po)g_po(m,r);
 }
@@ -1279,6 +1296,21 @@ extern "C" void dsrrl_flver_selector_observer(
              direct_parser_owner = true;
          }
      }
+ }
+#endif
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+ // SECOND source cut: exact selector->live parser FLVER association.
+ // This runs BEFORE MTD enrichment, authentication and publish, so an
+ // absent published identity cannot hide an observed 9360 owner.
+ if (owner_lookup_ok) {
+  operators::material_response::material_identity diagnostic{};
+  diagnostic.flver_sha256=observation.flver_sha256;
+  diagnostic.material_slot=observation.material_slot;
+  diagnostic.material_slot_valid=observation.material_slot_valid;
+  warrior_9360_trace(
+      warrior_9360_stage::selector_flver_lookup,
+      diagnostic,0u,0u);
  }
 #endif
 
