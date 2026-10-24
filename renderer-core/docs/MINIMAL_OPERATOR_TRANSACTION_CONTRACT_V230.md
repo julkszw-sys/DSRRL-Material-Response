@@ -111,3 +111,48 @@ retail-DDS SHA attestation. Compilation is independently tracked in CI;
 in-game draw activation and PTDE pixel remain OPEN until evidenced. The
 protected P_Metal latest_hook_source fallback, PointLight, DoF and DSR EXE
 remain untouched.
+
+## V230 continuation: normalized B-bank source + exact RX34 witnesses (2026-10-24)
+
+**Source-level correction:** Native `envspec_blend_hook_entry` receives its
+original `source_a/source_b` pointers. With finite `beta >= 1.0` and
+different selectors, `pmetal_selector_policy::select()` reduces the
+expression to B-only, with normalized `endpoints.a=B`, `beta=0`.
+Reading this normalized B selector from **native A bank** is incorrect.
+The hook now reads from `source_b` and publishes that same selected bank
+as its exact donor identity, while passing the original input pointers and
+beta unchanged to the host packer. The protected `latest_hook_source`
+TLS/global fallback is unchanged.
+
+**Receiver-first runtime evidence, not a new patch authority:**
+
+- `[DSRRL RX34 RESOURCE ID WITNESS]`: six bounded RX34/route345
+  unresolved-sidecar snapshots, three stock slots each. Records native
+  t0/t1/t2 SRV handles, DXGI view format/dimension, registry logical hash
+  and independent sidecar status. `AMBIGUOUS_NATIVE_VIEW` means the
+  existing quarantine gate remains in effect; `NO_NAME_SIDECAR_REGISTRY_ENTRY`
+  means the callback registry has no authoritative identity *for that view*,
+  but does not distinguish a missing name from a missing matching sidecar.
+  `TRACKED_NO_CLASS_SIDECAR` means the registry has an entry but the
+  requested class replacement is unavailable. Unrequested slots are marked
+  `requested=0` and cannot be considered failed operators.
+- `[DSRRL RX34 T11 DOMAIN WITNESS]`: eight bounded exact P_Metal
+  RX34 post-source reads of actual PS slots t11, s11, b12 and the native
+  t11 resource descriptor (view/texture format, width, height, mip count,
+  array count and misc flags), plus exact source EnvDiffuse readiness
+  and beta. The witness reads state with `PSGet*`; it does **not** write
+  `PSSet*`, bind replacement SRVs, create a shader or establish a PTDE
+  probe alias. A non-NULL t11 is not proof of PTDE asset homology.
+  The witness does not run if an earlier material/source gate rejects.
+
+The two witnesses intentionally answer different questions: `t0/t1/t2`
+companion admission is not `t11` EnvDiffuse identity, and a source donor
+is not a pixel consumer. In the next owner-run matched-scene log, join both
+markers with the exact RX34 route/material/slot and the existing source
+stage counters. Preserve stock DSR on unresolved identity; **do not**
+turn either diagnostic into a new bypass.
+
+**Status:** source-code change committed, CI native build to be checked on
+the new HEAD; in-game RX34 hit, exact PTDE t11/c86 consumer activation,
+state restoration and PTDE pixel improvement are still OPEN. The active
+V359-RC1 release is not replaced by this draft.
