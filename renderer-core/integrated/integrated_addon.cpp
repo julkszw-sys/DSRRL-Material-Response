@@ -245,9 +245,13 @@ std::atomic_bool g_mr_once_decision_active{false};
 std::atomic_bool g_mr_once_identity{false};
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
-// Diagnostic-only: bounded per exact MR route and stage. No admission,
-// graphics state mutation or material/source reclassification.
-std::array<std::atomic_bool, 4096u> g_v230_nonmetal_route_logged{};
+// Diagnostic-only: per exact (route, RX, material-slot, stage).
+// Previous route-only latch hid later RX34/other-slot success after an early
+// RX33 failure. 512 routes * 24 MR receivers * 16 slot buckets, 32 stage bits.
+// Slots >=15 share the final diagnostic bucket; never a material gate.
+// No admission, shader state mutation, resource or operator changes.
+std::array<std::atomic<std::uint32_t>, 512u * 24u * 16u>
+    g_v230_nonmetal_route_logged{};
 void v230_nonmetal_route_trace(
     std::uint32_t stage,
     std::uint32_t receiver,
@@ -256,18 +260,26 @@ void v230_nonmetal_route_trace(
 {
     if (!material.valid || material.semantic_name_hash == 0u ||
         material.route_index == 345u || material.route_index == 229u ||
-        material.route_index >= 512u || stage >= 8u)
+        material.route_index >= 512u || receiver < 24u ||
+        receiver > 47u || stage >= 12u)
         return;
-    const auto key = static_cast<std::size_t>(material.route_index) * 8u + stage;
-    if (g_v230_nonmetal_route_logged[key].exchange(
-            true, std::memory_order_relaxed))
+    const auto slot_bucket =
+        std::min(material.material_slot, 15u);
+    const auto key =
+        ((static_cast<std::size_t>(material.route_index) * 24u +
+          (receiver - 24u)) * 16u + slot_bucket);
+    const auto mask = 1u << stage;
+    if ((g_v230_nonmetal_route_logged[key].fetch_or(
+             mask, std::memory_order_relaxed) & mask) != 0u)
         return;
-    static const char *const names[8] = {
+    static const char *const names[12] = {
         "identity_visible", "mr_evaluated", "generic_candidate",
         "lerp_mr_prepared", "stable_mr_prepared",
-        "generic_mr_not_prepared", "reserved6", "reserved7"
+        "generic_mr_not_prepared", "batch_mutation_ready",
+        "indexed_issued", "indexed_failopen", "batch_prepare_fail",
+        "draw_issued", "draw_failopen"
     };
-    char msg[496]{};
+    char msg[512]{};
     std::snprintf(msg, sizeof(msg),
         "[DSRRL NONMETAL FIRST CUT] stage=%s route=%u rx=%u sem=%016llx "
         "slot=%u owner=%u actual_mtd=%u mat_valid=%u "
@@ -7083,6 +7095,10 @@ bool on_draw(
                 dsrrl::runtime::warrior_9360_stage::prepare_reject,
                 material, route_mask, receiver_id, &decision);
 #endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid && !hemenvlerp_bound)
+            v230_nonmetal_route_trace(9u, receiver_id, material, decision);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7109,6 +7125,10 @@ bool on_draw(
             material, route_mask, receiver_id, &decision);
 #endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(6u, receiver_id, material, decision);
+#endif
     const auto effect_prepared =
         prepared_effect_mask(prepared);
     mark_effect_probe_mask(
@@ -7261,6 +7281,12 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction) ? 10u : 11u,
+            receiver_id, material, decision);
+#endif
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     if (prepared.envspec_in_batch) {
@@ -7694,6 +7720,10 @@ bool on_draw_indexed(
                 dsrrl::runtime::warrior_9360_stage::prepare_reject,
                 material, route_mask, receiver_id, &decision);
 #endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid && !hemenvlerp_bound)
+            v230_nonmetal_route_trace(9u, receiver_id, material, decision);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7720,6 +7750,10 @@ bool on_draw_indexed(
             material, route_mask, receiver_id, &decision);
 #endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(6u, receiver_id, material, decision);
+#endif
     const auto effect_prepared =
         prepared_effect_mask(prepared);
     mark_effect_probe_mask(
@@ -7826,6 +7860,12 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction) ? 7u : 8u,
+            receiver_id, material, decision);
+#endif
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     if (prepared.envspec_in_batch) {
