@@ -236,8 +236,7 @@ bool enrich_exact_owner_mtd_identity(
                   semantic_hash, raw_mtd_sha)
             : (mr::generated::dsr_mtd_identity_resolve(
                     semantic_hash, raw_mtd_sha) ||
-               mr::generated::dsr_mtd_identity_supplement_resolve(
-                    semantic_hash, raw_mtd_sha));
+               mr::generated::dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha));
         if (!sha_resolved) {
             cached = {
                 observation.flver_sha256,
