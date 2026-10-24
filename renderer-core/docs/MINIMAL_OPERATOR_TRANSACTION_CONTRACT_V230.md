@@ -170,9 +170,9 @@ the integrated one-addon draw:
 | t2 | independent Normal DDS | exact live stock t2 logical name + valid `DSRRL/Normals/*.dds` | resource-only, preserves stock s2 |
 | t10 | PTDE equipment SpecRGB | exact live stock t1 identity, equipment owner/MTD/receiver and `DSRRL/Specular/*.dds` | separate transport; full PS owns the material response |
 | t11/s11 | PTDE EnvDiffuse A RGBA cube and sampler | PackedGI 342 canonical ordinal, `PTDE_GI_ENVDIFFUSE_PACK_RGBA.bin` (8,404,992 bytes, SHA-256 `5ab4a471fedbbc95d8dceb55ed0f4648582a824b4290bec03e6134d7cb81cd8c`) | complete PTDE shader only; exact c86 donor and post-filter RGB/A |
-| t12/s12 | PTDE EnvSpec A RGBA cube and sampler | `PTDE_GI_ENVSPEC_PACK_RGBA.bin` (33,619,968 bytes, SHA-256 `c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`) | verified stock probe identity and EnvSpc slot |
+| t12/s12 | PTDE EnvSpec A RGBA cube in the full PTDE build; native DSR BC6H A only in the explicitly selected V13 diagnostic | `PTDE_GI_ENVSPEC_PACK_RGBA.bin` (33,619,968 bytes, SHA-256 `c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`) | verified stock probe identity and EnvSpc slot |
 | t13/s13 | PTDE EnvDiffuse B | same exact pack, independent probe B | Lerp only; `beta==0` binds B=A |
-| t14/s14 | PTDE EnvSpec B | same exact pack, slot/probe B | bound in both variants; `beta==0` binds B=A |
+| t14/s14 | PTDE EnvSpec B in the full build; native DSR BC6H B only in the V13 diagnostic | same exact pack, slot/probe B | bound in both variants; `beta==0` binds B=A |
 | s7 | shadow PCF sampler | dedicated R7 shadow-only carrier | conditional exact stable RX33/34; independent of GI |
 | b12 | PTDE LightBank/EnvDiffuse/scene constant carrier | verified actual producer signal | the private shader owns CB12 ABI, never inferred from DDS presence |
 
