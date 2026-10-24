@@ -813,33 +813,6 @@ bool resolve_tracked_probe_locked(
     return true;
 }
 
-bool probe_for_native_view(
-    ID3D11ShaderResourceView *view,
-    std::uint16_t &probe) noexcept
-{
-    probe = 0u;
-    if (view == nullptr)
-        return false;
-
-    const auto key =
-        static_cast<std::uint64_t>(
-            reinterpret_cast<std::uintptr_t>(
-                view));
-
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    const auto by_view =
-        g_resource_by_view.find(key);
-    if (by_view ==
-        g_resource_by_view.end())
-        return false;
-
-    probe =
-        by_view->second.probe_ordinal;
-    return true;
-}
-
 bool snapshot_ready_envspec(
     ID3D11ShaderResourceView *stock_a,
     ID3D11ShaderResourceView *stock_b,
@@ -1555,17 +1528,10 @@ bool envspec_resource_runtime::prepare_native_dsr(
     }
 
     ID3D11ShaderResourceView *stock_views[3]{};
-    if (probe_b_required) {
-        context->PSGetShaderResources(
-            12u,
-            3u,
-            stock_views);
-    } else {
-        context->PSGetShaderResources(
-            12u,
-            1u,
-            stock_views);
-    }
+    context->PSGetShaderResources(
+        12u,
+        probe_b_required ? 3u : 1u,
+        stock_views);
 
     auto *stock_a = stock_views[0];
     auto *stock_b =
