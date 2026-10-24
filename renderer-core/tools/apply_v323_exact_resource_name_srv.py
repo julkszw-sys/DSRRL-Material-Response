@@ -44,6 +44,24 @@ def patch_v230_view_witness(s: str) -> str:
         "            }\n"
         "#endif\n"
         "            const auto found = g_cache.find(key);")
+    # Single exact stock SRV record. This is observation, not authority.
+    witness=once(witness,
+        "sidecar=%u reason=%s\",",
+        "sidecar=%u reason=%s\"\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "            \" view_init=%s backing=%016llx name=%016llx eligible=%u uploaded=%u\"\n"
+        "#endif\n            ,")
+    witness=once(witness,
+        "            reason);",
+        "            reason\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "            , origin_found ? v230_stage_name(origin.stage) :\n"
+        "                \"NO_VIEW_INIT_OBSERVATION\",\n"
+        "            static_cast<unsigned long long>(origin.resource_handle),\n"
+        "            static_cast<unsigned long long>(origin.logical_hash),\n"
+        "            static_cast<unsigned>(origin.class_mask),\n"
+        "            static_cast<unsigned>(origin.uploaded_mask)\n"
+        "#endif\n            );")
     s=s[:begin]+witness+s[end:]
     return s
 
