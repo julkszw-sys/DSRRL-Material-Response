@@ -7995,6 +7995,16 @@ bool AddonInit(
 {
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Core library must not depend on reshade.hpp. A function-pointer sink
+    // delivers only bounded exact Warrior model+slot first-cut warnings.
+    dsrrl::runtime::warrior_9360_set_log_sink(
+        +[](const char *line) noexcept {
+            if (line != nullptr)
+                reshade::log::message(
+                    reshade::log::level::warning, line);
+        });
+#endif
     dsrrl::runtime::qpc_bisect::init_from_game_directory();
     char qpc_mode_line[200]{};
     std::snprintf(qpc_mode_line,sizeof(qpc_mode_line),
@@ -8511,6 +8521,9 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    dsrrl::runtime::warrior_9360_set_log_sink(nullptr);
+#endif
     if (k_addon_loaded_only_bisect) {
         reshade::unregister_addon(addon_module, reshade_module);
         return;
