@@ -949,7 +949,9 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
        !material.material_slot_valid || !decision.active ||
        decision.receiver_id<33u || decision.receiver_id>35u ||
        !core_.features().enabled(core::operator_id::env_diffuse) ||
-       !exact_pmetal_envspec_candidate(material,decision))
+       // Own source owner, NOT EnvSpec operator permission: a disabled
+       // EnvSpec island must not prevent an authenticated diffuse draw.
+       !exact_pmetal_material(material))
         return false;
     pmetal_envspec_source source{};
     if(!source_.latest(material,source) ||
