@@ -240,3 +240,5 @@ if __name__=="__main__":
     print("V214_FULL_SPEC_1295_ASSET_LOADER=ON")
     print("V214_FLVER_MTD_CONSUMER_GATE_UNCHANGED=ON")
     print("V214_NO_SOURCE_PROVENANCE=FAIL_OPEN")
+
+# V230 diagnostic compatibility: exact original-resource provenance is mandatory.
