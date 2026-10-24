@@ -587,3 +587,49 @@ assert '"character_not_equipment_stock"' in pmetal_rt
 assert pmetal_rt.index("if (prepared.material_resources.verified_character_not_equipment)") < pmetal_rt.index("if (!material_ready ||")
 assert "spec_equipment_allowed(logical_hash)" in v230_resources
 print("V230_RX34_CHR_NOT_EQUIPMENT_PASS original_owner_negative_exact_stock")
+
+
+# Warrior/Standard 9360 exact source first-cut witness (DIAGNOSTIC ONLY).
+# Both Draw and DrawIndexed must observe the owner BEFORE the fast-return
+# invalidates TLS; the full-SHA + slot-specific trace must be bounded.
+warrior_owner = (root / "src/runtime/material_owner_selection.cpp").read_text("utf-8")
+warrior_h = (root / "include/dsrrl/runtime/material_owner_selection.hpp").read_text("utf-8")
+source_sha_9360 = {
+    "1e1a21b2ca8d0ee05822edd8a898a0d337b2e04687a05887f119aef08857166f",
+    "a115d89eb9f70265038c58cc3a48285c419013f4b6165b07cd1c9a172449fdee",
+    "cf79f8450ddaa8f1c2a2ccea554a016daf84fb0427830849ce7d26592cb75989",
+    "ab9df51c284b67f60f40be958403f7906b8fb492a158c6e9f10b944c6339da79",
+    "59c937ced4aaf41ba3f6db4a351d47b41dabd176224ecca4123b72a11d23baee",
+    "bfbef63e9611bd8b753f8197e5cabeabbf08ec400e098f2191561bdc5ce7396b",
+    "dd2b106aab423417960fa96239eef69cab5b8c70ec795af32cc878386a3bfb1e",
+    "ad7d888aa5caee9794d8ea5e39265df2c9d3c7c8fafcdf2d94ffeb22ab552413",
+}
+sha_vectors = re.findall(r'\{ "(?:AM|BD|HD|LG)_[FM]_9360", \{\{(.*?)\}\} \}', warrior_owner)
+assert len(sha_vectors) == 8
+recovered = set()
+for vector in sha_vectors:
+    data = [int(v.strip().removesuffix("u"), 16) for v in vector.split(",")]
+    assert len(data) == 32
+    recovered.add(bytes(data).hex())
+assert recovered == source_sha_9360
+assert "material_owner_selection_peek(" in warrior_h
+assert "identity = *g_current;" in warrior_owner
+assert "g_warrior_9360_logged[key].exchange(" in warrior_owner
+assert "k_warrior_slots = 8u" in warrior_owner
+assert "identity.material_slot >= k_warrior_slots" in warrior_owner
+assert "warrior_9360_stage::selector_invalid" in warrior_owner
+assert "warrior_9360_stage::selector_not_authenticated" in warrior_owner
+assert "warrior_9360_stage::selector_published" in warrior_owner
+assert "warrior_9360_stage::pre_route" in integrated
+assert integrated.count("warrior_9360_stage::pre_route") == 2
+for gate in ("no_pipeline_route", "no_dynamic_route", "identity_reject",
+             "identity_ready", "prepare_reject", "prepared"):
+    assert integrated.count("warrior_9360_stage::" + gate) == 2
+route_a = integrated.index("bool on_draw(")
+route_b = integrated.index("bool on_draw_indexed(")
+for fn in (integrated[route_a:route_b], integrated[route_b:]):
+    assert fn.index("warrior_9360_stage::pre_route") < fn.index("if (route_mask == 0u)")
+    assert fn.index("warrior_9360_stage::no_pipeline_route") < fn.index("material_owner_selection_clear();")
+# Witness never changes operator authority or the business logic return path.
+assert "warrior_9360_trace" not in src
+print("V230_WARRIOR_9360_FIRST_CUT_PASS 8 SHA full owner both Draw variants no authority widening")
