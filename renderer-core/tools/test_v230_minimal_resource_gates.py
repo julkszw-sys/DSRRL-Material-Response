@@ -890,3 +890,40 @@ for required_resource in (
 ):
     assert required_resource in bound
 print("V230_UNPROVEN_WARRIOR_GATES_ABSENT_PRESERVED_SOURCE_IDENTITY_PASS")
+
+# Independently owned EnvDiffuse RX33-35 PTDE island.
+# Positive native-draw and PTDE-visible pixel evidence remain OPEN.
+_v230_ed_materializer=(root/"src/operators/env_spec/pmetal_rgba_materializer.cpp").read_text()
+_v230_ed_runtime=(root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text()
+_v230_ed_resources=(root/"src/runtime/envspec_resource_runtime.cpp").read_text()
+_v230_ed_identity=(root/"include/dsrrl/operators/env_spec/native_envdiffuse_identity.hpp").read_text()
+_v230_ed_build=(root/"tools/build_v230_production.ps1").read_text()
+assert "DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE" in _v230_ed_build
+assert "materialize_ptde_envdiffuse_stable_only(" in _v230_ed_materializer
+assert "apply_exact_ptde_envdiffuse_consumer_isolated(decl,true)" in _v230_ed_materializer
+assert "ptde_sample[7]=0x00107936u" in _v230_ed_materializer
+assert "add_b12_rdef(decl)" in _v230_ed_materializer
+assert "register_independent_envdiffuse(" in _v230_ed_runtime
+_start=_v230_ed_runtime.index("bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(")
+_end=_v230_ed_runtime.index("\n#endif",_start)
+_ed_body=_v230_ed_runtime[_start:_end]
+assert "prepare_envdiffuse_bound(" in _ed_body
+assert "env_resources_.prepare_native_dsr(" not in _ed_body
+assert "env_resources_.prepare(" not in _ed_body
+assert "!core_.features().enabled(core::operator_id::env_diffuse)" in _ed_body
+assert "!core_.features().enabled(core::operator_id::env_spec)" not in _ed_body
+assert "!exact_pmetal_envspec_candidate(material,decision)" not in _ed_body
+assert "payload[12]=source.envdiffuse_a[0]" in _ed_body
+assert "q.constant_buffers[0]={12u,prepared.b12,owner};" in _ed_body
+assert "q.srvs[0]={11u,prepared.envdiffuse_resources.ptde_a};" in _ed_body
+assert "q.samplers[0]={11u,prepared.envdiffuse_resources.sampler};" in _ed_body
+assert "material.route_index != 345u" in _v230_addon
+assert "try_stable_envdiffuse()" in _v230_addon
+assert "materialize_ptde_envdiffuse_stable_only(" in _v230_addon
+assert "g_native_diffuse_resources" in _v230_ed_resources
+assert "g_diffuse_by_view" in _v230_ed_resources
+assert "unique_native_diffuse_probe" in _v230_ed_resources
+assert "g_resource_by_view" in _v230_ed_resources
+assert "DSREND01" in _v230_ed_identity
+assert "visited[id] || id != i" in _v230_ed_identity
+print("V230_ISOLATED_ENVDIFFUSE_SOURCE_PASS separate RX33-35 PS/CB12/t11; EnvSpec t12/t14 stock; runtime/pixel OPEN")
