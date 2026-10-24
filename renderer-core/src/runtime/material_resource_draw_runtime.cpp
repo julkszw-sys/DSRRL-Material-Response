@@ -1500,6 +1500,9 @@ void on_init_resource_view(
     std::wstring logical_name;
     bool diffuse_member = false;
     bool normal_member = false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    bool spec_disk_present = false;
+#endif
     try {
         logical_name.assign(logical_name_raw, logical_name_length);
         std::error_code diffuse_ec, normal_ec;
