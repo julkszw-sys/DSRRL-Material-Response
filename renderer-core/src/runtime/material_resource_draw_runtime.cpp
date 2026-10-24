@@ -1303,6 +1303,82 @@ void inspect_many(
     }
 }
 
+// Read-only, bounded Source1-candidate RX34 visibility probe. Stock-view
+// presence alone does not prove a logical texture owner. Never synthesize
+// a hash or authorize a sidecar from this witness: g_cache and quarantine
+// remain the only resource-transport authority.
+std::atomic<std::uint32_t> g_rx34_identity_witness_samples{0u};
+
+void witness_rx34_resource_identity(
+    ID3D11ShaderResourceView *const (&views)[3],
+    const std::uint64_t (&hashes)[3],
+    ID3D11ShaderResourceView *const (&companions)[3],
+    std::uint32_t requested_mask) noexcept
+{
+    auto sample = g_rx34_identity_witness_samples.load(
+        std::memory_order_relaxed);
+    if (sample >= 6u ||
+        !g_rx34_identity_witness_samples.compare_exchange_strong(
+            sample, sample + 1u, std::memory_order_relaxed))
+        return;
+
+    for (std::uint32_t slot = 0u; slot < 3u; ++slot) {
+        auto *stock = views[slot];
+        const auto key = static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(stock));
+        bool registry_found = false;
+        bool quarantined = false;
+        bool class_sidecar_ready = false;
+        std::uint64_t registry_hash = 0u;
+
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            quarantined =
+                g_ambiguous_view_device.find(key) !=
+                g_ambiguous_view_device.end();
+            const auto found = g_cache.find(key);
+            if (found != g_cache.end()) {
+                registry_found = true;
+                registry_hash = found->second.logical_hash;
+                class_sidecar_ready =
+                    slot == 0u ? found->second.diffuse != nullptr :
+                    slot == 1u ? found->second.specular != nullptr :
+                                 found->second.normal != nullptr;
+            }
+        }
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+        if (stock != nullptr)
+            stock->GetDesc(&desc);
+
+        const char *reason =
+            stock == nullptr ? "NO_STOCK_SRV" :
+            quarantined ? "AMBIGUOUS_NATIVE_VIEW" :
+            !registry_found ? "NO_NAME_SIDECAR_REGISTRY_ENTRY" :
+            !class_sidecar_ready ? "TRACKED_NO_CLASS_SIDECAR" :
+            "TRACKED_CLASS_SIDECAR";
+
+        char line[550]{};
+        std::snprintf(
+            line, sizeof(line),
+            "[DSRRL RX34 RESOURCE ID WITNESS] sample=%u route=345 slot=t%u requested=%u stock=%p srv_format=%u srv_dimension=%u registry=%u ambiguous=%u registry_hash=%016llx inspected_hash=%016llx sidecar=%u reason=%s",
+            static_cast<unsigned>(sample + 1u),
+            static_cast<unsigned>(slot),
+            (requested_mask & (1u << slot)) != 0u ? 1u : 0u,
+            static_cast<void *>(stock),
+            static_cast<unsigned>(desc.Format),
+            static_cast<unsigned>(desc.ViewDimension),
+            registry_found ? 1u : 0u,
+            quarantined ? 1u : 0u,
+            static_cast<unsigned long long>(registry_hash),
+            static_cast<unsigned long long>(hashes[slot]),
+            companions[slot] != nullptr ? 1u : 0u,
+            reason);
+        reshade::log::message(
+            reshade::log::level::warning, line);
+    }
+}
+
 void on_init_resource_view(
     reshade::api::device *device,
     reshade::api::resource,
@@ -1775,6 +1851,23 @@ prepare_draw_requests_bound(
     const auto h0 = hashes[0];
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
+
+    // RX34 P_Metal is the owner-observed stockmask=7/hashmask=0 frontier.
+    // Emit a capped identity-state census only when at least one enabled
+    // operator cannot resolve its requested stock view. Fail-open unchanged.
+    const std::uint32_t requested_mask =
+        (want_diffuse ? 1u : 0u) |
+        (want_spec_rgb ? 2u : 0u) |
+        (want_normal ? 4u : 0u);
+    const std::uint32_t unresolved_mask =
+        (want_diffuse && (h0 == 0u || companions[0] == nullptr) ? 1u : 0u) |
+        (want_spec_rgb && (h1 == 0u || companions[1] == nullptr) ? 2u : 0u) |
+        (want_normal && (h2 == 0u || companions[2] == nullptr) ? 4u : 0u);
+    if (receiver_id == 34u &&
+        query.material.route_index == 345u &&
+        unresolved_mask != 0u)
+        witness_rx34_resource_identity(
+            views, hashes, companions, requested_mask);
 
     if (want_spec_rgb) {
         auto *replacement =
