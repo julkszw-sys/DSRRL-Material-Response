@@ -179,12 +179,10 @@ apply(p,marker,marker+'''
 std::atomic<std::uint32_t> g_v357_unknown_bc6h_census{0u};
 std::atomic<std::uint32_t> g_v357_missing_bc6h_init{0u};
 #endif''',"counter")
-marker='''        ++g_native_hash_miss;
+marker='''        if (spec) ++g_native_hash_miss;
         return;
     }
-
-    const auto digest =
-        hashing::sha256('''
+    const auto digest = hashing::sha256(tight.data(),tight.size());'''
 repl='''        ++g_native_hash_miss;
 #if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
         const auto n=g_v357_missing_bc6h_init.fetch_add(
