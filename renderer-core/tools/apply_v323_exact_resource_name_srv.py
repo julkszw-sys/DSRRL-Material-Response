@@ -28,6 +28,10 @@ def patch(source: str) -> str:
         '#include "dsrrl/runtime/texture_identity_transport.hpp"\n'
         '#include "dsrrl/runtime/v214_resource_name_provenance.hpp"')
 
+    # V230 diagnostic source names this argument resource_handle. Adapt
+    # its ABI here, before the original V323 source_resource binding.
+    s=s.replace('    reshade::api::resource resource_handle,\n    reshade::api::resource_usage usage,', '    reshade::api::resource,\n    reshade::api::resource_usage usage,')
+
     # V322 already uses spec_equipment_allowed(): exact Oct10 749 direct names
     # plus the original owner and consumer gates; do not widen its allowlist.
     s=once(s,
