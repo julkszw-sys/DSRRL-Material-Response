@@ -39,6 +39,13 @@ inline bool exact_envspec36_material(
         return false;
 
     const auto query = make_envspec36_query(material);
+    // Enforce the actual source-joined FLVER SHA / slot / exact raw MTD
+    // cohort. Previously this function only consulted MTD EnvSpec presence,
+    // allowing an unaudited model to borrow the nonmetal shader island.
+    // The two 9360 helmet owners are separate exact records, not a family
+    // wildcard, and must also satisfy the live receiver/resource gates.
+    if (!exact_proven_owner_slot(query))
+        return false;
     const auto env = mr::classify_mtd_envspec_semantics(query);
     return env.exact_identity_match &&
            env.presence == mr::ptde_envspec_presence::present &&
