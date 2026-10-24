@@ -1330,9 +1330,47 @@ extern "C" void dsrrl_flver_selector_observer(
   if(owner_mtd_ok){
    telemetry::hot_count(g_owner_mtd_hits);
 
-   const auto identity=
+   auto identity=
        make_actual_material_identity(
            observation);
+
+   // Source-scoped DSR MTD ambiguity recovery. The original source BND3
+   // contains TWO distinct P_DullLeather[DSB].mtd payloads, so neither a
+   // global semantic-name SHA override nor an unconditional route160 claim
+   // would be sound. Only the two verified Warrior 9360 FLVER+slot tuples
+   // may recover the route from an *actual live-parser MTD object*, and only
+   // when that object's full raw SHA equals the existing source route160.
+   // Other models/slots, absent parser attestation and the alternate
+   // P_DullLeather raw payload all retain stock DSR/fail-open behavior.
+   const bool warrior_dull_exact_owner =
+       (observation.material_slot == 1u &&
+        operators::legacy_plan::hashing::matches_hex(
+            observation.flver_sha256,
+            "a115d89eb9f70265038c58cc3a48285c419013f4b6165b07cd1c9a172449fdee")) ||
+       (observation.material_slot == 2u &&
+        operators::legacy_plan::hashing::matches_hex(
+            observation.flver_sha256,
+            "ad7d888aa5caee9794d8ea5e39265df2c9d3c7c8fafcdf2d94ffeb22ab552413"));
+   if (warrior_dull_exact_owner &&
+       identity.valid && identity.owner_tuple_exact &&
+       identity.semantic_name_hash ==
+           operators::material_response::mtd_semantic_hash(
+               "P_DullLeather[DSB].mtd") &&
+       actual_material != nullptr) {
+       operators::material_response::material_identity live{};
+       if (lookup_exact_runtime_material(actual_material, live) &&
+           live.valid && live.actual_material_exact &&
+           live.semantic_name_hash == identity.semantic_name_hash &&
+           operators::legacy_plan::hashing::matches_hex(
+               live.raw_mtd_sha256,
+               "7ea7d6ce9bb7148db62e8c27ee45edefb9547018d0b723dd4753d4c37e29f293")) {
+           identity.raw_mtd_sha256 = live.raw_mtd_sha256;
+           identity.route_index = 160u;
+           identity.material_family_hash =
+               operators::material_response::mtd_semantic_hash(
+                   "DifSpcBmp");
+       }
+   }
 
 #if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
    // Full FLVER+slot+semantic match from source must ALSO preserve actual
