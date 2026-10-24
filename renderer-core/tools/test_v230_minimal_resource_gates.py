@@ -549,6 +549,18 @@ prepare_negative = v230_resources.split(
 assert "DSRRL_V230_RUNTIME_TELEMETRY" not in prepare_negative
 assert "registered_device == bound_device" in prepare_negative
 assert "bound_device->Release();" in prepare_negative
+# prepare_draw_requests_bound accepts views, never a D3D context. Extract
+# the whole native bound fast-path function rather than checking one text
+# marker; this catches a regression hidden by superficial string tests.
+bound_fn = v230_resources.split(
+    "bool material_resource_draw_runtime::\\nprepare_draw_requests_bound(", 1
+)[1].split(
+    "bool material_resource_draw_runtime::\\nprepare_fixed_pointlight_material_requests(", 1
+)[0]
+assert "context->" not in bound_fn
+assert "context !=" not in bound_fn
+assert "views[1]->GetDevice(&bound_device);" in prepare_negative
+assert "context->GetDevice(&bound_device);" not in prepare_negative
 assert "prepared.verified_character_not_equipment = true;" in prepare_negative
 assert "g_v230_view_origin.find(key)" not in prepare_negative
 assert "if (prepared.material_resources.verified_character_not_equipment)" in pmetal_rt
