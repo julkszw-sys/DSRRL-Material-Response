@@ -1524,6 +1524,15 @@ void on_init_resource_view(
         view.handle == 0u)
         return;
 
+    // New native view lifetime: a recycled pointer must not inherit chr
+    // equipment-exclusion evidence from an older view. Clear even when
+    // this creation has no exact loader-name TLS evidence.
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_v230_character_view_device.erase(
+            static_cast<std::uint64_t>(view.handle));
+    }
+
     const wchar_t *logical_name_raw = nullptr;
     std::size_t logical_name_length = 0u;
     if (!texture_identity_transport::snapshot_raw(
