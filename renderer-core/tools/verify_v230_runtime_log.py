@@ -40,6 +40,17 @@ def get_rx34_sidecar_rows(log):
     base = Path(__file__).resolve().parents[1]
     names = load_names(base/"data/provenance/sidecar_specular_20261010_names.b85")
     ptde = {f"{fnv1a_ascii_lower(n):016x}": n for n in names}
+    low = {"am_f_9450_l_s","am_m_9372_l_s",
+           "bd_m_9440_1_l_s","bd_m_9440_2_l_s","wp_a_0652_l_s"}
+    no_direct = {"wp_a_0911_s","wp_a_1004_s"}
+    direct = {f"{fnv1a_ascii_lower(n):016x}" for n in names
+              if (not n.endswith("_l_s") or n in low) and n not in no_direct}
+    assert len(ptde) == 1295 and len(direct) == 749
+    for v in rows.values():
+        if v["slot"] == "t1":
+            v["spec_route"] = ("DIRECT_DSR" if v["name"] in direct else
+                "PTDE_NO_DIRECT_DSR" if v["name"] in ptde else
+                "OUTSIDE_PTDE_SPEC_CORPUS")
     for v in rows.values():
         if v["slot"] == "t1":
             v["ptde_spec_name"] = ptde.get(v["name"])
