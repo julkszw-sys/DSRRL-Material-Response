@@ -1532,7 +1532,8 @@ void on_init_resource_view(
     if (!spec_member && !diffuse_member && !normal_member) {
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
         v230_observe_view(view.handle,resource_handle.handle,logical_hash,
-            v230_view_stage::no_target_sidecar,0u,0u);
+            v230_view_stage::no_target_sidecar,0u,0u,
+            v230_disk_mask);
 #endif
         return;
     }
