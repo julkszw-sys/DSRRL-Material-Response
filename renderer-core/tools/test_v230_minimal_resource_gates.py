@@ -616,7 +616,9 @@ assert "material_owner_selection_peek(" in warrior_h
 assert "identity = *g_current;" in warrior_owner
 assert "g_warrior_9360_logged[key].exchange(" in warrior_owner
 assert "k_warrior_slots = 8u" in warrior_owner
-assert "identity.material_slot >= k_warrior_slots" in warrior_owner
+assert "slot_bucket" in warrior_owner
+assert "identity.material_slot < k_warrior_slots - 1u" in warrior_owner
+assert "slot_valid=%u" in warrior_owner
 assert "warrior_9360_stage::selector_invalid" in warrior_owner
 assert "warrior_9360_stage::selector_not_authenticated" in warrior_owner
 assert "warrior_9360_stage::selector_published" in warrior_owner
