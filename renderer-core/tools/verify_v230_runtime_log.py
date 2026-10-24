@@ -20,7 +20,7 @@ SHADER = "[DSRRL PS PAYLOAD AUTHORITY]"
 RX_RE = re.compile(r"\brx=(33|34|35)\b")
 FAM_RE = re.compile(r"\bfamily=(STABLE|LERP)\b")
 STAGE_RE = re.compile(r"\bstage=([a-z_]+)\b")
-VALUE_RE = re.compile(r"\b([a-z_]+)=([^\s]+)")
+VALUE_RE = re.compile(r"\b([a-z][a-z0-9_]*)=([^\s]+)")
 
 
 def evaluate(log: str) -> dict:
