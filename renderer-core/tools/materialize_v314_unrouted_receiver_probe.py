@@ -64,8 +64,7 @@ replace('''    if (!k_drawtime_islands_runtime_enabled)
         observe_integrated_draw_route_bind(''',"bind real PS pipeline")
 replace_twice('''#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
         // Capture sidecar-bound draws *outside* current shader families,''',
-'''    if (route_mask == 0u) {
-#if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)
+'''#if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)
         // On this route, the stock path already discards the selector
         // identity below. Consume ONLY to record actual original MTD/FLVER
         // provenance against exact DSR runtime PS SHA. No draw replay,
