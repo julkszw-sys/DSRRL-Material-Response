@@ -709,3 +709,27 @@ assert "diagnostic.flver_sha256=observation.flver_sha256;" in selector_region
 assert "flver_identity_lookup_direct_parser_model(" in selector_region
 assert "warrior_9360_trace" not in (root / "src/runtime/material_owner_producer.cpp").read_text("utf-8")
 print("V230_WARRIOR_PREOWNER_PROBE_SOURCE_PASS parserSHA selectorSHA no authorization widening")
+
+# User's gameplay log: exact HD_M_9360 SHA parsed and selector lookup succeeded,
+# but no later owner publish. C_Metal raw identity was absent from BOTH source
+# registries despite a confirmed route229 raw SHA. Restore *identity only*.
+import json as _v230_json
+_v230_supp = _v230_json.loads(
+    (root / "data/census/dsr_mtd_identity_certified_supplement_v1.json").read_text("utf-8"))
+_v230_routes = _v230_json.loads(
+    (root / "data/material_response_routes_v1.json").read_text("utf-8"))
+_v230_cmetal = [x for x in _v230_supp["records"]
+                if x["semantic_name"] == "C_Metal[DSB].mtd"]
+_v230_cmetal_route = [x for x in _v230_routes["routes"]
+                      if x["mtd_name"] == "C_Metal[DSB].mtd"]
+assert len(_v230_cmetal) == len(_v230_cmetal_route) == 1
+assert _v230_cmetal[0]["status"] == "CONFIRMED"
+assert _v230_cmetal[0]["authority_class"] == "MATERIAL_IDENTITY_ONLY"
+assert _v230_cmetal_route[0]["route_index"] == 229
+assert _v230_cmetal[0]["raw_mtd_sha256"] == _v230_cmetal_route[0]["sha256"] == (
+    "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85")
+assert _v230_cmetal[0]["basis"]["material_slot"] == 0
+assert _v230_cmetal[0]["basis"]["pixel_equivalence"] == "OPEN"
+assert "dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)" in (
+    (root / "src/runtime/material_owner_producer.cpp").read_text("utf-8"))
+print("V230_WARRIOR_CMETAL_RAW_IDENTITY_PASS route229 source certification only")
