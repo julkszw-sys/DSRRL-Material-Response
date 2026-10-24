@@ -178,6 +178,13 @@ core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
 
+// Negative-only, view-lifetime RX34 evidence (not a sidecar allowlist).
+// Kept independently of runtime telemetry so stripped release builds also
+// avoid the equipment island for a source-confirmed chr t1.
+std::unordered_map<std::uint64_t, ID3D11Device *>
+    g_v230_character_view_device;
+constexpr std::size_t k_v230_character_views_max = 16384u;
+
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
 // Exact VIEW-lifetime evidence only. This does not authorize or repair a
 // resource identity. It records why a bound stock t0/t1/t2 had no companion
@@ -518,6 +525,10 @@ void release_cache() noexcept
         g_view_cache_journal.publish(0u);
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
+        g_v230_character_view_device.clear();
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        g_v230_view_origin.clear();
+#endif
     }
 
     for (auto &entry : dead)
@@ -555,6 +566,16 @@ void release_cache_for_device(
             if (it->second.device == device) {
                 dead.push_back(it->second);
                 it = g_cache.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+
+        for (auto it = g_v230_character_view_device.begin();
+             it != g_v230_character_view_device.end();) {
+            if (it->second == device) {
+                it = g_v230_character_view_device.erase(it);
                 changed = true;
             } else {
                 ++it;
@@ -1524,6 +1545,23 @@ void on_init_resource_view(
     // It is never an equipment sidecar, even if its name contains wp_/am_.
     // The independent character renderer keeps its stock resource.
     if (v230_observed_character_t1(logical_hash)) {
+        // The native view handle is authenticated at init and retired on
+        // destroy_resource_view/device. Never classify a reused view by a
+        // stale diagnostic map entry or by texture-name substring.
+        try {
+            const auto key = static_cast<std::uint64_t>(view.handle);
+            auto *native = reinterpret_cast<ID3D11Device *>(
+                device->get_native());
+            if (native != nullptr) {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                if (g_v230_character_view_device.count(key) != 0u ||
+                    g_v230_character_view_device.size() <
+                        k_v230_character_views_max)
+                    g_v230_character_view_device[key] = native;
+            }
+        } catch (...) {
+            // Failed negative tracking never authorizes a sidecar.
+        }
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
         v230_observe_view(view.handle,resource_handle.handle,logical_hash,
             v230_view_stage::verified_character_not_equipment,0u,0u);
@@ -1728,6 +1766,11 @@ void on_destroy_resource_view(
 
         if (g_ambiguous_view_device.erase(key) != 0u)
             changed = true;
+        if (g_v230_character_view_device.erase(key) != 0u)
+            changed = true;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        g_v230_view_origin.erase(key);
+#endif
 
         const auto it =
             g_cache.find(key);
@@ -2007,29 +2050,35 @@ prepare_draw_requests_bound(
     if (!want_diffuse && !want_normal && !want_spec_rgb)
         return true;
 
-#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
-    // Certified negative owner match. This native t1 belongs to an original
-    // DSR chr/chrbnd texture, not player parts/partsbnd. Leave all t0/t1/t2
-    // stock; do not issue or count an equipment SpecRGB replacement attempt.
+    // Certified negative chr owner view: never enter the equipment island.
+    // Always-on even when release telemetry is disabled. Require the same
+    // live native D3D11 device as at view creation; stale/reused handles
+    // fail open rather than borrowing someone else's negative identity.
     if (receiver_id == 34u && query.material.route_index == 345u &&
-        views[1] != nullptr) {
+        views[1] != nullptr && context != nullptr) {
         const auto key = static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(views[1]));
-        bool character_t1 = false;
+        ID3D11Device *registered_device = nullptr;
         {
             std::lock_guard<std::mutex> lock(g_mutex);
-            const auto it = g_v230_view_origin.find(key);
-            character_t1 = it != g_v230_view_origin.end() &&
-                it->second.stage ==
-                    v230_view_stage::verified_character_not_equipment &&
-                v230_observed_character_t1(it->second.logical_hash);
+            const auto it = g_v230_character_view_device.find(key);
+            if (it != g_v230_character_view_device.end())
+                registered_device = it->second;
         }
-        if (character_t1) {
-            prepared.verified_character_not_equipment = true;
-            return true;
+        if (registered_device != nullptr) {
+            ID3D11Device *bound_device = nullptr;
+            context->GetDevice(&bound_device);
+            const bool exact_character_view =
+                bound_device != nullptr &&
+                registered_device == bound_device;
+            if (bound_device != nullptr)
+                bound_device->Release();
+            if (exact_character_view) {
+                prepared.verified_character_not_equipment = true;
+                return true;
+            }
         }
     }
-#endif
 
     const companion_lookup_request companion_requests[3]{
         {want_diffuse ? views[0] : nullptr, asset_class::diffuse},
