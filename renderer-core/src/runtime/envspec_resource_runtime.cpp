@@ -938,6 +938,59 @@ bool snapshot_ready_envspec(
     return true;
 }
 
+// Creating the 32x32x6 RGBA8 SRV is identical for both PTDE PackedGI
+// families. Copy from the independently authenticated pack under g_mutex
+// FIRST, then call this helper without holding the registry lock. Only the
+// caller owns probe/slot mapping, cache insertion and lifetime checks.
+bool create_ptde_rgba_cube(
+    device *device_ptr,
+    const std::array<std::uint8_t, k_ptde_cube_bytes> &bytes,
+    rgba_cube &cube) noexcept
+{
+    cube = {};
+    if (device_ptr == nullptr)
+        return false;
+
+    std::array<subresource_data, k_faces> subresources{};
+    for (std::uint32_t face = 0u; face < k_faces; ++face) {
+        subresources[face].data =
+            bytes.data() +
+            static_cast<std::size_t>(face) * k_ptde_face_bytes;
+        subresources[face].row_pitch = k_ptde_size * 4u;
+        subresources[face].slice_pitch =
+            static_cast<std::uint32_t>(k_ptde_face_bytes);
+    }
+
+    const resource_desc desc(
+        resource_type::texture_2d,
+        k_ptde_size, k_ptde_size, k_faces, 1u,
+        format::r8g8b8a8_unorm,
+        1u, memory_heap::default_,
+        resource_usage::shader_resource,
+        resource_flags::cube_compatible);
+
+    if (!device_ptr->create_resource(
+            desc, subresources.data(),
+            resource_usage::shader_resource,
+            &cube.texture))
+        return false;
+
+    const resource_view_desc view_desc(
+        resource_view_type::texture_cube,
+        format::r8g8b8a8_unorm,
+        0u, 1u, 0u, k_faces);
+
+    if (!device_ptr->create_resource_view(
+            cube.texture, resource_usage::shader_resource,
+            view_desc, &cube.view)) {
+        device_ptr->destroy_resource(cube.texture);
+        cube = {};
+        return false;
+    }
+
+    return true;
+}
+
 bool get_ptde_cube(
     std::uint16_t probe,
     std::uint8_t slot,
@@ -1003,61 +1056,8 @@ bool get_ptde_cube(
             cube_bytes.size());
     }
 
-    std::array<subresource_data,k_faces>
-        subresources{};
-
-    for (std::uint32_t face = 0u;
-         face < k_faces;
-         ++face) {
-        subresources[face].data =
-            cube_bytes.data() +
-            static_cast<std::size_t>(face) *
-                k_ptde_face_bytes;
-        subresources[face].row_pitch =
-            k_ptde_size * 4u;
-        subresources[face].slice_pitch =
-            static_cast<std::uint32_t>(
-                k_ptde_face_bytes);
-    }
-
-    const resource_desc desc(
-        resource_type::texture_2d,
-        k_ptde_size,
-        k_ptde_size,
-        k_faces,
-        1u,
-        format::r8g8b8a8_unorm,
-        1u,
-        memory_heap::default_,
-        resource_usage::shader_resource,
-        resource_flags::cube_compatible);
-
     rgba_cube cube{};
-
-    if (!device_ptr->create_resource(
-            desc,
-            subresources.data(),
-            resource_usage::shader_resource,
-            &cube.texture)) {
-        ++g_cube_fail;
-        return false;
-    }
-
-    const resource_view_desc view_desc(
-        resource_view_type::texture_cube,
-        format::r8g8b8a8_unorm,
-        0u,
-        1u,
-        0u,
-        k_faces);
-
-    if (!device_ptr->create_resource_view(
-            cube.texture,
-            resource_usage::shader_resource,
-            view_desc,
-            &cube.view)) {
-        device_ptr->destroy_resource(
-            cube.texture);
+    if (!create_ptde_rgba_cube(device_ptr, cube_bytes, cube)) {
         ++g_cube_fail;
         return false;
     }
@@ -1156,59 +1156,9 @@ bool get_ptde_envdiffuse_cube(
             cube_bytes.size());
     }
 
-    std::array<subresource_data,k_faces>
-        subresources{};
-    for (std::uint32_t face = 0u;
-         face < k_faces;
-         ++face) {
-        subresources[face].data =
-            cube_bytes.data() +
-            static_cast<std::size_t>(face) *
-                k_ptde_face_bytes;
-        subresources[face].row_pitch =
-            k_ptde_size * 4u;
-        subresources[face].slice_pitch =
-            static_cast<std::uint32_t>(
-                k_ptde_face_bytes);
-    }
-
-    const resource_desc desc(
-        resource_type::texture_2d,
-        k_ptde_size,
-        k_ptde_size,
-        k_faces,
-        1u,
-        format::r8g8b8a8_unorm,
-        1u,
-        memory_heap::default_,
-        resource_usage::shader_resource,
-        resource_flags::cube_compatible);
-
     rgba_cube cube{};
-    if (!device_ptr->create_resource(
-            desc,
-            subresources.data(),
-            resource_usage::shader_resource,
-            &cube.texture))
+    if (!create_ptde_rgba_cube(device_ptr, cube_bytes, cube))
         return false;
-
-    const resource_view_desc view_desc(
-        resource_view_type::texture_cube,
-        format::r8g8b8a8_unorm,
-        0u,
-        1u,
-        0u,
-        k_faces);
-
-    if (!device_ptr->create_resource_view(
-            cube.texture,
-            resource_usage::shader_resource,
-            view_desc,
-            &cube.view)) {
-        device_ptr->destroy_resource(
-            cube.texture);
-        return false;
-    }
 
     bool inserted = false;
     bool carrier_alive = false;
