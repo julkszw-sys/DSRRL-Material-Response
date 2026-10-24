@@ -108,15 +108,13 @@ replace(res,'''    if (!probe.has_value()) {
         if (spec) {''',"certified and unknown native creation SHA")
 replace(res,'''    g_native_resources.erase(
         resource_handle.handle);
-
-    g_snapshot_epoch.fetch_add(''',
+    g_native_diffuse_resources.erase(resource_handle.handle);''',
 '''    g_native_resources.erase(
         resource_handle.handle);
 #if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
     g_v358_lifetime_probes.erase(resource_handle.handle);
 #endif
-
-    g_snapshot_epoch.fetch_add(''',"resource lifetime retirement")
+    g_native_diffuse_resources.erase(resource_handle.handle);''',"resource lifetime retirement")
 helper=r'''#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
 bool v358_probe_origin_for_native_view(
     ID3D11ShaderResourceView *view,
