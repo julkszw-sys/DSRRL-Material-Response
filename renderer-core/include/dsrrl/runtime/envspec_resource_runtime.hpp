@@ -103,6 +103,16 @@ public:
         bool probe_b_required,
         prepared_envdiffuse_resources &prepared) noexcept;
 
+#if defined(DSRRL_V230_INDEPENDENT_ENVDIFFUSE)
+    // Standalone EnvDiffuse consumes the exact stock probe-assignment
+    // identity at t12, NOT a successful EnvSpec island or PTDE EnvSpec
+    // cubemap. Only the assignment witness is shared between operators.
+    // The stock EnvSpec t12/s12 remains untouched in this transaction.
+    bool prepare_independent_envdiffuse(
+        ID3D11DeviceContext *context,
+        prepared_envdiffuse_resources &prepared) noexcept;
+#endif
+
     bool prepare_envdiffuse(
         std::uint16_t probe_a,
         std::uint16_t probe_b,
