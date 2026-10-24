@@ -7,7 +7,7 @@
 #include <cstring>
 #include <optional>
 #include <cstdio>
-#include <reshade.hpp>
+
 
 namespace dsrrl::runtime {
 namespace {
@@ -18,6 +18,7 @@ std::atomic<std::uint64_t> g_owner_enriched{0};
 std::atomic<std::uint64_t> g_owner_authenticated{0};
 std::atomic<std::uint64_t> g_actual_material_authenticated{0};
 std::atomic<std::uint64_t> g_fail_open{0};
+std::atomic<warrior_9360_log_sink> g_warrior_log_sink{nullptr};
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
 struct warrior_9360_model {
@@ -208,6 +209,11 @@ bool owner_tuple_authenticated_cached(
 }
 }
 
+void warrior_9360_set_log_sink(warrior_9360_log_sink sink) noexcept
+{
+    g_warrior_log_sink.store(sink, std::memory_order_release);
+}
+
 bool material_owner_selection_peek(
     operators::material_response::material_identity &identity) noexcept
 {
@@ -274,7 +280,9 @@ void warrior_9360_trace(
         identity.raw_mtd_sha256[1],
         identity.raw_mtd_sha256[2],
         identity.raw_mtd_sha256[3]);
-    reshade::log::message(reshade::log::level::warning, line);
+    if (const auto log =
+            g_warrior_log_sink.load(std::memory_order_acquire))
+        log(line);
 #else
     (void)stage; (void)identity; (void)route_mask;
     (void)receiver_id; (void)decision;
