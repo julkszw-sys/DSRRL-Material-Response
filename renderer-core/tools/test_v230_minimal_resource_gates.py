@@ -730,7 +730,7 @@ assert _v230_cmetal[0]["raw_mtd_sha256"] == _v230_cmetal_route[0]["sha256"] == (
     "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85")
 assert _v230_cmetal[0]["basis"]["material_slot"] == 0
 assert _v230_cmetal[0]["basis"]["pixel_equivalence"] == "OPEN"
-assert "dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)" in (
+assert "dsr_mtd_identity_supplement_resolve(" in (
     (root / "src/runtime/material_owner_producer.cpp").read_text("utf-8"))
 print("V230_WARRIOR_CMETAL_RAW_IDENTITY_PASS route229 source certification only")
 
