@@ -234,9 +234,15 @@ void log_prepare_stage_once(
             material.semantic_name_hash),
         static_cast<unsigned long long>(
             material.flver_identity_hash));
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Fail-open cause: the normal V230 release strips INFO logs. Keep this
+    // already-bounded exact-family stage witness, but no extra GPU queries.
     reshade::log::message(
-        reshade::log::level::info,
-        line);
+        reshade::log::level::warning, line);
+#else
+    reshade::log::message(
+        reshade::log::level::info, line);
+#endif
 }
 
 #if defined(DSRRL_PMETAL_FORCE_PTDE_PACKEDGI)
