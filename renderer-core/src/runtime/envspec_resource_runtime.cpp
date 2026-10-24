@@ -744,8 +744,10 @@ void on_destroy_resource_view(
 // The caller owns whether an out-of-range ordinal is rejected.
 bool resolve_tracked_probe_locked(
     ID3D11ShaderResourceView *view,
-    std::uint16_t &probe) noexcept
+    std::uint16_t &probe,
+    bool allow_verified_alias) noexcept
 {
+    (void)allow_verified_alias; // consumed only by V356's exact backing patch
     if (view == nullptr)
         return false;
 
@@ -834,13 +836,15 @@ bool snapshot_ready_envspec(
 
     if (!resolve_tracked_probe_locked(
             stock_a,
-            probe_a))
+            probe_a,
+            true))
         return false;
 
     if (probe_b_required) {
         if (!resolve_tracked_probe_locked(
                 stock_b,
-                probe_b))
+                probe_b,
+                true))
             return false;
     } else {
         probe_b = probe_a;
@@ -1450,12 +1454,14 @@ bool envspec_resource_runtime::prepare_native_dsr(
             g_sampler.handle != 0u &&
             resolve_tracked_probe_locked(
                 stock_a,
-                probe_a) &&
+                probe_a,
+                false) &&
             probe_a < env::k_legacy_envspec_probe_count &&
             (!probe_b_required ||
              (resolve_tracked_probe_locked(
                  stock_b,
-                 probe_b) &&
+                 probe_b,
+                 false) &&
               probe_b < env::k_legacy_envspec_probe_count))) {
             if (!probe_b_required)
                 probe_b = probe_a;
