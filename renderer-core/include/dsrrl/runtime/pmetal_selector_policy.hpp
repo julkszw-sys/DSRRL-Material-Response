@@ -18,6 +18,15 @@ auto source(std::int16_t selector, bool character, Lookup lookup) noexcept
     return result;
 }
 
+// When a clamped blend is entirely B, select() normalizes both selectors
+// to B. The corresponding native source pointer must ALSO come from B,
+// otherwise a different bank at the A pointer is read under the B selector.
+inline bool selects_only_b(std::int16_t a, std::int16_t b,
+                           float beta) noexcept
+{
+    return a != b && std::isfinite(beta) && beta >= 1.0f;
+}
+
 struct endpoints { std::int16_t a, b; float beta; bool valid; };
 inline endpoints select(std::int16_t a, std::int16_t b, float beta) noexcept
 {
