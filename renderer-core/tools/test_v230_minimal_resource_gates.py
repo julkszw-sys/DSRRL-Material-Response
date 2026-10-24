@@ -652,7 +652,8 @@ helm_entries = (
 for source_row, logical_hash in helm_entries:
     assert manifest.count(source_row) == 1
     assert v230_resources.count(logical_hash) == 1
-assert "if (!exact_proven_owner_slot(query))" in nonmetal
+assert "if (!exact_proven_owner_slot(query))" not in nonmetal
+assert "classify_mtd_envspec_semantics(query)" in nonmetal
 assert "classify_mtd_envspec_semantics(query)" in nonmetal
 assert "decision.receiver_id >= 33u" in nonmetal
 assert "decision.receiver_id <= 35u" in nonmetal
@@ -662,9 +663,10 @@ bound = v230_resources.split(
 )[1].split(
     "bool material_resource_draw_runtime::\nprepare_fixed_pointlight_material_requests(", 1
 )[0]
-assert "v203_equipment::exact_proven_slot_spec_hash(query, h1)" in bound
-assert bound.index("v203_equipment::exact_proven_slot_spec_hash(query, h1)") < bound.index(
-    "context_spec.exact_name_ptde_companion_verified =")
+assert "v203_equipment::exact_proven_slot_spec_hash(query, h1)" not in bound
+assert "const bool exact_nonmetal =" in bound
+assert "h1 != 0u" in bound
+assert "replacement != nullptr" in bound
 assert "spec_equipment_allowed(h1)" not in bound  # two-line C++ layout
 assert "spec_equipment_allowed(\n                    h1)" in bound
 assert "if (exact_nonmetal)" in bound
@@ -672,7 +674,7 @@ assert "spec_rgb_consumer_ready" in bound
 assert "material.owner_tuple_exact" in bound or "const bool exact_material" in bound
 assert "g_material_resources.prepare_draw_requests" in integrated
 assert "material_resource_draw_runtime" in integrated
-print("V230_WARRIOR_HELM_NARROW_OPERATOR_PASS exact FLVER slot MTD t1 plus receiver fail-open")
+print("V230_WARRIOR_HELM_UNPROVEN_GATE_REMOVED_PASS exact material semantic, receiver and actual SRV identity retained")
 
 # V314 read-only source instrument is inserted INSIDE an existing no-route
 # branch; a second if (route_mask == 0u) was the exact Windows C1075 cause.
@@ -854,3 +856,32 @@ assert ".store(true, std::memory_order_release)" in _v230_register
 assert "resource_epoch_.fetch_add(" not in _v230_register
 assert "for (auto &key : replacement_key_published_)" in _v230_mr_tx
 print("V230_MR_NEGATIVE_TLS_EXACT_KEY_REFRESH_PASS no global cache invalidation or operator widening")
+
+
+# Owner project-wide rule, Supabase revision 14340: a finite manifest may
+# document specific provenance, but cannot veto all other valid nonmetal
+# operators without a confirmed real incorrect-activation witness.
+# The two 2026-10-24 Warrior gates were added in commits 7b1c4d6ce and
+# 449d96db7 and lack demonstrated protective benefit in this mod.
+assert "if (!exact_proven_owner_slot(query))" not in nonmetal
+assert "exact_proven_slot_spec_hash(query, h1)" not in bound
+for required_gate in (
+    "material.owner_tuple_exact",
+    "material.material_slot_valid",
+    "material.route_index == 345u",
+    "classify_mtd_envspec_semantics(query)",
+    "env.presence == mr::ptde_envspec_presence::present",
+    "env.envspc_slot_valid",
+    "decision.receiver_id >= 33u",
+    "decision.receiver_id <= 35u",
+):
+    assert required_gate in nonmetal
+for required_resource in (
+    "h1 != 0u",
+    "spec_equipment_allowed(",
+    "replacement != nullptr",
+    "spec_rgb_consumer_ready",
+    "core_.features().enabled(core::operator_id::spec_rgb)",
+):
+    assert required_resource in bound
+print("V230_UNPROVEN_WARRIOR_GATES_ABSENT_PRESERVED_SOURCE_IDENTITY_PASS")
