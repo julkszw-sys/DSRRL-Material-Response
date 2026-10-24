@@ -30,5 +30,6 @@ for code in (
     assert code in runtime, code
 assert "prepare_envdiffuse_bound(" in materializer
 assert "prepared.env_resources.probe_a" in materializer
-assert materializer.index("prepare_envdiffuse_bound(") < materializer.index("prepared.env_resources.probe_a")
+generated_v372 = materializer.split("b='''", 1)[1].split("'''", 1)[0]
+assert generated_v372.index("prepare_envdiffuse_bound(") < generated_v372.index("prepared.env_resources.probe_a")
 print("V373_INDEPENDENT_OPERATOR_PROBE_IDENTITY_WITNESS_SOURCE_PASS pixel=OPEN")
