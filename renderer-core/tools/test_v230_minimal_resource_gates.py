@@ -381,3 +381,41 @@ assert native_resolution.count("probe_a,\n                false) &&") == 1
 assert native_resolution.count("probe_b,\n                 false) &&") == 1
 assert "if (allow_verified_alias)\n        return v356_resolve_exact_native_backing_locked(view,probe);" in unified_v356
 print("V230_V356_ALIAS_SCOPE_PASS ptde_only_native_v13_stays_strict")
+
+# Runtime witness in the actual V230 one-addon profile (not build-only
+# telemetry): capped RX33-35 x Stable/Lerp, no D3D state reads/writes,
+# records request-ready / source-probe fail-open / native arm / replay
+# issued / restore failure. Warning-level logs survive V230 INFO stripping.
+integrated_rt = (root/"integrated/integrated_addon.cpp").read_text("utf-8")
+pmetal_rt = (root/"src/runtime/pmetal_envspec_draw_runtime.cpp").read_text("utf-8")
+build_rt = (root/"tools/build_v230_production.ps1").read_text("utf-8")
+hot_audit = (root/"tools/audit_active_islands_hotpath.py").read_text("utf-8")
+assert "/DDSRRL_V230_RUNTIME_TELEMETRY" in build_rt
+assert "DSRRL_V230_RUNTIME_TELEMETRY" in integrated_rt
+assert "DSRRL_V230_RUNTIME_TELEMETRY" in pmetal_rt
+probe_rt = integrated_rt.split("void v230_rt_probe_once(",1)[1].split(
+    "bool prepare_island_batch(",1
+)[0]
+assert "rx < 33u || rx > 35u || route != 345u" in probe_rt
+assert "g_v230_rt_probe_seen.fetch_or(" in probe_rt
+assert "const unsigned index = (rx - 33u) * 16u +" in probe_rt
+assert "const std::uint64_t bit = 1ull << index;" in probe_rt
+assert "envspec_resources" not in probe_rt or "pack_envspec" in probe_rt
+assert "prepared->env_resources.ready" in probe_rt
+assert "prepared->envdiffuse_resources.ready" in probe_rt
+assert "prepared->material_resources.spec_rgb" in probe_rt
+assert "srv_mask" in probe_rt and "sampler_mask" in probe_rt
+assert "[DSRRL V230 RUNTIME]" in probe_rt
+assert "pixel_pass=0" in probe_rt
+for forbidden in ("PSGet", "PSSet", "CreatePixelShader", "DrawIndexed("):
+    assert forbidden not in probe_rt
+assert 'v230_rt_probe_once(0u,"prepare_reject"' in integrated_rt
+assert 'v230_rt_probe_once(1u,"batch_ready"' in integrated_rt
+assert integrated_rt.count('v230_rt_probe_once(2u,"native_armed"') == 2
+assert integrated_rt.count('v230_rt_probe_once(7u,"restore_failed"') == 2
+assert '"draw_issued"' in integrated_rt
+assert '"indexed_issued"' in integrated_rt
+assert "dsrrl::runtime::draw_tx_issued(dispatch.transaction)" in integrated_rt
+assert "dsrrl::runtime::draw_tx_result::issued_restore_failed" in integrated_rt
+assert "probe_resolver_boundary" in hot_audit
+print("V230_RUNTIME_TELEMETRY_WIRING_PASS source_scope_native_one_addon_bounded_failopen_restore")
