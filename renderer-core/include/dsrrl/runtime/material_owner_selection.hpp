@@ -39,7 +39,10 @@ enum class warrior_9360_stage : std::uint8_t {
     identity_reject,
     identity_ready,
     prepare_reject,
-    prepared
+    prepared,
+    // Source-stage observations: never authorize a material or shader.
+    parser_registered,
+    selector_flver_lookup
 };
 void warrior_9360_trace(
     warrior_9360_stage stage,
