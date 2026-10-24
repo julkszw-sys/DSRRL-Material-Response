@@ -312,3 +312,42 @@ assert "#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)" in envdiffuse_load
 assert "g_ptde_cubes" in env and "g_ptde_envdiffuse_cubes" in env
 assert "k_ptde_slots = 4u" in env
 print("V230_EXACT_PACK_LOADERS_SHARED_PASS independent_envspec_envdiffuse_paths_sizes_sha")
+
+# Physical GPU cubemap creation is identical; its asset source/cache is NOT.
+# Both callers materialize their own exact SHA-checked RGBA payload after a
+# mutex-protected copy, use the shared 6-face texture/view creator and then
+# individually verify carrier liveness before committing to their own cache.
+cube_helper = env.split("bool create_ptde_rgba_cube(",1)[1].split(
+    "bool get_ptde_cube(",1
+)[0]
+spec_cube = env.split("bool get_ptde_cube(",1)[1].split(
+    "bool get_ptde_envdiffuse_cube(",1
+)[0]
+diff_cube = env.split("bool get_ptde_envdiffuse_cube(",1)[1].split(
+    "} // namespace",1
+)[0]
+for contract in (
+    "format::r8g8b8a8_unorm",
+    "resource_flags::cube_compatible",
+    "resource_view_type::texture_cube",
+    "device_ptr->create_resource(",
+    "device_ptr->create_resource_view(",
+    "device_ptr->destroy_resource(cube.texture);",
+    "k_faces",
+    "k_ptde_face_bytes",
+):
+    assert contract in cube_helper
+assert spec_cube.count("create_ptde_rgba_cube(device_ptr, cube_bytes, cube)") == 1
+assert diff_cube.count("create_ptde_rgba_cube(device_ptr, cube_bytes, cube)") == 1
+assert "g_pack.data() + offset" in spec_cube
+assert "g_envdiffuse_pack.data() +" in diff_cube
+assert "g_ptde_cubes.emplace(" in spec_cube
+assert "g_ptde_envdiffuse_cubes.emplace(" in diff_cube
+assert "g_pack_ready" in spec_cube
+assert "g_envdiffuse_pack_ready" in diff_cube
+assert "std::lock_guard<std::mutex> lock(" in spec_cube
+assert "std::lock_guard<std::mutex> lock(" in diff_cube
+assert "++g_cube_fail;" in spec_cube
+assert "++g_cube_created;" in spec_cube
+assert "++g_cube_created;" in diff_cube
+print("V230_PTDE_CUBEMAP_CREATE_SHARED_PASS separate_caches_lifetimes_source_pack_checks")
