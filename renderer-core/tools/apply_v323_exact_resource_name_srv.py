@@ -92,7 +92,8 @@ def patch_v230_view_witness(s: str) -> str:
         "            static_cast<unsigned long long>(origin.resource_handle),\n"
         "            static_cast<unsigned long long>(origin.logical_hash),\n"
         "            static_cast<unsigned>(origin.class_mask),\n"
-        "            static_cast<unsigned>(origin.uploaded_mask),\n"\n        "            static_cast<unsigned>(origin.disk_mask)\n"
+        "            static_cast<unsigned>(origin.uploaded_mask),\n"
+        "            static_cast<unsigned>(origin.disk_mask)\n"
         "#endif\n            );")
     s=s[:begin]+witness+s[end:]
     s=once(s,
