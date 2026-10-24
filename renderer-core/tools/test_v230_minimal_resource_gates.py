@@ -553,9 +553,9 @@ assert "bound_device->Release();" in prepare_negative
 # the whole native bound fast-path function rather than checking one text
 # marker; this catches a regression hidden by superficial string tests.
 bound_fn = v230_resources.split(
-    "bool material_resource_draw_runtime::\\nprepare_draw_requests_bound(", 1
+    "bool material_resource_draw_runtime::\nprepare_draw_requests_bound(", 1
 )[1].split(
-    "bool material_resource_draw_runtime::\\nprepare_fixed_pointlight_material_requests(", 1
+    "bool material_resource_draw_runtime::\nprepare_fixed_pointlight_material_requests(", 1
 )[0]
 assert "context->" not in bound_fn
 assert "context !=" not in bound_fn
