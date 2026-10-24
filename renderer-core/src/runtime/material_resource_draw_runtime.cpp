@@ -2141,15 +2141,13 @@ prepare_draw_requests_bound(
                     h1) &&
             replacement != nullptr;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-        // The PTDE nonmetal consumer requires a SAME-OWNER stock t1 name.
-        // A globally eligible SpecRGB DDS and matching MTD are not enough:
-        // bind only this FLVER's exact source g_Specular for this slot.
+        // Match by the ACTUALLY BOUND stock t1 SRV logical identity and
+        // its exact PTDE companion. The optional source inventory of 38
+        // FLVER/slot/spec pairs was never shown to prevent a real failure,
+        // so it must not veto unrelated attested nonmetal consumers.
+        // Keep separate MTD EnvSpec eligibility and shader/receiver gates.
         const bool exact_nonmetal =
             v203_equipment::exact_envspec36_material(query.material);
-        if (exact_nonmetal)
-            exact_companion =
-                exact_companion &&
-                v203_equipment::exact_proven_slot_spec_hash(query, h1);
 #endif
 
         operators::resource_bridges::
