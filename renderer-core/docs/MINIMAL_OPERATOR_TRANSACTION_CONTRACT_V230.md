@@ -156,3 +156,31 @@ turn either diagnostic into a new bypass.
 the new HEAD; in-game RX34 hit, exact PTDE t11/c86 consumer activation,
 state restoration and PTDE pixel improvement are still OPEN. The active
 V359-RC1 release is not replaced by this draft.
+
+## Simplified resource/sampler transaction (2026-10-24)
+
+The private stable/Lerp HemEnv consumer still requires every *actual*
+PTDE carrier. The simplification unifies **only the routing code**, not
+the source/consumer semantics. This is the explicit asset checklist for
+the integrated one-addon draw:
+
+| Binding | Resource | Source/identity | Gate and status |
+| --- | --- | --- | --- |
+| t0 | independent Diffuse DDS | exact live stock t0 logical name + valid `DSRRL/Diffuse/*.dds` | resource-only, not gated by c100, independent |
+| t2 | independent Normal DDS | exact live stock t2 logical name + valid `DSRRL/Normals/*.dds` | resource-only, preserves stock s2 |
+| t10 | PTDE equipment SpecRGB | exact live stock t1 identity, equipment owner/MTD/receiver and `DSRRL/Specular/*.dds` | separate transport; full PS owns the material response |
+| t11/s11 | PTDE EnvDiffuse A RGBA cube and sampler | PackedGI 342 canonical ordinal, `PTDE_GI_ENVDIFFUSE_PACK_RGBA.bin` (8,404,992 bytes, SHA-256 `5ab4a471fedbbc95d8dceb55ed0f4648582a824b4290bec03e6134d7cb81cd8c`) | complete PTDE shader only; exact c86 donor and post-filter RGB/A |
+| t12/s12 | PTDE EnvSpec A RGBA cube and sampler | `PTDE_GI_ENVSPEC_PACK_RGBA.bin` (33,619,968 bytes, SHA-256 `c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`) | verified stock probe identity and EnvSpc slot |
+| t13/s13 | PTDE EnvDiffuse B | same exact pack, independent probe B | Lerp only; `beta==0` binds B=A |
+| t14/s14 | PTDE EnvSpec B | same exact pack, slot/probe B | bound in both variants; `beta==0` binds B=A |
+| s7 | shadow PCF sampler | dedicated R7 shadow-only carrier | conditional exact stable RX33/34; independent of GI |
+| b12 | PTDE LightBank/EnvDiffuse/scene constant carrier | verified actual producer signal | the private shader owns CB12 ABI, never inferred from DDS presence |
+
+The exact pack SHA is a **load-time asset check**, not proof of active
+receiver, successful draw, shader composition or PTDE pixel equivalence.
+`PackedGI` ordinals do not establish native `LegacyGI` asset identity;
+do not substitute a legacy `EnvDif_m18_*` cubemap by ordinal alone. The
+source-only refactor of `pmetal_envspec_draw_runtime.cpp` now writes
+common t12/t14 and s12/s14 mappings once, preserving slot order and
+mode-specific t11/t13 and s11/s13 routes. No D3D11 transaction permission
+or shader bytecode is changed here.
