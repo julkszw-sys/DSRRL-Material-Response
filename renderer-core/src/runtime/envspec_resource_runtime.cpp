@@ -762,17 +762,6 @@ bool resolve_tracked_probe_locked(
     return true;
 }
 
-// V358/V359 source materializers still call this historic read API.
-// Keep a forwarding ABI only: exact SHA-certified PTDE backing authority
-// stays exclusively inside the shared resolver, under the same lock.
-bool probe_for_native_view(
-    ID3D11ShaderResourceView *view,
-    std::uint16_t &probe) noexcept
-{
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return resolve_tracked_probe_locked(view,probe,true);
-}
-
 bool snapshot_ready_envspec(
     ID3D11ShaderResourceView *stock_a,
     ID3D11ShaderResourceView *stock_b,
@@ -1004,6 +993,17 @@ bool create_ptde_rgba_cube(
     }
 
     return true;
+}
+
+// V358/V359 source materializers still call this historic read API.
+// Keep a forwarding ABI only: exact SHA-certified PTDE backing authority
+// stays exclusively inside the shared resolver, under the same lock.
+bool probe_for_native_view(
+    ID3D11ShaderResourceView *view,
+    std::uint16_t &probe) noexcept
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return resolve_tracked_probe_locked(view,probe,true);
 }
 
 bool get_ptde_cube(
