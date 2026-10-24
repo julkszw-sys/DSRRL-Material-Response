@@ -188,3 +188,23 @@ assert 'material.route_index == 345u' in composed
 assert 'witness_rx34_native_envdiffuse(cmd_list, context, source, true);' in composed
 assert 'witness_rx34_native_envdiffuse(cmd_list, context, source, true);\n\n    ID3D11PixelShader *shader = nullptr;' in composed
 print("V230_RX34_T11_DOMAIN_WITNESS_PASS exact_material_readonly_t11_s11_b12")
+
+# Batch append must be atomic across shader, CB, SRV and sampler conflicts.
+# This is a construction invariant, not pixel or runtime proof.
+adapter = (root / "src/runtime/island_draw_adapter.cpp").read_text("utf-8")
+atomic_append = adapter.split(
+    "island_draw_batch_result append_island_draw_request(", 1
+)[1].split(
+    "island_draw_dispatch_result dispatch_island_draw_batch(", 1
+)[0]
+assert "island_draw_batch staged = batch;" in atomic_append
+assert "batch = staged; // single commit after every category passes" in atomic_append
+assert atomic_append.index("batch = staged;") > atomic_append.index(
+    "island_draw_batch_result::sampler_conflict"
+)
+assert "merge_slot_bindings(\n            staged.mutation.constant_buffers," in atomic_append
+assert "merge_slot_bindings(\n            staged.mutation.srvs," in atomic_append
+assert "merge_slot_bindings(\n            staged.mutation.samplers," in atomic_append
+assert "++staged.island_count;" in atomic_append
+assert "++batch.island_count;" not in atomic_append
+print("V230_ATOMIC_BATCH_APPEND_PASS no_partial_mutation_on_late_conflict")
