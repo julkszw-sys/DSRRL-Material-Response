@@ -1542,6 +1542,21 @@ bool pmetal_envspec_draw_runtime::prepare(
                       true,
                       prepared.material_resources);
 
+    // Source-censused chr-bound stock t1 is not a missing player equipment
+    // sidecar. Preserve the whole native character draw without trying the
+    // PTDE equipment island or recording a false SpecRGB fail-open.
+    if (prepared.material_resources.verified_character_not_equipment) {
+        if (shader != nullptr)
+            shader->Release();
+        env_resources_.release(prepared.env_resources);
+        material_resources_.release_prepared_draw(
+            prepared.material_resources);
+        log_prepare_stage_once(
+            1u << 29u, "character_not_equipment_stock",
+            material, decision, family);
+        return false;
+    }
+
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
         if (shader != nullptr)
