@@ -2055,7 +2055,7 @@ prepare_draw_requests_bound(
     // live native D3D11 device as at view creation; stale/reused handles
     // fail open rather than borrowing someone else's negative identity.
     if (receiver_id == 34u && query.material.route_index == 345u &&
-        views[1] != nullptr && context != nullptr) {
+        views[1] != nullptr) {
         const auto key = static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(views[1]));
         ID3D11Device *registered_device = nullptr;
@@ -2067,7 +2067,9 @@ prepare_draw_requests_bound(
         }
         if (registered_device != nullptr) {
             ID3D11Device *bound_device = nullptr;
-            context->GetDevice(&bound_device);
+            // Bound fast path has no ID3D11DeviceContext argument.
+            // Query the native stock t1 SRV's owning device directly.
+            views[1]->GetDevice(&bound_device);
             const bool exact_character_view =
                 bound_device != nullptr &&
                 registered_device == bound_device;
