@@ -469,3 +469,26 @@ assert "v230_view_stage::conflicting_view_identity" in v230_resources
 assert "reshade::api::resource_usage::undefined" in v230_resources
 assert "usage !=\n            reshade::api::resource_usage::shader_resource" not in v230_resources
 print("V230_RESOURCE_VIEW_LIFECYCLE_DIAG_SOURCE_PASS exact_only_no_alias")
+
+# Exercise the complete V323 overlay against the current V230 source, not
+# just the generator anchors. Reject drift before native Windows build.
+import importlib.util
+v323_spec = importlib.util.spec_from_file_location(
+    "v230_v323_overlay", root / "tools/apply_v323_exact_resource_name_srv.py"
+)
+v323_module = importlib.util.module_from_spec(v323_spec)
+v323_spec.loader.exec_module(v323_module)
+generated_v323 = v323_module.patch(v230_resources)
+assert "v214_resource_provenance::instance().snapshot(" in generated_v323
+assert "v230_view_stage::no_name_scope" in generated_v323
+assert "v230_view_origin origin{}" in generated_v323
+assert "view_init=%s backing=%016llx" in generated_v323
+assert "seen.begin()+seen_count" in generated_v323
+assert "source_resource.handle" in generated_v323
+assert "resource_handle.handle" not in generated_v323.split(
+    "void on_init_resource_view(",1
+)[1].split("void on_destroy_resource_view(",1)[0]
+assert "v214_resource_provenance::status::ambiguous" in generated_v323
+assert "resource_exact" in generated_v323
+assert "g_cache.emplace(" in generated_v323
+print("V230_V323_EXECUTED_GENERATOR_BRIDGE_PASS same_native_resource_scope_and_unique_rx34")
