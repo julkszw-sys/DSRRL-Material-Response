@@ -109,6 +109,14 @@ def patch_v230_view_witness(s: str) -> str:
         "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
         "        g_v230_view_origin.clear();\n"
         "#endif")
+    s=once(s,
+        "        bool changed = false;\n"
+        "        for (auto it = g_cache.begin();",
+        "        bool changed = false;\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "        g_v230_view_origin.clear();\n"
+        "#endif\n"
+        "        for (auto it = g_cache.begin();")
     return s
 
 
