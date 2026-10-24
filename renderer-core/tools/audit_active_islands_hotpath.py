@@ -477,10 +477,18 @@ def main():
         "void on_destroy_resource_view(")
     if "g_snapshot_epoch.fetch_add" in init_view:
         fail("unrelated EnvSpec SRV creation still globally invalidates snapshot TLS")
+    # Before V230 the native-view registry cut was probe_for_native_view.
+    # V230 moved V356 same-backing evidence into a shared, exact tracked
+    # resolver; don't demand an eliminated function as a boundary.
+    probe_resolver_boundary = (
+        "bool resolve_tracked_probe_locked("
+        if "bool resolve_tracked_probe_locked(" in envspec
+        else "bool probe_for_native_view("
+    )
     destroy_view=function_body(
         envspec,
         "void on_destroy_resource_view(",
-        "bool probe_for_native_view(")
+        probe_resolver_boundary)
     require(destroy_view,
         "g_snapshot_epoch.fetch_add(",
         "EnvSpec view-destroy snapshot invalidation")
