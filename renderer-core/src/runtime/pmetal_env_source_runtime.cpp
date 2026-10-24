@@ -2231,6 +2231,18 @@ void __fastcall envspec_blend_hook_entry(
                 selector_b),
             beta);
 
+    // select() reduces beta >= 1 to B-only (endpoints.a == endpoints.b).
+    // The native hook still receives the ORIGINAL A and B bank pointers.
+    // Decode the normalized B selector from source_b, never from source_a.
+    // The original host call below remains unchanged.
+    void *const selected_source_a =
+        pmetal_selector_policy::selects_only_b(
+            static_cast<std::int16_t>(selector_a),
+            static_cast<std::int16_t>(selector_b),
+            beta)
+            ? source_b
+            : source_a;
+
     f4 a{};
     f4 b{};
     std::uint64_t bank_a = 0u;
@@ -2242,7 +2254,7 @@ void __fastcall envspec_blend_hook_entry(
     if (endpoints.valid) {
         donor_ok =
             read_exact_source(
-                source_a,
+                selected_source_a,
                 endpoints.a,
                 a,
                 bank_a,
@@ -2315,7 +2327,7 @@ void __fastcall envspec_blend_hook_entry(
             bank_b,
             row_a,
             row_b,
-            source_a,
+            selected_source_a,
             endpoints.a,
             source_b,
             endpoints.b);
