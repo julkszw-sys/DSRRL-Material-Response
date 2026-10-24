@@ -33,7 +33,11 @@ assert "v315::summary();" in addon
 assert addon.count("v315::prepared(")==2
 assert addon.count("v315::issued(")==2
 assert addon.count("dispatch.transaction !=")==2
-assert addon.count("dsrrl::runtime::draw_tx_result::issued_restore_failed")==2
+# Two V315 ledger checks are mandatory; V230 adds two separate
+# post-transaction restore-failure telemetry gates in the same integrated
+# file. The file-global count must not reject a correctly isolated witness.
+assert addon.count("dsrrl::runtime::draw_tx_result::issued_restore_failed")>=2
+
 assert addon.count("draw_tx_issued(dispatch.transaction)")>=2
 assert "prepared.envspec.material_resources.logical_spec_hash" in addon
 assert "if (latest_hook_source(out))" in source
