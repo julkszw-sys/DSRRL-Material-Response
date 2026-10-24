@@ -84,16 +84,11 @@ replace(res,'''    if (!extract_tight_bc6h(desc, initial_data, tight)) {
 #endif
         }
         return;''',"missing BC6H initial data")
-replace(res,'''    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
-
-    if (!probe.has_value()) {''',
-'''    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
-#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
-    {
+replace(res,'''    if (!probe.has_value()) {
+        if (spec) ++g_native_hash_miss;
+        return;''',
+'''#if defined(DSRRL_V358_EXACT_PROBE_ORIGIN)
+    if (spec) {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (device_ptr==g_device) {
             v358_lifetime_probe_record item{};
@@ -108,7 +103,9 @@ replace(res,'''    const auto probe =
     }
 #endif
 
-    if (!probe.has_value()) {''',"certified and unknown native creation SHA")
+    if (!probe.has_value()) {
+        if (spec) ++g_native_hash_miss;
+        return;''',"certified and unknown native creation SHA")
 replace(res,'''    g_native_resources.erase(
         resource_handle.handle);
 
