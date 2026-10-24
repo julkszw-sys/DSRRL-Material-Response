@@ -169,6 +169,7 @@ for read in (
     'context->PSGetShaderResources(11u, 1u, &t11);',
     'context->PSGetSamplers(11u, 1u, &s11);',
     'context->PSGetConstantBuffers(12u, 1u, &b12);',
+    'pixel_srv_shadow_snapshot(cmd_list, 11u, 1u, shadow_views);',
     't11->GetDesc(&srv_desc);',
     'texture->GetDesc(&texture_desc);',
     'cb_desc.ByteWidth',
