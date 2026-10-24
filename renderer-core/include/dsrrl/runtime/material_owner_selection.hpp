@@ -21,6 +21,9 @@ bool material_owner_selection_consume(
 
 // Read-only snapshot of the TLS owner before an unrouted/dynamic-skip draw
 // clears it. A snapshot is never operator, resource or shader authority.
+using warrior_9360_log_sink = void (*)(const char *) noexcept;
+void warrior_9360_set_log_sink(warrior_9360_log_sink sink) noexcept;
+
 bool material_owner_selection_peek(
     operators::material_response::material_identity &identity) noexcept;
 
