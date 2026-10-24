@@ -191,7 +191,8 @@ void v230_observe_view(
     std::uint64_t name_hash,
     v230_view_stage stage,
     std::uint8_t class_mask,
-    std::uint8_t uploaded_mask) noexcept
+    std::uint8_t uploaded_mask,
+    std::uint8_t disk_mask = 0u) noexcept
 {
     if (view_key == 0u) return;
     try {
@@ -201,7 +202,7 @@ void v230_observe_view(
             g_v230_view_origin.size() >= k_v230_view_origin_max)
             g_v230_view_origin.erase(g_v230_view_origin.begin());
         g_v230_view_origin[view_key] = {
-            resource_key,name_hash,stage,class_mask,uploaded_mask
+            resource_key,name_hash,stage,class_mask,uploaded_mask,disk_mask
         };
     } catch (...) {
         // Diagnostic allocation failure is never resource permission.
