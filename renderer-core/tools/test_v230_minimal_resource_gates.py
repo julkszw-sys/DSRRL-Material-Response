@@ -685,3 +685,27 @@ assert "'''#if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)" in v314_unrouted_pat
 assert "'''    if (route_mask == 0u) {" not in v314_unrouted_patch
 assert v314_unrouted_patch.count("v314::report_stock_unrouted(") == 1
 print("V230_V314_BRACE_CONTRACT_PASS no_duplicate_unrouted_scope")
+
+# The uploaded 2026-10-24 gameplay log had 0 Warrior FULL-SHA markers,
+# despite a loaded addon and route345 native draw hits. Trace two genuinely
+# earlier stages without weakening FLVER, MTD, shader or stock view authority.
+warrior_flver = (root / "src/runtime/flver_engine_hooks.cpp").read_text("utf-8")
+assert "k_warrior_stages = 12u" in warrior_owner
+assert "parser_registered" in warrior_h and "selector_flver_lookup" in warrior_h
+assert "warrior_9360_stage::parser_registered" in warrior_flver
+assert "warrior_9360_stage::selector_flver_lookup" in warrior_flver
+parser_start=warrior_flver.index("void __fastcall parse_entry(")
+parser_end=warrior_flver.index("void __fastcall destroy_entry(",parser_start)
+parser_region=warrior_flver[parser_start:parser_end]
+assert parser_region.index("flver_identity_observe_parse(") < parser_region.index(
+    "warrior_9360_stage::parser_registered")
+assert parser_region.index("warrior_9360_stage::parser_registered") < parser_region.index("if(g_po)")
+selector_start=warrior_flver.index("bool owner_lookup_ok =")
+selector_end=warrior_flver.index("if(owner_lookup_ok){\n  telemetry::hot_count(g_owner_sha_hits);",selector_start)
+selector_region=warrior_flver[selector_start:selector_end]
+assert "flver_identity_enrich_owner(" in selector_region
+assert "warrior_9360_stage::selector_flver_lookup" in selector_region
+assert "diagnostic.flver_sha256=observation.flver_sha256;" in selector_region
+assert "flver_identity_lookup_direct_parser_model(" in selector_region
+assert "warrior_9360_trace" not in (root / "src/runtime/material_owner_producer.cpp").read_text("utf-8")
+print("V230_WARRIOR_PREOWNER_PROBE_SOURCE_PASS parserSHA selectorSHA no authorization widening")
