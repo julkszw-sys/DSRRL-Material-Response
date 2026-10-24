@@ -59,6 +59,88 @@ constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
 constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
 constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 
+// Read-only exact-owner RX34 t11/s11/b12 witness. This is diagnostic
+// resource-domain evidence, never authority to bind a PTDE probe or modify
+// a shader. The live texture dimensions/format separate PackedGI candidates
+// from legacy resources without inventing logical-name mappings.
+std::atomic<std::uint32_t> g_rx34_t11_witness_samples{0u};
+
+void witness_rx34_native_envdiffuse(
+    ID3D11DeviceContext *context,
+    const pmetal_envspec_source &source) noexcept
+{
+    auto sample = g_rx34_t11_witness_samples.load(
+        std::memory_order_relaxed);
+    if (sample >= 8u ||
+        !g_rx34_t11_witness_samples.compare_exchange_strong(
+            sample, sample + 1u, std::memory_order_relaxed))
+        return;
+
+    ID3D11ShaderResourceView *t11 = nullptr;
+    ID3D11SamplerState *s11 = nullptr;
+    ID3D11Buffer *b12 = nullptr;
+    context->PSGetShaderResources(11u, 1u, &t11);
+    context->PSGetSamplers(11u, 1u, &s11);
+    context->PSGetConstantBuffers(12u, 1u, &b12);
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc{};
+    D3D11_TEXTURE2D_DESC texture_desc{};
+    D3D11_SAMPLER_DESC sampler_desc{};
+    D3D11_BUFFER_DESC cb_desc{};
+    bool texture2d = false;
+    ID3D11Resource *resource = nullptr;
+    if (t11 != nullptr) {
+        t11->GetDesc(&srv_desc);
+        t11->GetResource(&resource);
+    }
+    if (resource != nullptr) {
+        ID3D11Texture2D *texture = nullptr;
+        if (SUCCEEDED(resource->QueryInterface(
+                __uuidof(ID3D11Texture2D),
+                reinterpret_cast<void **>(&texture))) &&
+            texture != nullptr) {
+            texture->GetDesc(&texture_desc);
+            texture2d = true;
+            texture->Release();
+        }
+        resource->Release();
+    }
+    if (s11 != nullptr) {
+        s11->GetDesc(&sampler_desc);
+        s11->Release();
+    }
+    if (b12 != nullptr) {
+        b12->GetDesc(&cb_desc);
+        b12->Release();
+    }
+
+    char line[768]{};
+    std::snprintf(
+        line, sizeof(line),
+        "[DSRRL RX34 T11 DOMAIN WITNESS] sample=%u route=345 t11=%p srv_fmt=%u srv_dim=%u tex2d=%u tex_fmt=%u width=%u height=%u array=%u mips=%u misc=%08x s11=%u sampler_filter=%u b12=%u cb_bytes=%u ptde_c86_donor=%u beta=%.9g",
+        static_cast<unsigned>(sample + 1u),
+        static_cast<void *>(t11),
+        static_cast<unsigned>(srv_desc.Format),
+        static_cast<unsigned>(srv_desc.ViewDimension),
+        texture2d ? 1u : 0u,
+        static_cast<unsigned>(texture_desc.Format),
+        texture_desc.Width,
+        texture_desc.Height,
+        texture_desc.ArraySize,
+        texture_desc.MipLevels,
+        texture_desc.MiscFlags,
+        s11 != nullptr ? 1u : 0u,
+        static_cast<unsigned>(sampler_desc.Filter),
+        b12 != nullptr ? 1u : 0u,
+        cb_desc.ByteWidth,
+        source.envdiffuse_linear_valid ? 1u : 0u,
+        static_cast<double>(source.beta));
+    reshade::log::message(
+        reshade::log::level::warning, line);
+    if (t11 != nullptr)
+        t11->Release();
+}
+
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
 std::atomic_bool g_native_envdiffuse_logged{false};
@@ -1139,6 +1221,12 @@ bool pmetal_envspec_draw_runtime::prepare(
             family);
         return false;
     }
+
+    // Exact P_Metal RX34 post-source, pre-transaction witness. No PS/CB/SRV
+    // set calls, no shadow resource cache mutation and no authorization.
+    if (decision.receiver_id == 34u &&
+        material.route_index == 345u)
+        witness_rx34_native_envdiffuse(context, source);
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
