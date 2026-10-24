@@ -1520,6 +1520,17 @@ void on_init_resource_view(
             logical_name_raw,
             logical_name_length);
 
+    // This exact t1 identity was found under a DSR character chrbnd owner.
+    // It is never an equipment sidecar, even if its name contains wp_/am_.
+    // The independent character renderer keeps its stock resource.
+    if (v230_observed_character_t1(logical_hash)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+            v230_view_stage::verified_character_not_equipment,0u,0u);
+#endif
+        return;
+    }
+
     // Resource-only replacements are selected by a live stock texture name
     // and presence of its own user DDS, never by another texture's identity.
     // SpecRGB retains the separate equipment consumer/owner allowlist.
