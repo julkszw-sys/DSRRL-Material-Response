@@ -229,13 +229,19 @@ void warrior_9360_trace(
     const auto model = warrior_model_id(identity.flver_sha256);
     const auto stage_idx = static_cast<std::size_t>(stage);
     if (model == k_warrior_9360_models.size() ||
-        stage_idx >= k_warrior_stages ||
-        !identity.material_slot_valid ||
-        identity.material_slot >= k_warrior_slots)
+        stage_idx >= k_warrior_stages)
         return;
 
+    // The final bucket is reserved for invalid/unresolved slots; these
+    // are precisely the selector failures that must NOT vanish from logs.
+    // All 9360 FLVER models have known slot indices 0..6.
+    const auto slot_bucket =
+        identity.material_slot_valid &&
+        identity.material_slot < k_warrior_slots - 1u
+            ? static_cast<std::size_t>(identity.material_slot)
+            : k_warrior_slots - 1u;
     const auto key = (model * k_warrior_slots +
-        identity.material_slot) * k_warrior_stages + stage_idx;
+        slot_bucket) * k_warrior_stages + stage_idx;
     if (g_warrior_9360_logged[key].exchange(
             true, std::memory_order_relaxed))
         return;
@@ -250,7 +256,7 @@ void warrior_9360_trace(
     std::snprintf(line, sizeof(line),
         "[DSRRL WARRIOR 9360 FIRST CUT] model=%s slot=%u stage=%s "
         "route_mask=0x%02x mtd_route=%u rx=%u decision=%u "
-        "owner_exact=%u actual_mtd=%u mat_valid=%u "
+        "owner_exact=%u slot_valid=%u actual_mtd=%u mat_valid=%u "
         "mtd_sha=%02x%02x%02x%02x pixel_pass=0",
         k_warrior_9360_models[model].name,
         static_cast<unsigned>(identity.material_slot),
@@ -261,6 +267,7 @@ void warrior_9360_trace(
         decision != nullptr ?
             static_cast<unsigned>(decision->reason) : 255u,
         identity.owner_tuple_exact ? 1u : 0u,
+        identity.material_slot_valid ? 1u : 0u,
         identity.actual_material_exact ? 1u : 0u,
         identity.valid ? 1u : 0u,
         identity.raw_mtd_sha256[0],
