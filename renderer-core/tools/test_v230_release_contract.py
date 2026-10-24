@@ -24,6 +24,17 @@ assert "g_mode.store(0u, std::memory_order_release);" in qpc
 telemetry=(root/"include/dsrrl/runtime/runtime_hot_telemetry.hpp").read_text("utf8")
 assert telemetry.count("#if defined(DSRRL_V230_PRODUCTION)")>=3
 core=(root.parent/"build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp").read_text("utf8")
+# User project-wide no-unproven-gates rule: the legacy V296 Oct10
+# logical-name-only test globally denied independent MR diffuse and normal
+# even when their local authenticated operator was otherwise correct.
+# The V230 generated one-addon must NOT carry that cross-operator veto;
+# V359 frozen source and its existing build/source audit remain intact.
+assert "v296_partial_material" not in core
+assert "suppress_partial_material_response(" not in core
+assert "V230 no speculative SpecRGB->Diffuse/Normal global veto." in core
+assert "    const bool diffuse_mr_active =\n        decision.active &&" in core
+assert "    if (context != nullptr) {\n        // MR reset invariant: generic stable MR is diffuse-v1 only." in core
+print("V230_UNPROVEN_V296_GLOBAL_NONMETAL_VETO_REMOVED_PASS")
 for fn in ("void log_state(","void log_effect_matrix(","void observe_pointlight_render_target("):
     assert fn in core
 assert "qpc_bisect::report();" not in core
