@@ -351,3 +351,22 @@ assert "++g_cube_fail;" in spec_cube
 assert "++g_cube_created;" in spec_cube
 assert "++g_cube_created;" in diff_cube
 print("V230_PTDE_CUBEMAP_CREATE_SHARED_PASS separate_caches_lifetimes_source_pack_checks")
+
+# V356 remains the authoritative SOURCE materializer of the exact
+# SHA-certified native BC6H backing alias. The V230 shared resolver must
+# receive that same V356 implementation; eliminating the orphan old helper
+# must NEVER eliminate its active build-time authorization path.
+v356_materializer = (root / "tools/materialize_v356_exact_probe_backing.py").read_text("utf-8")
+unified_v356 = v356_materializer.split(
+    'if "bool resolve_tracked_probe_locked(" in s:', 1
+)[1].split('raise SystemExit(0)', 1)[0]
+assert "once(unified_anchor,impl+unified_anchor" in unified_v356
+assert "v356_resolve_exact_native_backing_locked(view,probe)" in unified_v356
+assert "DXGI_FORMAT_BC6H_UF16" in v356_materializer
+assert "DXGI_FORMAT_BC6H_SF16" in v356_materializer
+assert "D3D11_SRV_DIMENSION_TEXTURECUBE" in v356_materializer
+assert "g_native_resources.find(" in v356_materializer
+assert "same_device" in v356_materializer
+assert 'once(anchor,impl+anchor,"helper")' in v356_materializer
+assert 'once(before,after,"probe_for_native_view")' in v356_materializer
+print("V230_V356_ALIAS_MATERIALIZER_COMPAT_PASS exact_resource_backing_still_in_unified_resolver")
