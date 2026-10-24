@@ -847,5 +847,5 @@ assert _v230_register.index("bank.emplace(") < _v230_register.index(
 assert _v230_register.count("resource_epoch_.fetch_add(") == 1
 assert "std::memory_order_release" in _v230_register
 assert _v230_register.index("resource_epoch_.fetch_add(") < _v230_register.index(
-    "++ok_counter;")
+    "++ok_counter;", _v230_register.index("bank.emplace("))
 print("V230_MR_NEGATIVE_TLS_INVALIDATE_SOURCE_PASS new exact shader only, no broadened material admission")
