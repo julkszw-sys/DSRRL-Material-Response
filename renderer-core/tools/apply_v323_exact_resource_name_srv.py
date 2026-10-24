@@ -278,7 +278,7 @@ void on_destroy_resource(
         '        reshade::addon_event::init_resource>(on_init_resource);\n\n'
         '    release_cache();')
 
-    return s
+    return patch_v230_view_witness(s)
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
