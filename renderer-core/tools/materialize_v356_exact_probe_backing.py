@@ -84,7 +84,8 @@ bool v356_resolve_exact_native_backing_locked(
 if "bool resolve_tracked_probe_locked(" in s:
     unified_anchor='''bool resolve_tracked_probe_locked(
     ID3D11ShaderResourceView *view,
-    std::uint16_t &probe) noexcept
+    std::uint16_t &probe,
+    bool allow_verified_alias) noexcept
 {'''
     once(unified_anchor,impl+unified_anchor,"unified helper")
     before_unified='''    const auto found = g_resource_by_view.find(key);
@@ -97,16 +98,18 @@ if "bool resolve_tracked_probe_locked(" in s:
 
 bool snapshot_ready_envspec('''
     after_unified='''#if defined(DSRRL_V356_EXACT_BACKING_SRV_ALIAS)
-    (void)key;
-    return v356_resolve_exact_native_backing_locked(view,probe);
-#else
+    // Only the PTDE PackedGI cubemap path had V356 alias authority before
+    // simplification. The native DSR diagnostic calls with false and
+    // remains exact registered-view-only.
+    if (allow_verified_alias)
+        return v356_resolve_exact_native_backing_locked(view,probe);
+#endif
     const auto found = g_resource_by_view.find(key);
     if (found == g_resource_by_view.end())
         return false;
 
     probe = found->second.probe_ordinal;
     return true;
-#endif
 }
 
 bool snapshot_ready_envspec('''
