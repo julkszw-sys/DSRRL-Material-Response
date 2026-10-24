@@ -62,6 +62,10 @@ python renderer-core/tools/materialize_v359_view_scope_identity.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 exact view source recovery failed' }
 python renderer-core/tools/test_v359_attested_gi_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 test failed' }
+python renderer-core/tools/materialize_v372_independent_bound_t11_composite.py
+if ($LASTEXITCODE -ne 0) { throw 'V372 bound t11 materializer failed' }
+python renderer-core/tools/test_v372_bound_t11_composite.py
+if ($LASTEXITCODE -ne 0) { throw 'V372 bound t11 contract failed' }
 
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'
