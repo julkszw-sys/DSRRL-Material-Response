@@ -733,3 +733,65 @@ assert _v230_cmetal[0]["basis"]["pixel_equivalence"] == "OPEN"
 assert "dsr_mtd_identity_supplement_resolve(semantic_hash, raw_mtd_sha)" in (
     (root / "src/runtime/material_owner_producer.cpp").read_text("utf-8"))
 print("V230_WARRIOR_CMETAL_RAW_IDENTITY_PASS route229 source certification only")
+
+# 2026-10-24 source-exact MTD identity reconciliation, from owner-supplied
+# original DSR Mtd.mtdbnd.dcx SHA 7c5a0952c1016a3efa3c6a7180bc60af81ccf7b2a4685c3c89028eda78c2d8b5.
+# This certifies *transported raw identity* only, never PTDE pixel output.
+_v230_supp = _v230_json.loads(
+    (root / "data/census/dsr_mtd_identity_certified_supplement_v1.json").read_text("utf-8"))
+_v230_routes = _v230_json.loads(
+    (root / "data/material_response_routes_v1.json").read_text("utf-8"))
+_v230_reg_text = (
+    root / "include/dsrrl/operators/material_response/generated_dsr_mtd_identity_v1.hpp"
+).read_text("utf-8")
+import re as _v230_re
+_v230_generic = {}
+for _v230_match in _v230_re.finditer(
+        r"\{(0x[0-9a-f]{16})ull,\{([^}]+)\},(true|false)\}", _v230_reg_text):
+    _v230_generic[int(_v230_match.group(1), 16)] = "".join(
+        _v230_re.findall(r"0x([0-9a-f]{2})", _v230_match.group(2)))
+def _v230_fnv64(n):
+    h = 14695981039346656037
+    for b in n.encode("utf-8"):
+        h = ((h ^ b) * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return h
+_v230_supp_by_name = {r["semantic_name"]: r for r in _v230_supp["records"]}
+assert len(_v230_supp_by_name) == len(_v230_supp["records"]) == 57
+_v230_original_bnd_sha = (
+    "7c5a0952c1016a3efa3c6a7180bc60af81ccf7b2a4685c3c89028eda78c2d8b5")
+_v230_source_rows = [
+    r for r in _v230_supp["records"]
+    if r.get("basis", {}).get("dcx_sha256") == _v230_original_bnd_sha
+]
+assert len(_v230_source_rows) == 30
+assert all(r["status"] == "CONFIRMED" and
+           r["authority_class"] == "MATERIAL_IDENTITY_ONLY"
+           for r in _v230_source_rows)
+_v230_covered = []
+_v230_not_covered = []
+for r in _v230_routes["routes"]:
+    name = r["mtd_name"]
+    source = _v230_supp_by_name.get(name)
+    exact = source["raw_mtd_sha256"] if source else _v230_generic.get(
+        _v230_fnv64(name))
+    if exact == r["sha256"]:
+        _v230_covered.append(name)
+    else:
+        _v230_not_covered.append(name)
+assert len(_v230_routes["routes"]) == 35
+assert len(_v230_covered) == 33
+assert set(_v230_not_covered) == {
+    "P_DullLeather[DSB].mtd", # 2 distinct DSR raw SHA for one name!
+    "C_3530_Unique_Wet[DSB].mtd", # route231 SHA != source archive SHA
+}
+assert "P_DullLeather[DSB].mtd" not in _v230_supp_by_name
+assert "C_3530_Unique_Wet[DSB].mtd" not in _v230_supp_by_name
+_v230_producer = (root / "src/runtime/material_owner_producer.cpp").read_text("utf-8")
+assert 'mr::mtd_semantic_hash("Ps_Body[DSB].mtd")' in _v230_producer
+assert 'mr::mtd_semantic_hash("P_DullLeather[DSB]_Edge.mtd")' in _v230_producer
+assert "const bool source_unique_bnd_override" in _v230_producer
+assert _v230_producer.index("source_unique_bnd_override") < _v230_producer.index(
+    "const bool sha_resolved")
+print("V230_DSR_RAW_MTD_SOURCE_CENSUS_PASS 35 routes, 33 exact registrable, "
+      "2 quarantined (ambiguous, bad route digest); 30 source-verified repairs "
+      "and exactly 2 stale-unique overrides, pixel OPEN")
