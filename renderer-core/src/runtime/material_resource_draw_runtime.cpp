@@ -1512,6 +1512,12 @@ void on_init_resource_view(
         normal_member = std::filesystem::is_regular_file(
             sidecar_path(asset_class::normal, logical_name), normal_ec) &&
             !normal_ec;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        std::error_code spec_ec;
+        spec_disk_present = std::filesystem::is_regular_file(
+            sidecar_path(asset_class::specular, logical_name), spec_ec) &&
+            !spec_ec;
+#endif
     } catch (...) {
         return;
     }
