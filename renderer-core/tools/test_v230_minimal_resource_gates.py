@@ -814,3 +814,20 @@ assert "v230_nonmetal_route_trace(2u, receiver_id, material, decision)" in _v230
 assert "v230_nonmetal_route_trace(3u, receiver_id, material, decision)" in _v230_addon
 assert "prepared.mr_in_batch ? 4u : 5u" in _v230_addon
 print("V230_ALL_NONMETAL_FIRST_CUT_SOURCE_PASS route specific diagnostic only; no new shader permissions")
+
+# 2026-10-24 second nonmetal owner log: first draw route160 RX33 rejected,
+# later route160 RX34 prepared; first route232 RX33 prepared but RX34 rejected.
+# Route-only latches conflate receiver, slot and time. Keep read-only
+# result stamps AFTER actual indexed/nonindexed draw dispatch, not only prep.
+assert "512u * 24u * 16u" in _v230_addon
+assert "std::min(material.material_slot, 15u)" in _v230_addon
+assert "(receiver - 24u)" in _v230_addon
+assert "g_v230_nonmetal_route_logged[key].fetch_or(" in _v230_addon
+for _stage in ("batch_mutation_ready","indexed_issued","indexed_failopen",
+               "batch_prepare_fail","draw_issued","draw_failopen"):
+    assert f'"{_stage}"' in _v230_addon
+assert _v230_addon.count("v230_nonmetal_route_trace(6u, receiver_id, material, decision)") == 2
+assert _v230_addon.count("v230_nonmetal_route_trace(9u, receiver_id, material, decision)") == 2
+assert "draw_tx_issued(dispatch.transaction) ? 7u : 8u" in _v230_addon
+assert "draw_tx_issued(dispatch.transaction) ? 10u : 11u" in _v230_addon
+print("V230_NONMETAL_RECEIVER_SLOT_DOWNSTREAM_PASS per RX/slot actual issued marker and fail-open")
