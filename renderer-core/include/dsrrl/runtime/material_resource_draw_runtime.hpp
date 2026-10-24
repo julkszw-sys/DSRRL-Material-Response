@@ -69,6 +69,7 @@ struct prepared_material_resource_draw {
     std::uint32_t retained_count = 0;
 
     bool spec_rgb = false;
+    bool verified_character_not_equipment = false;
     bool diffuse = false;
     bool normal = false;
 };

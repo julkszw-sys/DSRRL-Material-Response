@@ -12,7 +12,8 @@ static_assert(
 
 enum class diffuse_action : std::uint8_t {
     preserve_existing_route = 0,
-    bind_ptde_t0_and_full_material_response
+    bind_ptde_t0,
+    bind_ptde_t0_and_full_material_response = bind_ptde_t0
 };
 
 enum class diffuse_reason : std::uint8_t {
@@ -35,14 +36,13 @@ struct diffuse_bridge_context {
     bool exact_ptde_diffuse_companion_verified = false;
     bool ptde_srv_ready = false;
 
-    // Diffuse resource alone is not the complete PTDE material-domain target.
-    // The exact paired PTDE c100 donor and the already-certified local
-    // diffuse-linear receiver are both mandatory.
+    // Material Response c100 and the diffuse-linear receiver are separate
+    // operator signals, not prerequisites for the t0 resource replacement.
     bool ptde_c100_donor_verified = false;
     bool diffuse_linear_receiver_ready = false;
 
-    // Shared-MTD routes require the exact texture-identity conjunction. Direct
-    // exact material routes leave shared_material_route=false.
+    // Legacy aggregate-route metadata. Resource-local t0 selects by the
+    // current bound stock texture and exact corresponding sidecar.
     bool shared_material_route = false;
     bool exact_texture_identity_conjunction = false;
 };
@@ -59,10 +59,8 @@ struct diffuse_bridge_decision {
 // Equipment Diffuse augmentation for stable no-PointLight DifSpcBmp HemEnv
 // receivers 24..35.
 //
-// Complete target route:
-//   exact PTDE diffuse companion -> t0
-//   exact paired PTDE c100 donor
-//   existing certified diffuse-linear Material Response receiver
+// Resource-local target: live stock t0 identity -> matching PTDE sidecar -> t0.
+// Material Response c100 remains a separate operator.
 //
 // When any coordinate is missing, preserve the already-selected route. This is
 // important for SPEC_ONLY draws: absence of a diffuse companion must not disable

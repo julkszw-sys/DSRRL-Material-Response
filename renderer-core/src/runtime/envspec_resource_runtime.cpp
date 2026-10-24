@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
+#include "dsrrl/operators/env_spec/native_envdiffuse_identity.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 
 #include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
@@ -33,6 +34,8 @@ namespace env = operators::env_spec;
 namespace hashing = operators::legacy_plan::hashing;
 
 constexpr std::uint32_t k_dsr_size = 256u;
+constexpr std::uint32_t k_dsr_diffuse_size = 64u;
+constexpr std::size_t k_dsr_diffuse_tight_bc6h_bytes = 24576u;
 constexpr std::uint32_t k_faces = 6u;
 constexpr std::uint32_t k_dsr_levels = 8u;
 constexpr std::size_t k_dsr_tight_bc6h_bytes = 524352u;
@@ -64,6 +67,10 @@ std::unordered_map<std::uint64_t,native_probe_record>
     g_native_resources;
 std::unordered_map<std::uint64_t,native_view_record>
     g_resource_by_view;
+std::unordered_map<std::uint64_t,native_probe_record> g_native_diffuse_resources;
+std::unordered_map<std::uint64_t,native_view_record> g_diffuse_by_view;
+env::native_diffuse_hash_atlas g_native_diffuse_hashes{};
+bool g_native_diffuse_atlas_ready = false;
 std::unordered_map<std::uint32_t,rgba_cube>
     g_ptde_cubes;
 std::unordered_map<std::uint16_t,rgba_cube>
@@ -203,119 +210,44 @@ std::filesystem::path process_dir()
         buffer).parent_path();
 }
 
-bool load_pack(
+// The two PTDE PackedGI families have different contents, cardinalities
+// and semantic consumers. Share only the mechanics of reading a regular
+// file with exact size and SHA-256 validation; never share pack identity
+// or infer a probe ordinal from an EnvDiffuse/native LegacyGI texture.
+bool load_exact_cube_pack(
+    const char *relative_path,
+    std::uint64_t expected_size,
+    const hashing::sha256_digest &expected_digest,
     std::vector<std::uint8_t> &out)
 {
     out.clear();
 
     try {
-        const auto root =
-            process_dir();
-        if (root.empty())
+        const auto root = process_dir();
+        if (root.empty() || relative_path == nullptr)
             return false;
 
         const auto path =
-            root /
-            std::filesystem::path(
-                env::k_legacy_packed_gi_relative_path);
+            root / std::filesystem::path(relative_path);
 
         std::error_code ec;
-        const auto size =
-            std::filesystem::file_size(
-                path,
-                ec);
-
-        if (ec ||
-            size != env::k_legacy_packed_gi_size)
+        const auto size = std::filesystem::file_size(path, ec);
+        if (ec || size != expected_size)
             return false;
 
-        std::ifstream stream(
-            path,
-            std::ios::binary);
+        std::ifstream stream(path, std::ios::binary);
         if (!stream)
             return false;
 
         std::vector<std::uint8_t> bytes(
             static_cast<std::size_t>(size));
-
         if (!stream.read(
-                reinterpret_cast<char *>(
-                    bytes.data()),
-                static_cast<std::streamsize>(
-                    bytes.size())))
+                reinterpret_cast<char *>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size())))
             return false;
 
-        const auto digest =
-            hashing::sha256(
-                bytes.data(),
-                bytes.size());
-
-        if (digest !=
-            env::k_legacy_packed_gi_sha256)
-            return false;
-
-        out =
-            std::move(bytes);
-        return true;
-    } catch (...) {
-        out.clear();
-        return false;
-    }
-}
-
-
-bool load_envdiffuse_pack(
-    std::vector<std::uint8_t> &out)
-{
-    out.clear();
-
-#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    return false;
-#else
-    try {
-        const auto root =
-            process_dir();
-        if (root.empty())
-            return false;
-
-        const auto path =
-            root /
-            std::filesystem::path(
-                env::k_ptde_envdiffuse_packed_gi_relative_path);
-
-        std::error_code ec;
-        const auto size =
-            std::filesystem::file_size(
-                path,
-                ec);
-
-        if (ec ||
-            size != env::k_ptde_envdiffuse_packed_gi_size)
-            return false;
-
-        std::ifstream stream(
-            path,
-            std::ios::binary);
-        if (!stream)
-            return false;
-
-        std::vector<std::uint8_t> bytes(
-            static_cast<std::size_t>(size));
-
-        if (!stream.read(
-                reinterpret_cast<char *>(
-                    bytes.data()),
-                static_cast<std::streamsize>(
-                    bytes.size())))
-            return false;
-
-        const auto digest =
-            hashing::sha256(
-                bytes.data(),
-                bytes.size());
-
-        if (digest !=
-            env::k_ptde_envdiffuse_packed_gi_sha256)
+        if (hashing::sha256(bytes.data(), bytes.size()) !=
+            expected_digest)
             return false;
 
         out = std::move(bytes);
@@ -324,6 +256,53 @@ bool load_envdiffuse_pack(
         out.clear();
         return false;
     }
+}
+
+bool load_pack(std::vector<std::uint8_t> &out)
+{
+    return load_exact_cube_pack(
+        env::k_legacy_packed_gi_relative_path,
+        env::k_legacy_packed_gi_size,
+        env::k_legacy_packed_gi_sha256,
+        out);
+}
+
+bool load_native_diffuse_hash_atlas(env::native_diffuse_hash_atlas &out)
+{
+    out = {};
+    try {
+        const auto root = process_dir();
+        if (root.empty()) return false;
+        const auto path = root /
+            std::filesystem::path(env::k_native_envdiffuse_atlas_relative_path);
+        std::error_code ec;
+        const auto size = std::filesystem::file_size(path, ec);
+        if (ec || size != env::k_native_envdiffuse_atlas_size) return false;
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream) return false;
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+        if (!stream.read(reinterpret_cast<char *>(bytes.data()),
+                         static_cast<std::streamsize>(bytes.size()))) return false;
+        if (hashing::sha256(bytes.data(), bytes.size()) !=
+            env::k_native_envdiffuse_atlas_sha) return false;
+        return env::parse_native_diffuse_hash_atlas(bytes.data(), bytes.size(), out);
+    } catch (...) {
+        out = {};
+        return false;
+    }
+}
+
+bool load_envdiffuse_pack(std::vector<std::uint8_t> &out)
+{
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    out.clear();
+    return false;
+#else
+    return load_exact_cube_pack(
+        env::k_ptde_envdiffuse_packed_gi_relative_path,
+        env::k_ptde_envdiffuse_packed_gi_size,
+        env::k_ptde_envdiffuse_packed_gi_sha256,
+        out);
 #endif
 }
 
@@ -348,28 +327,42 @@ bool is_native_envspec_desc(
             format::bc6h_sfloat;
 }
 
+bool is_native_envdiffuse_desc(const resource_desc &desc) noexcept
+{
+    if (desc.type != resource_type::texture_2d ||
+        desc.texture.width != k_dsr_diffuse_size ||
+        desc.texture.height != k_dsr_diffuse_size ||
+        desc.texture.depth_or_layers != k_faces ||
+        desc.texture.levels != 1u ||
+        desc.texture.samples != 1u) return false;
+    return desc.texture.format == format::bc6h_typeless ||
+           desc.texture.format == format::bc6h_ufloat ||
+           desc.texture.format == format::bc6h_sfloat;
+}
+
 bool extract_tight_bc6h(
     const resource_desc &desc,
     const subresource_data *initial_data,
     std::vector<std::uint8_t> &out)
 {
-    if (!is_native_envspec_desc(desc) ||
-        initial_data == nullptr)
+    const bool spec = is_native_envspec_desc(desc);
+    const bool diffuse = is_native_envdiffuse_desc(desc);
+    if ((!spec && !diffuse) || initial_data == nullptr)
         return false;
 
     try {
         out.clear();
         out.reserve(
-            k_dsr_tight_bc6h_bytes);
+            spec ? k_dsr_tight_bc6h_bytes : k_dsr_diffuse_tight_bc6h_bytes);
 
         for (std::uint32_t face = 0u;
              face < k_faces;
              ++face) {
             for (std::uint32_t level = 0u;
-                 level < k_dsr_levels;
+                 level < desc.texture.levels;
                  ++level) {
                 const std::uint32_t sub =
-                    face * k_dsr_levels +
+                    face * desc.texture.levels +
                     level;
                 const auto &src =
                     initial_data[sub];
@@ -380,11 +373,11 @@ bool extract_tight_bc6h(
                 const std::uint32_t width =
                     std::max(
                         1u,
-                        k_dsr_size >> level);
+                        desc.texture.width >> level);
                 const std::uint32_t height =
                     std::max(
                         1u,
-                        k_dsr_size >> level);
+                        desc.texture.height >> level);
                 const std::uint32_t block_cols =
                     std::max(
                         1u,
@@ -429,8 +422,8 @@ bool extract_tight_bc6h(
     }
 
     return
-        out.size() ==
-        k_dsr_tight_bc6h_bytes;
+        out.size() == (spec ? k_dsr_tight_bc6h_bytes :
+                         k_dsr_diffuse_tight_bc6h_bytes);
 }
 
 void release_carrier(
@@ -472,6 +465,10 @@ void release_carrier(
 
         g_native_resources.clear();
         g_resource_by_view.clear();
+        g_native_diffuse_resources.clear();
+        g_diffuse_by_view.clear();
+        g_native_diffuse_hashes = {};
+        g_native_diffuse_atlas_ready = false;
         g_device = nullptr;
     }
 
@@ -523,6 +520,8 @@ void on_init_device(
             env::k_legacy_envspec_probe_count);
         g_resource_by_view.reserve(
             env::k_legacy_envspec_probe_count * 2u);
+        g_native_diffuse_resources.reserve(env::k_native_envdiffuse_count);
+        g_diffuse_by_view.reserve(env::k_native_envdiffuse_count * 2u);
         g_ptde_cubes.reserve(
             env::k_legacy_envspec_probe_count *
             k_ptde_slots);
@@ -530,6 +529,9 @@ void on_init_device(
             env::k_legacy_envspec_probe_count);
     }
 
+    env::native_diffuse_hash_atlas native_diffuse_atlas{};
+    const bool native_diffuse_ready =
+        load_native_diffuse_hash_atlas(native_diffuse_atlas);
     std::vector<std::uint8_t> pack;
     const bool pack_ready =
         load_pack(pack);
@@ -575,6 +577,8 @@ void on_init_device(
             replaced_sampler = g_sampler;
             g_pack = std::move(pack);
             g_pack_ready = pack_ready;
+            g_native_diffuse_hashes = native_diffuse_atlas;
+            g_native_diffuse_atlas_ready = native_diffuse_ready;
             g_envdiffuse_pack =
                 std::move(envdiffuse_pack);
             g_envdiffuse_pack_ready =
@@ -598,6 +602,14 @@ void on_init_device(
         device_ptr->destroy_sampler(
             replaced_sampler);
 
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    reshade::log::message(
+        native_diffuse_ready ? reshade::log::level::info :
+                               reshade::log::level::warning,
+        native_diffuse_ready
+            ? "[DSRRL ENVDIFFUSE ID] independently authenticated t11/t13 atlas ready."
+            : "[DSRRL ENVDIFFUSE ID] missing/invalid native t11/t13 atlas: exact diffuse fails open.");
+#endif
     if (pack_ready)
         ++g_pack_admit_ok;
     else
@@ -646,53 +658,45 @@ void on_init_resource(
     resource_usage,
     resource resource_handle)
 {
-    if (device_ptr == nullptr ||
-        resource_handle.handle == 0u ||
-        !is_native_envspec_desc(desc))
-        return;
-
+    if (device_ptr == nullptr || resource_handle.handle == 0u) return;
+    const bool spec = is_native_envspec_desc(desc);
+    const bool diffuse = is_native_envdiffuse_desc(desc);
+    if (!spec && !diffuse) return;
     {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-        if (device_ptr != g_device)
-            return;
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (device_ptr != g_device ||
+            (diffuse && !g_native_diffuse_atlas_ready)) return;
     }
-
-    ++g_native_candidates;
-
+    if (spec) ++g_native_candidates;
     std::vector<std::uint8_t> tight;
-    if (!extract_tight_bc6h(
-            desc,
-            initial_data,
-            tight)) {
-        ++g_native_hash_miss;
+    if (!extract_tight_bc6h(desc, initial_data, tight)) {
+        if (spec) ++g_native_hash_miss;
         return;
     }
-
-    const auto digest =
-        hashing::sha256(
-            tight.data(),
-            tight.size());
-
-    const auto probe =
-        env::legacy_native_probe_for_sha(
-            digest);
-
+    const auto digest = hashing::sha256(tight.data(),tight.size());
+    std::optional<std::uint16_t> probe;
+    if (spec) {
+        probe = env::legacy_native_probe_for_sha(digest);
+    } else {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (device_ptr != g_device || !g_native_diffuse_atlas_ready)
+            return;
+        probe = env::unique_native_diffuse_probe(g_native_diffuse_hashes,digest);
+    }
     if (!probe.has_value()) {
-        ++g_native_hash_miss;
+        if (spec) ++g_native_hash_miss;
         return;
     }
-
     {
-        std::lock_guard<std::mutex> lock(
-            g_mutex);
-        g_native_resources[
-            resource_handle.handle] = {
-                probe.value()
-            };
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (device_ptr != g_device ||
+            (diffuse && !g_native_diffuse_atlas_ready)) return;
+        if (spec)
+            g_native_resources[resource_handle.handle] = {probe.value()};
+        else
+            g_native_diffuse_resources[resource_handle.handle] = {probe.value()};
     }
-
-    ++g_native_matches;
+    if (spec) ++g_native_matches;
 }
 
 void on_destroy_resource(
@@ -711,6 +715,7 @@ void on_destroy_resource(
 
     g_native_resources.erase(
         resource_handle.handle);
+    g_native_diffuse_resources.erase(resource_handle.handle);
 
     g_snapshot_epoch.fetch_add(
         1u,
@@ -726,6 +731,11 @@ void on_destroy_resource(
                     it);
         else
             ++it;
+    }
+    for (auto it=g_diffuse_by_view.begin();it!=g_diffuse_by_view.end();) {
+        if (it->second.resource_handle == resource_handle.handle)
+            it=g_diffuse_by_view.erase(it);
+        else ++it;
     }
 }
 
@@ -753,9 +763,13 @@ void on_init_resource_view(
     const auto native =
         g_native_resources.find(
             resource_handle.handle);
-    if (native ==
-        g_native_resources.end())
+    if (native == g_native_resources.end()) {
+        const auto diffuse = g_native_diffuse_resources.find(resource_handle.handle);
+        if (diffuse == g_native_diffuse_resources.end()) return;
+        g_diffuse_by_view[view.handle] = {
+            resource_handle.handle, diffuse->second.probe_ordinal};
         return;
+    }
 
     g_resource_by_view[
         view.handle] = {
@@ -784,37 +798,35 @@ void on_destroy_resource_view(
     if (device_ptr != g_device)
         return;
 
-    if (g_resource_by_view.erase(
-            view.handle) != 0u)
+    const bool spec_removed = g_resource_by_view.erase(view.handle) != 0u;
+    const bool diff_removed = g_diffuse_by_view.erase(view.handle) != 0u;
+    if (spec_removed || diff_removed)
         g_snapshot_epoch.fetch_add(
             1u,
             std::memory_order_release);
 }
 
-bool probe_for_native_view(
+// All DSR stock-view -> canonical probe ordinal lookups share this
+// exact registry cut. Call only while g_mutex is held; the view lifecycle
+// callback invalidates the lookup and TLS epoch under the same mutex.
+// The caller owns whether an out-of-range ordinal is rejected.
+bool resolve_tracked_probe_locked(
     ID3D11ShaderResourceView *view,
-    std::uint16_t &probe) noexcept
+    std::uint16_t &probe,
+    bool allow_verified_alias) noexcept
 {
-    probe = 0u;
+    (void)allow_verified_alias; // consumed only by V356's exact backing patch
     if (view == nullptr)
         return false;
 
     const auto key =
         static_cast<std::uint64_t>(
-            reinterpret_cast<std::uintptr_t>(
-                view));
-
-    std::lock_guard<std::mutex> lock(
-        g_mutex);
-
-    const auto by_view =
-        g_resource_by_view.find(key);
-    if (by_view ==
-        g_resource_by_view.end())
+            reinterpret_cast<std::uintptr_t>(view));
+    const auto found = g_resource_by_view.find(key);
+    if (found == g_resource_by_view.end())
         return false;
 
-    probe =
-        by_view->second.probe_ordinal;
+    probe = found->second.probe_ordinal;
     return true;
 }
 
@@ -882,27 +894,6 @@ bool snapshot_ready_envspec(
         return true;
     }
 
-    const auto resolve_probe_locked =
-        [](ID3D11ShaderResourceView *view,
-           std::uint16_t &probe) noexcept {
-            if (view == nullptr)
-                return false;
-
-            const auto view_key =
-                static_cast<std::uint64_t>(
-                    reinterpret_cast<std::uintptr_t>(
-                        view));
-            const auto by_view =
-                g_resource_by_view.find(view_key);
-            if (by_view ==
-                g_resource_by_view.end())
-                return false;
-
-            probe =
-                by_view->second.probe_ordinal;
-            return true;
-        };
-
     std::lock_guard<std::mutex> lock(g_mutex);
 
     if (g_device == nullptr ||
@@ -911,15 +902,17 @@ bool snapshot_ready_envspec(
         g_sampler.handle == 0u)
         return false;
 
-    if (!resolve_probe_locked(
+    if (!resolve_tracked_probe_locked(
             stock_a,
-            probe_a))
+            probe_a,
+            true))
         return false;
 
     if (probe_b_required) {
-        if (!resolve_probe_locked(
+        if (!resolve_tracked_probe_locked(
                 stock_b,
-                probe_b))
+                probe_b,
+                true))
             return false;
     } else {
         probe_b = probe_a;
@@ -1017,6 +1010,70 @@ bool snapshot_ready_envspec(
     return true;
 }
 
+// Creating the 32x32x6 RGBA8 SRV is identical for both PTDE PackedGI
+// families. Copy from the independently authenticated pack under g_mutex
+// FIRST, then call this helper without holding the registry lock. Only the
+// caller owns probe/slot mapping, cache insertion and lifetime checks.
+bool create_ptde_rgba_cube(
+    device *device_ptr,
+    std::array<std::uint8_t, k_ptde_cube_bytes> &bytes,
+    rgba_cube &cube) noexcept
+{
+    cube = {};
+    if (device_ptr == nullptr)
+        return false;
+
+    std::array<subresource_data, k_faces> subresources{};
+    for (std::uint32_t face = 0u; face < k_faces; ++face) {
+        subresources[face].data =
+            bytes.data() +
+            static_cast<std::size_t>(face) * k_ptde_face_bytes;
+        subresources[face].row_pitch = k_ptde_size * 4u;
+        subresources[face].slice_pitch =
+            static_cast<std::uint32_t>(k_ptde_face_bytes);
+    }
+
+    const resource_desc desc(
+        resource_type::texture_2d,
+        k_ptde_size, k_ptde_size, k_faces, 1u,
+        format::r8g8b8a8_unorm,
+        1u, memory_heap::default_,
+        resource_usage::shader_resource,
+        resource_flags::cube_compatible);
+
+    if (!device_ptr->create_resource(
+            desc, subresources.data(),
+            resource_usage::shader_resource,
+            &cube.texture))
+        return false;
+
+    const resource_view_desc view_desc(
+        resource_view_type::texture_cube,
+        format::r8g8b8a8_unorm,
+        0u, 1u, 0u, k_faces);
+
+    if (!device_ptr->create_resource_view(
+            cube.texture, resource_usage::shader_resource,
+            view_desc, &cube.view)) {
+        device_ptr->destroy_resource(cube.texture);
+        cube = {};
+        return false;
+    }
+
+    return true;
+}
+
+// V358/V359 source materializers still call this historic read API.
+// Keep a forwarding ABI only: exact SHA-certified PTDE backing authority
+// stays exclusively inside the shared resolver, under the same lock.
+bool probe_for_native_view(
+    ID3D11ShaderResourceView *view,
+    std::uint16_t &probe) noexcept
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return resolve_tracked_probe_locked(view,probe,true);
+}
+
 bool get_ptde_cube(
     std::uint16_t probe,
     std::uint8_t slot,
@@ -1082,61 +1139,8 @@ bool get_ptde_cube(
             cube_bytes.size());
     }
 
-    std::array<subresource_data,k_faces>
-        subresources{};
-
-    for (std::uint32_t face = 0u;
-         face < k_faces;
-         ++face) {
-        subresources[face].data =
-            cube_bytes.data() +
-            static_cast<std::size_t>(face) *
-                k_ptde_face_bytes;
-        subresources[face].row_pitch =
-            k_ptde_size * 4u;
-        subresources[face].slice_pitch =
-            static_cast<std::uint32_t>(
-                k_ptde_face_bytes);
-    }
-
-    const resource_desc desc(
-        resource_type::texture_2d,
-        k_ptde_size,
-        k_ptde_size,
-        k_faces,
-        1u,
-        format::r8g8b8a8_unorm,
-        1u,
-        memory_heap::default_,
-        resource_usage::shader_resource,
-        resource_flags::cube_compatible);
-
     rgba_cube cube{};
-
-    if (!device_ptr->create_resource(
-            desc,
-            subresources.data(),
-            resource_usage::shader_resource,
-            &cube.texture)) {
-        ++g_cube_fail;
-        return false;
-    }
-
-    const resource_view_desc view_desc(
-        resource_view_type::texture_cube,
-        format::r8g8b8a8_unorm,
-        0u,
-        1u,
-        0u,
-        k_faces);
-
-    if (!device_ptr->create_resource_view(
-            cube.texture,
-            resource_usage::shader_resource,
-            view_desc,
-            &cube.view)) {
-        device_ptr->destroy_resource(
-            cube.texture);
+    if (!create_ptde_rgba_cube(device_ptr, cube_bytes, cube)) {
         ++g_cube_fail;
         return false;
     }
@@ -1235,59 +1239,9 @@ bool get_ptde_envdiffuse_cube(
             cube_bytes.size());
     }
 
-    std::array<subresource_data,k_faces>
-        subresources{};
-    for (std::uint32_t face = 0u;
-         face < k_faces;
-         ++face) {
-        subresources[face].data =
-            cube_bytes.data() +
-            static_cast<std::size_t>(face) *
-                k_ptde_face_bytes;
-        subresources[face].row_pitch =
-            k_ptde_size * 4u;
-        subresources[face].slice_pitch =
-            static_cast<std::uint32_t>(
-                k_ptde_face_bytes);
-    }
-
-    const resource_desc desc(
-        resource_type::texture_2d,
-        k_ptde_size,
-        k_ptde_size,
-        k_faces,
-        1u,
-        format::r8g8b8a8_unorm,
-        1u,
-        memory_heap::default_,
-        resource_usage::shader_resource,
-        resource_flags::cube_compatible);
-
     rgba_cube cube{};
-    if (!device_ptr->create_resource(
-            desc,
-            subresources.data(),
-            resource_usage::shader_resource,
-            &cube.texture))
+    if (!create_ptde_rgba_cube(device_ptr, cube_bytes, cube))
         return false;
-
-    const resource_view_desc view_desc(
-        resource_view_type::texture_cube,
-        format::r8g8b8a8_unorm,
-        0u,
-        1u,
-        0u,
-        k_faces);
-
-    if (!device_ptr->create_resource_view(
-            cube.texture,
-            resource_usage::shader_resource,
-            view_desc,
-            &cube.view)) {
-        device_ptr->destroy_resource(
-            cube.texture);
-        return false;
-    }
 
     bool inserted = false;
     bool carrier_alive = false;
@@ -1554,17 +1508,10 @@ bool envspec_resource_runtime::prepare_native_dsr(
     }
 
     ID3D11ShaderResourceView *stock_views[3]{};
-    if (probe_b_required) {
-        context->PSGetShaderResources(
-            12u,
-            3u,
-            stock_views);
-    } else {
-        context->PSGetShaderResources(
-            12u,
-            1u,
-            stock_views);
-    }
+    context->PSGetShaderResources(
+        12u,
+        probe_b_required ? 3u : 1u,
+        stock_views);
 
     auto *stock_a = stock_views[0];
     auto *stock_b =
@@ -1581,40 +1528,20 @@ bool envspec_resource_runtime::prepare_native_dsr(
         std::lock_guard<std::mutex> lock(
             g_mutex);
 
-        const auto resolve_probe_locked =
-            [](ID3D11ShaderResourceView *view,
-               std::uint16_t &probe) noexcept {
-                if (view == nullptr)
-                    return false;
-
-                const auto key =
-                    static_cast<std::uint64_t>(
-                        reinterpret_cast<std::uintptr_t>(
-                            view));
-                const auto found =
-                    g_resource_by_view.find(key);
-
-                if (found ==
-                    g_resource_by_view.end())
-                    return false;
-
-                probe =
-                    found->second.probe_ordinal;
-                return
-                    probe <
-                    env::k_legacy_envspec_probe_count;
-            };
-
         if (g_device != nullptr &&
             g_sampler_ready &&
             g_sampler.handle != 0u &&
-            resolve_probe_locked(
+            resolve_tracked_probe_locked(
                 stock_a,
-                probe_a) &&
+                probe_a,
+                false) &&
+            probe_a < env::k_legacy_envspec_probe_count &&
             (!probe_b_required ||
-             resolve_probe_locked(
+             (resolve_tracked_probe_locked(
                  stock_b,
-                 probe_b))) {
+                 probe_b,
+                 false) &&
+              probe_b < env::k_legacy_envspec_probe_count))) {
             if (!probe_b_required)
                 probe_b = probe_a;
 
@@ -1676,6 +1603,42 @@ bool envspec_resource_runtime::prepare_native_dsr(
 }
 
 
+bool envspec_resource_runtime::prepare_envdiffuse_bound(
+    ID3D11ShaderResourceView *stock_t11,
+    ID3D11ShaderResourceView *stock_t13,
+    bool probe_b_required,
+    prepared_envdiffuse_resources &prepared) noexcept
+{
+    prepared = {};
+#if !defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+    (void)stock_t11; (void)stock_t13; (void)probe_b_required;
+    return false;
+#else
+    if (stock_t11 == nullptr ||
+        (probe_b_required && stock_t13 == nullptr)) return false;
+    std::uint16_t a=0u,b=0u;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (!g_native_diffuse_atlas_ready || g_device == nullptr)
+            return false;
+        const auto resolve = [](ID3D11ShaderResourceView *view,
+                                std::uint16_t &id) noexcept -> bool {
+            if (view == nullptr) return false;
+            const auto key = static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(view));
+            const auto found = g_diffuse_by_view.find(key);
+            if (found == g_diffuse_by_view.end()) return false;
+            id = found->second.probe_ordinal;
+            return id < env::k_native_envdiffuse_count;
+        };
+        if (!resolve(stock_t11,a) ||
+            (probe_b_required && !resolve(stock_t13,b))) return false;
+        if (!probe_b_required) b=a;
+    }
+    return prepare_envdiffuse(a,b,probe_b_required,prepared);
+#endif
+}
+
 bool envspec_resource_runtime::prepare_envdiffuse(
     std::uint16_t probe_a,
     std::uint16_t probe_b,
@@ -1690,11 +1653,12 @@ bool envspec_resource_runtime::prepare_envdiffuse(
     (void)probe_b_required;
     return false;
 #else
-    if (probe_a >=
-            env::k_legacy_envspec_probe_count ||
-        probe_b >=
-            env::k_legacy_envspec_probe_count)
+    // Stable consumes only A: the unused B endpoint cannot veto it.
+    if (probe_a >= env::k_legacy_envspec_probe_count ||
+        (probe_b_required && probe_b >= env::k_legacy_envspec_probe_count))
         return false;
+    if (!probe_b_required)
+        probe_b = probe_a;
 
     resource_view a_view{};
     resource_view b_view{};

@@ -14,7 +14,6 @@
 #endif
 #include "dsrrl/runtime/generated_diffuse_routes_v12.hpp"
 #include "dsrrl/runtime/generated_normal_routes_v12.hpp"
-#include "dsrrl/operators/legacy_plan/sha256_bytes.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -62,10 +61,44 @@ inline bool spec_equipment_allowed(std::uint64_t hash) noexcept
 #endif
     if (generated::spec_equipment_name_hash_allowed_v12(hash)) return true;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    // Two exact base equipment t1 names established by the 2026-10-24
+    // Warrior parts FLVER source census. This only stages a candidate DDS:
+    // nonmetal PTDE t10 binding still requires the exact SHA256 model,
+    // material slot, raw MTD, live stock t1, PTDE consumer and receiver.
+    if (hash == 0xe9c532be429d6f7eull || // hd_m_9360_s
+        hash == 0xb73e2e38d914a8f1ull)  // hd_f_9360_s
+        return true;
+#endif
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     return sidecar_20261010::spec_allowed(hash);
 #else
     return false;
 #endif
+}
+
+// Negative-only RX34 source witness: these *exact* bound t1 identities were
+// reverse-joined to DSR chr/*.chrbnd FLVER, not parts/*.partsbnd equipment.
+// No basename/MTD inference or positive replacement authorization.
+inline bool v230_observed_character_t1(std::uint64_t h) noexcept
+{
+    switch (h) {
+    case 0x03f695a24f8f9be0ull:
+    case 0x236adf2eb0a2afccull: // c2500_wp_a_0200_s
+    case 0x2d2fc5a100f0b05dull:
+    case 0x370ad6a106dc1480ull:
+    case 0x4afb32a9129e6896ull:
+    case 0x6f6c845ad6e9c1d4ull:
+    case 0x82f8f87655320badull:
+    case 0x8629e77c1b231175ull:
+    case 0x8f94806ba5d2be1bull:
+    case 0x903b214ffd5bdb01ull:
+    case 0xa283bf761630b10bull:
+    case 0xfe12c9d08265290aull:
+    case 0xfe2aa6373d1213faull:
+        return true;
+    default:
+        return false;
+    }
 }
 
 enum class asset_class : std::uint8_t {
@@ -153,6 +186,71 @@ constexpr std::uint32_t k_caps2_cubemap = 0x200u;
 core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
+
+// Negative-only, view-lifetime RX34 evidence (not a sidecar allowlist).
+// Kept independently of runtime telemetry so stripped release builds also
+// avoid the equipment island for a source-confirmed chr t1.
+std::unordered_map<std::uint64_t, ID3D11Device *>
+    g_v230_character_view_device;
+constexpr std::size_t k_v230_character_views_max = 16384u;
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+// Exact VIEW-lifetime evidence only. This does not authorize or repair a
+// resource identity. It records why a bound stock t0/t1/t2 had no companion
+// at init_resource_view. Never guess a name from a similar DDS or MTD.
+// The bounded map is invalidated by destroy_resource_view/device.
+enum class v230_view_stage : std::uint8_t {
+    unknown = 0, no_name_scope, no_target_sidecar,
+    named_eligible, registered, registered_without_upload,
+    conflicting_view_identity, verified_character_not_equipment
+};
+struct v230_view_origin {
+    std::uint64_t resource_handle = 0u;
+    std::uint64_t logical_hash = 0u;
+    v230_view_stage stage = v230_view_stage::unknown;
+    std::uint8_t class_mask = 0u;
+    std::uint8_t uploaded_mask = 0u;
+    std::uint8_t disk_mask = 0u;
+};
+std::unordered_map<std::uint64_t, v230_view_origin> g_v230_view_origin;
+constexpr std::size_t k_v230_view_origin_max = 16384u;
+const char *v230_stage_name(v230_view_stage stage) noexcept
+{
+    switch (stage) {
+    case v230_view_stage::no_name_scope: return "NO_LOADER_NAME_AT_VIEW_INIT";
+    case v230_view_stage::no_target_sidecar: return "NAME_HAS_NO_ELIGIBLE_SIDECAR";
+    case v230_view_stage::named_eligible: return "ELIGIBLE_BUT_REGISTRATION_NOT_REACHED";
+    case v230_view_stage::registered: return "REGISTERED";
+    case v230_view_stage::registered_without_upload: return "REGISTERED_NO_DDS_UPLOAD";
+    case v230_view_stage::conflicting_view_identity: return "CONFLICT_QUARANTINE";
+    case v230_view_stage::verified_character_not_equipment: return "VERIFIED_CHR_NOT_PLAYER_EQUIPMENT";
+    default: return "NO_VIEW_INIT_OBSERVATION";
+    }
+}
+void v230_observe_view(
+    std::uint64_t view_key,
+    std::uint64_t resource_key,
+    std::uint64_t name_hash,
+    v230_view_stage stage,
+    std::uint8_t class_mask,
+    std::uint8_t uploaded_mask,
+    std::uint8_t disk_mask = 0u) noexcept
+{
+    if (view_key == 0u) return;
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto found = g_v230_view_origin.find(view_key);
+        if (found == g_v230_view_origin.end() &&
+            g_v230_view_origin.size() >= k_v230_view_origin_max)
+            g_v230_view_origin.erase(g_v230_view_origin.begin());
+        g_v230_view_origin[view_key] = {
+            resource_key,name_hash,stage,class_mask,uploaded_mask,disk_mask
+        };
+    } catch (...) {
+        // Diagnostic allocation failure is never resource permission.
+    }
+}
+#endif
 
 // One sidecar GPU SRV may back multiple concurrently live stock SRVs with
 // exactly the same (device, class, name, logical hash). The cache retains one
@@ -436,6 +534,10 @@ void release_cache() noexcept
         g_view_cache_journal.publish(0u);
         dead.swap(g_cache);
         g_ambiguous_view_device.clear();
+        g_v230_character_view_device.clear();
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        g_v230_view_origin.clear();
+#endif
     }
 
     for (auto &entry : dead)
@@ -473,6 +575,16 @@ void release_cache_for_device(
             if (it->second.device == device) {
                 dead.push_back(it->second);
                 it = g_cache.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+
+        for (auto it = g_v230_character_view_device.begin();
+             it != g_v230_character_view_device.end();) {
+            if (it->second == device) {
+                it = g_v230_character_view_device.erase(it);
                 changed = true;
             } else {
                 ++it;
@@ -568,10 +680,32 @@ std::filesystem::path sidecar_path(
             L".dds") != 0)
         filename += L".dds";
 
-    return root /
-        L"DSRRL" /
-        class_dir(cls) /
-        filename;
+    const auto base = root / L"DSRRL";
+    const auto canonical = base / class_dir(cls) / filename;
+
+    // The owner's exact-name manifest scanner also recognizes the older
+    // Speculars and Normal directory spellings. File identity is unchanged:
+    // select only the *same* leaf after V323 native resource/name routing
+    // and the existing receiver/MTD/SpecRGB allowlist have authorized it.
+    // Never search recursively, infer a basename, or replace a conflicting
+    // canonical file with the alternative directory.
+    std::error_code ec{};
+    if (std::filesystem::exists(canonical, ec) || ec)
+        return canonical;
+
+    const wchar_t *legacy = nullptr;
+    switch (cls) {
+    case asset_class::specular: legacy = L"Speculars"; break;
+    case asset_class::normal: legacy = L"Normal"; break;
+    case asset_class::diffuse: legacy = L"Diffuses"; break;
+    }
+    if (legacy != nullptr) {
+        const auto exact_alternative = base / legacy / filename;
+        ec.clear();
+        if (std::filesystem::is_regular_file(exact_alternative, ec) && !ec)
+            return exact_alternative;
+    }
+    return canonical;
 }
 
 template <typename T>
@@ -642,123 +776,11 @@ load_result load_dds(
                 load_status::unsupported
             };
 
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R3)
-        // R3 closes the remaining content-authority hole on the exact
-        // material seen in the owner's active black/red R2 draw. R2 only
-        // authenticated logical identity + a non-null companion SRV, so a
-        // stale same-name DDS could silently enter t10. For HD_A_9550_s we
-        // now require the exact retail PTDE DDS bytes recovered by the PTDE
-        // equipment extractor.
-        constexpr std::uint64_t k_hd_a_9550_s_hash =
-            0xaedd13872d25cffbull;
-        constexpr char k_hd_a_9550_s_sha256[] =
-            "988d288dc65c7cb0856b65243ed33cbcc16862ea8c233d48ca0a377f0e8b1f77";
-
-        if (cls == asset_class::specular &&
-            logical_hash == k_hd_a_9550_s_hash) {
-            const auto digest =
-                operators::legacy_plan::hashing::sha256(
-                    bytes.data(),
-                    bytes.size());
-            if (!operators::legacy_plan::hashing::matches_hex(
-                    digest,
-                    k_hd_a_9550_s_sha256)) {
-                if (!g_pmetal_r3_spec_attest_fail_logged.exchange(
-                        true,
-                        std::memory_order_relaxed))
-                    reshade::log::message(
-                        reshade::log::level::warning,
-                        "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA mismatch; fail-open, stale/wrong sidecar rejected.");
-                return {
-                    nullptr,
-                    load_status::hash_mismatch
-                };
-            }
-
-            if (!g_pmetal_r3_spec_attest_ok_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
-                reshade::log::message(
-                    reshade::log::level::info,
-                    "[DSRRL PMETAL R3 SPEC ATTEST] HD_A_9550_s exact PTDE SHA PASS.");
-        }
-
-
-#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R5)
-        // PR216 exact-content authority: for the active HD_A_9550 P_Metal
-        // equipment draw, t0 diffuse and t2 normal must be exact retail PTDE
-        // bytes. Same-name stale/wrong sidecars fail open.
-        constexpr std::uint64_t k_hd_a_9550_diffuse_hash =
-            0x00b515c367a88e31ull;
-        constexpr std::uint64_t k_hd_a_9550_normal_hash =
-            0xaedcfe872d25ac4cull;
-        constexpr char k_hd_a_9550_diffuse_sha256[] =
-            "ed4e1d104b5db59d51ace7fdaafbeeb2a8c36eea830233edf29b01907ed46803";
-        constexpr char k_hd_a_9550_normal_sha256[] =
-            "3c83caa2a95a85e1fc2d0397edfd48a271a3829330d7a0d5aa74b0cd599de78c";
-
-        if (cls == asset_class::diffuse &&
-            logical_hash == k_hd_a_9550_diffuse_hash) {
-            const auto digest =
-                operators::legacy_plan::hashing::sha256(
-                    bytes.data(),
-                    bytes.size());
-            if (!operators::legacy_plan::hashing::matches_hex(
-                    digest,
-                    k_hd_a_9550_diffuse_sha256)) {
-                if (!g_pmetal_r5_diffuse_attest_fail_logged.exchange(
-                        true,
-                        std::memory_order_relaxed))
-                    reshade::log::message(
-                        reshade::log::level::warning,
-                        "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA mismatch; fail-open, stale/wrong diffuse sidecar rejected.");
-                return {
-                    nullptr,
-                    load_status::hash_mismatch
-                };
-            }
-
-            if (!g_pmetal_r5_diffuse_attest_ok_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
-                reshade::log::message(
-                    reshade::log::level::info,
-                    "[DSRRL PMETAL R5 DIFFUSE ATTEST] HD_A_9550 exact PTDE SHA PASS.");
-        }
-
-        if (cls == asset_class::normal &&
-            logical_hash == k_hd_a_9550_normal_hash) {
-            const auto digest =
-                operators::legacy_plan::hashing::sha256(
-                    bytes.data(),
-                    bytes.size());
-            if (!operators::legacy_plan::hashing::matches_hex(
-                    digest,
-                    k_hd_a_9550_normal_sha256)) {
-                if (!g_pmetal_r5_normal_attest_fail_logged.exchange(
-                        true,
-                        std::memory_order_relaxed))
-                    reshade::log::message(
-                        reshade::log::level::warning,
-                        "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA mismatch; fail-open, stale/wrong normal sidecar rejected.");
-                return {
-                    nullptr,
-                    load_status::hash_mismatch
-                };
-            }
-
-            if (!g_pmetal_r5_normal_attest_ok_logged.exchange(
-                    true,
-                    std::memory_order_relaxed))
-                reshade::log::message(
-                    reshade::log::level::info,
-                    "[DSRRL PMETAL R5 NORMAL ATTEST] HD_A_9550_n exact PTDE SHA PASS.");
-        }
-#endif
-#else
+// A sidecar is a user-provided texture; the bound stock view identifies
+        // its target. Only the DDS structure/format must be validated here.
+        // Fixed original-file SHA would reject an otherwise valid replacement.
         (void)cls;
         (void)logical_hash;
-#endif
 
         std::uint32_t magic = 0u;
         dds_header header{};
@@ -1416,9 +1438,85 @@ void inspect_many(
     }
 }
 
+// Read-only, bounded Source1-candidate RX34 visibility probe. Stock-view
+// presence alone does not prove a logical texture owner. Never synthesize
+// a hash or authorize a sidecar from this witness: g_cache and quarantine
+// remain the only resource-transport authority.
+std::atomic<std::uint32_t> g_rx34_identity_witness_samples{0u};
+
+void witness_rx34_resource_identity(
+    ID3D11ShaderResourceView *const (&views)[3],
+    const std::uint64_t (&hashes)[3],
+    ID3D11ShaderResourceView *const (&companions)[3],
+    std::uint32_t requested_mask) noexcept
+{
+    auto sample = g_rx34_identity_witness_samples.load(
+        std::memory_order_relaxed);
+    if (sample >= 6u ||
+        !g_rx34_identity_witness_samples.compare_exchange_strong(
+            sample, sample + 1u, std::memory_order_relaxed))
+        return;
+
+    for (std::uint32_t slot = 0u; slot < 3u; ++slot) {
+        auto *stock = views[slot];
+        const auto key = static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(stock));
+        bool registry_found = false;
+        bool quarantined = false;
+        bool class_sidecar_ready = false;
+        std::uint64_t registry_hash = 0u;
+
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            quarantined =
+                g_ambiguous_view_device.find(key) !=
+                g_ambiguous_view_device.end();
+            const auto found = g_cache.find(key);
+            if (found != g_cache.end()) {
+                registry_found = true;
+                registry_hash = found->second.logical_hash;
+                class_sidecar_ready =
+                    slot == 0u ? found->second.diffuse != nullptr :
+                    slot == 1u ? found->second.specular != nullptr :
+                                 found->second.normal != nullptr;
+            }
+        }
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
+        if (stock != nullptr)
+            stock->GetDesc(&desc);
+
+        const char *reason =
+            stock == nullptr ? "NO_STOCK_SRV" :
+            quarantined ? "AMBIGUOUS_NATIVE_VIEW" :
+            !registry_found ? "NO_NAME_SIDECAR_REGISTRY_ENTRY" :
+            !class_sidecar_ready ? "TRACKED_NO_CLASS_SIDECAR" :
+            "TRACKED_CLASS_SIDECAR";
+
+        char line[550]{};
+        std::snprintf(
+            line, sizeof(line),
+            "[DSRRL RX34 RESOURCE ID WITNESS] sample=%u route=345 slot=t%u requested=%u stock=%p srv_format=%u srv_dimension=%u registry=%u ambiguous=%u registry_hash=%016llx inspected_hash=%016llx sidecar=%u reason=%s",
+            static_cast<unsigned>(sample + 1u),
+            static_cast<unsigned>(slot),
+            (requested_mask & (1u << slot)) != 0u ? 1u : 0u,
+            static_cast<void *>(stock),
+            static_cast<unsigned>(desc.Format),
+            static_cast<unsigned>(desc.ViewDimension),
+            registry_found ? 1u : 0u,
+            quarantined ? 1u : 0u,
+            static_cast<unsigned long long>(registry_hash),
+            static_cast<unsigned long long>(hashes[slot]),
+            companions[slot] != nullptr ? 1u : 0u,
+            reason);
+        reshade::log::message(
+            reshade::log::level::warning, line);
+    }
+}
+
 void on_init_resource_view(
     reshade::api::device *device,
-    reshade::api::resource,
+    reshade::api::resource resource_handle,
     reshade::api::resource_usage usage,
     const reshade::api::resource_view_desc &,
     reshade::api::resource_view view)
@@ -1429,50 +1527,118 @@ void on_init_resource_view(
         device == nullptr ||
         device->get_api() !=
             reshade::api::device_api::d3d11 ||
-        usage !=
-            reshade::api::resource_usage::shader_resource ||
+        (usage &
+            reshade::api::resource_usage::shader_resource) ==
+                reshade::api::resource_usage::undefined ||
         view.handle == 0u)
         return;
+
+    // New native view lifetime: a recycled pointer must not inherit chr
+    // equipment-exclusion evidence from an older view. Clear even when
+    // this creation has no exact loader-name TLS evidence.
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_v230_character_view_device.erase(
+            static_cast<std::uint64_t>(view.handle));
+    }
 
     const wchar_t *logical_name_raw = nullptr;
     std::size_t logical_name_length = 0u;
     if (!texture_identity_transport::snapshot_raw(
             logical_name_raw,
-            logical_name_length))
+            logical_name_length)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_observe_view(view.handle, resource_handle.handle, 0u,
+            v230_view_stage::no_name_scope, 0u, 0u);
+#endif
         return;
+    }
 
     const auto logical_hash =
         fnv_name(
             logical_name_raw,
             logical_name_length);
 
-    const bool subsurface_body_spec =
-        exact_subsurface_body_spec_hash(
-            logical_hash);
-    const bool spec_member =
-        spec_equipment_allowed(
-            logical_hash) ||
-        subsurface_body_spec;
-    const bool diffuse_member =
-        generated::diffuse_name_hash_allowed_v12(
-            logical_hash);
-    const bool normal_member =
-        generated::normal_name_hash_allowed_v12(
-            logical_hash);
-
-    if (!spec_member &&
-        !diffuse_member &&
-        !normal_member)
+    // This exact t1 identity was found under a DSR character chrbnd owner.
+    // It is never an equipment sidecar, even if its name contains wp_/am_.
+    // The independent character renderer keeps its stock resource.
+    if (v230_observed_character_t1(logical_hash)) {
+        // The native view handle is authenticated at init and retired on
+        // destroy_resource_view/device. Never classify a reused view by a
+        // stale diagnostic map entry or by texture-name substring.
+        try {
+            const auto key = static_cast<std::uint64_t>(view.handle);
+            auto *native = reinterpret_cast<ID3D11Device *>(
+                device->get_native());
+            if (native != nullptr) {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                if (g_v230_character_view_device.count(key) != 0u ||
+                    g_v230_character_view_device.size() <
+                        k_v230_character_views_max)
+                    g_v230_character_view_device[key] = native;
+            }
+        } catch (...) {
+            // Failed negative tracking never authorizes a sidecar.
+        }
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+            v230_view_stage::verified_character_not_equipment,0u,0u);
+#endif
         return;
+    }
 
+    // Resource-only replacements are selected by a live stock texture name
+    // and presence of its own user DDS, never by another texture's identity.
+    // SpecRGB retains the separate equipment consumer/owner allowlist.
     std::wstring logical_name;
+    bool diffuse_member = false;
+    bool normal_member = false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    bool spec_disk_present = false;
+#endif
     try {
-        logical_name.assign(
-            logical_name_raw,
-            logical_name_length);
+        logical_name.assign(logical_name_raw, logical_name_length);
+        std::error_code diffuse_ec, normal_ec;
+        diffuse_member = std::filesystem::is_regular_file(
+            sidecar_path(asset_class::diffuse, logical_name), diffuse_ec) &&
+            !diffuse_ec;
+        normal_member = std::filesystem::is_regular_file(
+            sidecar_path(asset_class::normal, logical_name), normal_ec) &&
+            !normal_ec;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        std::error_code spec_ec;
+        spec_disk_present = std::filesystem::is_regular_file(
+            sidecar_path(asset_class::specular, logical_name), spec_ec) &&
+            !spec_ec;
+#endif
     } catch (...) {
         return;
     }
+    const bool spec_member = spec_equipment_allowed(logical_hash) ||
+        exact_subsurface_body_spec_hash(logical_hash);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const std::uint8_t v230_disk_mask =
+        (diffuse_member ? 1u : 0u) |
+        (spec_disk_present ? 2u : 0u) |
+        (normal_member ? 4u : 0u);
+#endif
+    if (!spec_member && !diffuse_member && !normal_member) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+            v230_view_stage::no_target_sidecar,0u,0u,
+            v230_disk_mask);
+#endif
+        return;
+    }
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const std::uint8_t v230_class_mask =
+        (spec_member ? 2u : 0u) |
+        (diffuse_member ? 1u : 0u) |
+        (normal_member ? 4u : 0u);
+    v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+        v230_view_stage::named_eligible,v230_class_mask,0u,
+        v230_disk_mask);
+#endif
 
     auto *native_device =
         reinterpret_cast<ID3D11Device *>(
@@ -1497,9 +1663,7 @@ void on_init_resource_view(
             set.shared_mask |= 1u;
     }
 
-    if (generated::
-        diffuse_target_hash_allowed_v12(
-            logical_hash)) {
+    if (diffuse_member) {
         const auto loaded =
             acquire_sidecar(
                 native_device,
@@ -1511,9 +1675,7 @@ void on_init_resource_view(
             set.shared_mask |= 2u;
     }
 
-    if (generated::
-        normal_target_hash_allowed_v12(
-            logical_hash)) {
+    if (normal_member) {
         const auto loaded =
             acquire_sidecar(
                 native_device,
@@ -1528,6 +1690,13 @@ void on_init_resource_view(
     // std::wstring move is noexcept: do not introduce allocations or
     // exceptions on the ReShade resource-view callback path.
     set.logical_name = std::move(logical_name);
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const std::uint8_t v230_uploaded_mask =
+        (set.specular != nullptr ? 2u : 0u) |
+        (set.diffuse != nullptr ? 1u : 0u) |
+        (set.normal != nullptr ? 4u : 0u);
+#endif
 
     const auto key =
         static_cast<std::uint64_t>(
@@ -1585,6 +1754,15 @@ void on_init_resource_view(
     if (!accepted)
         release_set(set);
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+        !accepted ? v230_view_stage::conflicting_view_identity :
+        v230_uploaded_mask == 0u
+            ? v230_view_stage::registered_without_upload :
+              v230_view_stage::registered,
+        v230_class_mask,v230_uploaded_mask,
+        v230_disk_mask);
+#endif
     ++g_named_views;
 }
 
@@ -1606,6 +1784,11 @@ void on_destroy_resource_view(
 
         if (g_ambiguous_view_device.erase(key) != 0u)
             changed = true;
+        if (g_v230_character_view_device.erase(key) != 0u)
+            changed = true;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        g_v230_view_origin.erase(key);
+#endif
 
         const auto it =
             g_cache.find(key);
@@ -1813,13 +1996,7 @@ prepare_draw_requests(
         g_quarantined.load())
         return false;
 
-    const bool exact_material =
-        query.material.valid &&
-        query.material.owner_tuple_exact;
-
-    if (!exact_material)
-        return true;
-
+    // Independent texture replacements do not need FLVER-owner attestation.
     if (!spec_rgb_consumer_ready &&
         (receiver_id < 24u ||
          receiver_id > 35u))
@@ -1866,38 +2043,94 @@ prepare_draw_requests_bound(
         query.material.valid &&
         query.material.owner_tuple_exact;
 
-    if (!exact_material)
-        return true;
-
+    // Independent texture replacements do not need FLVER-owner attestation.
     if (!spec_rgb_consumer_ready &&
         (receiver_id < 24u ||
          receiver_id > 35u))
         return true;
 
-    const companion_lookup_request
-        companion_requests[3]{
-            {views[0], asset_class::diffuse},
-            {views[1], asset_class::specular},
-            {views[2], asset_class::normal}
-        };
+    // Only inspect stock textures actually consumed by enabled operators.
+    // Exact resource identity authorizes a t0/t2 swap; equipment t10
+    // additionally requires the exact material and its own PTDE consumer.
+    // Material Response/EnvSpec compositional completeness is verified by
+    // the private HemEnv shader before the combined draw, NOT by this
+    // sidecar transport. This also allows other attested SpecRGB consumers
+    // (e.g. local specular) to request t10 without borrowing HemEnv c100.
+    const bool bmp_receiver = receiver_id >= 24u && receiver_id <= 35u;
+    const bool spec_receiver = receiver_id >= 24u && receiver_id <= 47u;
+    const bool want_diffuse = bmp_receiver &&
+        core_.features().enabled(core::operator_id::diffuse);
+    const bool want_normal = bmp_receiver &&
+        core_.features().enabled(core::operator_id::normal);
+    const bool want_spec_rgb = exact_material && spec_receiver &&
+        spec_rgb_consumer_ready &&
+        core_.features().enabled(core::operator_id::spec_rgb);
+    if (!want_diffuse && !want_normal && !want_spec_rgb)
+        return true;
+
+    // Certified negative chr owner view: never enter the equipment island.
+    // Always-on even when release telemetry is disabled. Require the same
+    // live native D3D11 device as at view creation; stale/reused handles
+    // fail open rather than borrowing someone else's negative identity.
+    if (receiver_id == 34u && query.material.route_index == 345u &&
+        views[1] != nullptr) {
+        const auto key = static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(views[1]));
+        ID3D11Device *registered_device = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            const auto it = g_v230_character_view_device.find(key);
+            if (it != g_v230_character_view_device.end())
+                registered_device = it->second;
+        }
+        if (registered_device != nullptr) {
+            ID3D11Device *bound_device = nullptr;
+            // Bound fast path has no ID3D11DeviceContext argument.
+            // Query the native stock t1 SRV's owning device directly.
+            views[1]->GetDevice(&bound_device);
+            const bool exact_character_view =
+                bound_device != nullptr &&
+                registered_device == bound_device;
+            if (bound_device != nullptr)
+                bound_device->Release();
+            if (exact_character_view) {
+                prepared.verified_character_not_equipment = true;
+                return true;
+            }
+        }
+    }
+
+    const companion_lookup_request companion_requests[3]{
+        {want_diffuse ? views[0] : nullptr, asset_class::diffuse},
+        {want_spec_rgb ? views[1] : nullptr, asset_class::specular},
+        {want_normal ? views[2] : nullptr, asset_class::normal}
+    };
     std::uint64_t hashes[3]{};
     ID3D11ShaderResourceView *companions[3]{};
-    inspect_many(
-        companion_requests,
-        3u,
-        hashes,
-        companions);
+    inspect_many(companion_requests, 3u, hashes, companions);
 
     const auto h0 = hashes[0];
     const auto h1 = hashes[1];
     const auto h2 = hashes[2];
 
-    if (full_material_response_ready &&
-        spec_rgb_consumer_ready &&
-        core_.features().enabled(
-            core::operator_id::spec_rgb) &&
-        receiver_id >= 24u &&
-        receiver_id <= 47u) {
+    // RX34 P_Metal is the owner-observed stockmask=7/hashmask=0 frontier.
+    // Emit a capped identity-state census only when at least one enabled
+    // operator cannot resolve its requested stock view. Fail-open unchanged.
+    const std::uint32_t requested_mask =
+        (want_diffuse ? 1u : 0u) |
+        (want_spec_rgb ? 2u : 0u) |
+        (want_normal ? 4u : 0u);
+    const std::uint32_t unresolved_mask =
+        (want_diffuse && (h0 == 0u || companions[0] == nullptr) ? 1u : 0u) |
+        (want_spec_rgb && (h1 == 0u || companions[1] == nullptr) ? 2u : 0u) |
+        (want_normal && (h2 == 0u || companions[2] == nullptr) ? 4u : 0u);
+    if (receiver_id == 34u &&
+        query.material.route_index == 345u &&
+        unresolved_mask != 0u)
+        witness_rx34_resource_identity(
+            views, hashes, companions, requested_mask);
+
+    if (want_spec_rgb) {
         auto *replacement =
             companions[1];
         companions[1] = nullptr;
@@ -1908,9 +2141,13 @@ prepare_draw_requests_bound(
                     h1) &&
             replacement != nullptr;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-        // Full owner/slot/MTD + currently bound stock t1 logical identity.
-        // SpecRGB existence alone never authorizes a nonmetal consumer.
-        // Full Oct10 resource allowlist + bound t1 identity: no static 36-slot veto.
+        // Match by the ACTUALLY BOUND stock t1 SRV logical identity and
+        // its exact PTDE companion. The optional source inventory of 38
+        // FLVER/slot/spec pairs was never shown to prevent a real failure,
+        // so it must not veto unrelated attested nonmetal consumers.
+        // Keep separate MTD EnvSpec eligibility and shader/receiver gates.
+        const bool exact_nonmetal =
+            v203_equipment::exact_envspec36_material(query.material);
 #endif
 
         operators::resource_bridges::
@@ -1946,10 +2183,8 @@ prepare_draw_requests_bound(
             true;
 
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-        const bool exact_nonmetal =
-            v203_equipment::exact_envspec36_material(query.material);
-        // Only exact 36-owner dedicated PTDE PS may bypass the generic
-        // MTD census, which intentionally blocks PTDE RGB -> DSR PBL.
+        // Only the source-attested dedicated PTDE PS can bypass the
+        // generic MR census (which forbids PTDE RGB -> host DSR PBL).
         const auto decision =
             exact_nonmetal
                 ? operators::resource_bridges::
@@ -1994,186 +2229,64 @@ prepare_draw_requests_bound(
             replacement->Release();
     }
 
-    const bool bmp_receiver =
-        receiver_id >= 24u &&
-        receiver_id <= 35u;
-
-    const bool diffuse_pair =
-        h0 != 0u &&
-        h1 != 0u &&
-        generated::diffuse_pair_allowed_v12(
-            h1,
-            h0);
-
-    if (bmp_receiver &&
-        exact_material &&
-        diffuse_pair &&
-        full_material_response_ready &&
-        core_.features().enabled(
-            core::operator_id::diffuse)) {
-        auto *replacement =
-            diffuse_pair
-                ? companions[0]
-                : nullptr;
-        if (diffuse_pair)
-            companions[0] = nullptr;
-
-        const auto semantic =
-            operators::material_response::
-                classify_mtd_semantic(
-                    query,
-                    operators::material_response::
-                        mtd_semantic_operator::diffuse);
-
-        operators::resource_bridges::
-            diffuse_bridge_context context_diff{};
-        context_diff.receiver_id =
-            receiver_id;
-        context_diff.actual_material_verified =
-            exact_material &&
-            semantic.state ==
-                operators::material_response::
-                    mtd_semantic_state::use;
-        context_diff.actual_bound_t0_verified =
-            h0 != 0u;
-        context_diff.exact_ptde_diffuse_companion_verified =
-            diffuse_pair &&
-            replacement != nullptr;
-        context_diff.ptde_srv_ready =
-            replacement != nullptr;
-        context_diff.ptde_c100_donor_verified =
-            full_material_response_ready;
-        context_diff.diffuse_linear_receiver_ready =
-            full_material_response_ready;
-        context_diff.shared_material_route =
-            true;
-        context_diff.exact_texture_identity_conjunction =
-            diffuse_pair;
-
-        const auto decision =
-            operators::resource_bridges::
-                evaluate_diffuse_route(
-                    context_diff);
-
-        if (decision.action ==
-                operators::resource_bridges::
-                    diffuse_action::
-                        bind_ptde_t0_and_full_material_response &&
-            replacement != nullptr) {
+    // Resource-local exact binding: each bound stock SRV carries its own
+    // logical target. Diffuse never needs t1; Normal never needs t0/t1.
+    const bool diffuse_target = h0 != 0u && companions[0] != nullptr;
+    if (want_diffuse && diffuse_target) {
+        auto *replacement = companions[0];
+        companions[0] = nullptr;
+        operators::resource_bridges::diffuse_bridge_context ctx{};
+        ctx.receiver_id = receiver_id;
+        ctx.actual_bound_t0_verified = true;
+        ctx.exact_ptde_diffuse_companion_verified = true;
+        ctx.ptde_srv_ready = true;
+        // c100 is an independent Material Response operation, not t0 authority.
+        ctx.ptde_c100_donor_verified = full_material_response_ready;
+        ctx.diffuse_linear_receiver_ready = full_material_response_ready;
+        const auto route = operators::resource_bridges::evaluate_diffuse_route(ctx);
+        if (route.action == operators::resource_bridges::diffuse_action::bind_ptde_t0) {
             island_draw_adapter_request request{};
-            request.primary =
-                core::operator_id::diffuse;
+            request.primary = core::operator_id::diffuse;
             request.receiver_verified = true;
-            request.material_verified = true;
-            request.srvs[0] = {
-                decision.srv_slot,
-                replacement
-            };
+            request.material_verified = true; // Exact stock-t0 identity.
+            request.srvs[0] = {route.srv_slot, replacement};
             request.srv_count = 1u;
-
-            if (append_retained_request(
-                    prepared,
-                    request,
-                    replacement)) {
+            if (append_retained_request(prepared, request, replacement)) {
                 prepared.diffuse = true;
                 hot_count(g_diffuse_requests);
                 replacement = nullptr;
             }
         }
-
-        if (replacement != nullptr)
-            replacement->Release();
+        if (replacement != nullptr) replacement->Release();
     }
 
-    const bool normal_tuple =
-        h0 != 0u &&
-        h1 != 0u &&
-        h2 != 0u &&
-        generated::normal_tuple_allowed_v12(
-            h0,
-            h1,
-            h2);
-
-    if (bmp_receiver &&
-        exact_material &&
-        normal_tuple &&
-        core_.features().enabled(
-            core::operator_id::normal)) {
-        auto *replacement =
-            normal_tuple
-                ? companions[2]
-                : nullptr;
-        if (normal_tuple)
-            companions[2] = nullptr;
-
-        const auto semantic =
-            operators::material_response::
-                classify_mtd_semantic(
-                    query,
-                    operators::material_response::
-                        mtd_semantic_operator::normal_bump);
-
-        operators::resource_bridges::
-            normal_bridge_context context_norm{};
-        context_norm.receiver_id =
-            receiver_id;
-
-        if (semantic.state ==
-            operators::material_response::
-                mtd_semantic_state::use) {
-            context_norm.authority =
-                operators::resource_bridges::
-                    normal_route_authority::
-                        homologous_material_route;
-            context_norm.homologous_bmp_material_route =
-                true;
-        }
-
-        context_norm.target_unambiguous =
-            normal_tuple;
-        context_norm.actual_bound_t2_verified =
-            h2 != 0u;
-        context_norm.exact_ptde_normal_sidecar_verified =
-            normal_tuple &&
-            replacement != nullptr;
-        context_norm.ptde_srv_ready =
-            replacement != nullptr;
-        context_norm.preserve_stock_s2 =
-            true;
-
-        const auto decision =
-            operators::resource_bridges::
-                evaluate_normal_route(
-                    context_norm);
-
-        if (decision.action ==
-                operators::resource_bridges::
-                    normal_action::bind_ptde_t2 &&
-            replacement != nullptr) {
+    const bool normal_target = h2 != 0u && companions[2] != nullptr;
+    if (want_normal && normal_target) {
+        auto *replacement = companions[2];
+        companions[2] = nullptr;
+        operators::resource_bridges::normal_bridge_context ctx{};
+        ctx.receiver_id = receiver_id;
+        ctx.authority = operators::resource_bridges::normal_route_authority::exact_bound_t2;
+        ctx.target_unambiguous = true;
+        ctx.actual_bound_t2_verified = true;
+        ctx.exact_ptde_normal_sidecar_verified = true;
+        ctx.ptde_srv_ready = true;
+        ctx.preserve_stock_s2 = true;
+        const auto route = operators::resource_bridges::evaluate_normal_route(ctx);
+        if (route.action == operators::resource_bridges::normal_action::bind_ptde_t2) {
             island_draw_adapter_request request{};
-            request.primary =
-                core::operator_id::normal;
+            request.primary = core::operator_id::normal;
             request.receiver_verified = true;
-            request.material_verified =
-                exact_material;
-            request.srvs[0] = {
-                decision.srv_slot,
-                replacement
-            };
+            request.material_verified = true; // Exact stock-t2 identity.
+            request.srvs[0] = {route.srv_slot, replacement};
             request.srv_count = 1u;
-
-            if (append_retained_request(
-                    prepared,
-                    request,
-                    replacement)) {
+            if (append_retained_request(prepared, request, replacement)) {
                 prepared.normal = true;
                 hot_count(g_normal_requests);
                 replacement = nullptr;
             }
         }
-
-        if (replacement != nullptr)
-            replacement->Release();
+        if (replacement != nullptr) replacement->Release();
     }
 
     for (auto *&companion : companions)

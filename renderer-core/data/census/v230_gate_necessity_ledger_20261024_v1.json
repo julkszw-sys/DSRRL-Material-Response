@@ -1,0 +1,167 @@
+{
+  "schema": "dsrrl_gate_evidence_ledger_v1",
+  "date": "2026-10-24",
+  "baseline": "f39c52b970866b79a9352f6b41f7230b7678b11e",
+  "new_candidate": "d5192a655c3d16fb86d5acba6a8fcb10e953c908",
+  "canon": "project.no_new_gates_without_proven_necessity",
+  "scope": "High-impact active ReShade v2.3 material response / EnvSpec / SpecRGB / owner gates, plus source-only opt-in gates. NOT a census of every conditional across 929 repo blobs. Status is SOURCE/ABI unless runtime/pixel explicitly observed.",
+  "status_definitions": {
+    "REMOVED_UNPROVEN": "Removed when no concrete protective benefit shown and scope provably wider than required.",
+    "ABI_REQUIRED": "Required to avoid calling different shader ABI/transport.",
+    "CONCRETE_SOURCE_COUNTEREXAMPLE": "Exact source bytes give a real invalid cross-identity case.",
+    "SOURCE_NECESSITY_PIXEL_OPEN": "Producer/consumer necessity grounded but no PTDE pixel parity yet.",
+    "OPEN_COVERAGE_RESTRICTOR": "Finite corpus may deny valid source joins, needs isolated source recovery."
+  },
+  "entries": [
+    {
+      "key": "warrior_38_owner",
+      "status": "REMOVED_UNPROVEN",
+      "file": "renderer-core/include/dsrrl/runtime/v203_equipment_envspec36_gate.hpp",
+      "claim": "The 38-row partial FLVER/slot census was an added shared EnvSpec veto. No concrete misrender prevented by it; temporal owner-reported nonmetal regression.",
+      "evidence": "7b1c4d6ce",
+      "action": "8b4c4fc8b14b4e41566c027757753ecf0f817e6c"
+    },
+    {
+      "key": "warrior_38_stock_t1",
+      "status": "REMOVED_UNPROVEN",
+      "file": "renderer-core/src/runtime/material_resource_draw_runtime.cpp",
+      "claim": "Added requirement that bound stock t1 SpecRGB equal a finite 38-row FLVER name, even when t1 logical identity/sidecar were independently established. No concrete avoided failure shown.",
+      "evidence": "449d96db7",
+      "action": "ac451ee77ef6dfc93c46a3180b066ea5ae639477"
+    },
+    {
+      "key": "v296_oct10_all_or_nothing",
+      "status": "REMOVED_UNPROVEN_V230_ONLY",
+      "file": "renderer-core/tools/materialize_v230_release_cleanup.py",
+      "claim": "V296 injected at build suppressed diffuse Material Response and independent diffuse/normal resource requests by Oct10 t1 membership without actual known bad receiver/pixel comparison. Multiple V353-V356 stock fallback events but no proven pixel benefit. Removed from generated v2.3.0, frozen V359 untouched.",
+      "evidence": "renderer.v296_oct10_nohybrid_construction",
+      "action": "7e02f95312934a431ee1bb5a1968b7298ca12579"
+    },
+    {
+      "key": "receiver_exact_R33_R35",
+      "status": "ABI_REQUIRED",
+      "file": "renderer-core/include/dsrrl/runtime/v203_equipment_envspec36_gate.hpp",
+      "claim": "Dedicated PTDE HemEnv/EnvSpec consumer was established for RX33-35. Other RX represent different shader families and distinct CB/SRV ABI. Never substitute across receiver families.",
+      "evidence": "route345 indexed_issued RX33/RX34 in owner log",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "raw_mtd_full_sha_vs_name",
+      "status": "CONCRETE_SOURCE_COUNTEREXAMPLE",
+      "file": "renderer-core/src/runtime/material_owner_producer.cpp",
+      "claim": "Original DSR MTD BND3 contains TWO different raw SHA digests for P_DullLeather[DSB].mtd. Name-only authorization would conflate different inputs. Keep full raw digest equality.",
+      "evidence": "7ea7d6ce9bb7148d... and 9376d84c81f0b1e7...",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "source_flver_slot_registry",
+      "status": "OPEN_COVERAGE_RESTRICTOR",
+      "file": "renderer-core/src/runtime/material_owner_producer.cpp",
+      "claim": "dsr_flver_owner_mtd_hash is a finite source manifest, not proof that every other live FLVER/slot is invalid. It presently blocks first-pass enrichment outside its source census. Live parser exact MTD fallback exists but does not independently prove all source owner tuples; do not blindly admit cross-model material.",
+      "evidence": "source original DSR FLVER and live parser; unknown source census completeness",
+      "action": "AUDIT_AND_REPAIR_OWNER_SOURCE_ROUTING"
+    },
+    {
+      "key": "envspec_exact_mtd_semantics",
+      "status": "SOURCE_NECESSITY_PIXEL_OPEN",
+      "file": "renderer-core/src/operators/material_response/mtd_semantic_census.cpp",
+      "claim": "PTDE EnvSpec MTD state PRESENT vs explicit NONE/NOSPC, encoded slot and homologous SPX define which semantic signal a shader consumes. Declaring absent PTDE EnvSpec as present would produce wrong operator.",
+      "evidence": "325 original PTDE MTD records with slot/state, own source schema",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "envspec_slot_four_bound",
+      "status": "ABI_REQUIRED",
+      "file": "renderer-core/include/dsrrl/runtime/v203_equipment_envspec36_gate.hpp",
+      "claim": "EnvSpec transport has four representable slots; slot >=4 would index unsupported register layout.",
+      "evidence": "source producer EnvSpec slot0-3",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "pmetal_island_exclusive_route345",
+      "status": "CONCRETE_RUNTIME_NONREGRESSION",
+      "file": "renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp",
+      "claim": "Dedicated working P_Metal route345 source/env shader already handles its own PTDE operator. A second nonmetal island on the same draw would double-apply a semantic owner.",
+      "evidence": "owner confirms P_Metal visually active and route345 native draw issued",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "actual_t1_exact_ptde_companion",
+      "status": "SOURCE_NECESSITY_PIXEL_OPEN",
+      "file": "renderer-core/src/runtime/material_resource_draw_runtime.cpp",
+      "claim": "A replacement t10 SRV needs nonnull exact PTDE asset and observed stock t1 identity; a guessed resource could bind wrong texture or null pointer. Need PTDE-visible validation per material.",
+      "evidence": "ReShade RX34 NO_NAME_SIDECAR_REGISTRY_ENTRY and t1/t10 live telemetry",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "dsr_direct_low_lod_names",
+      "status": "SOURCE_CONFIRMED_HOST_ABSENCE",
+      "file": "renderer-core/src/runtime/material_resource_draw_runtime.cpp",
+      "claim": "544 PTDE low-name resources lacked independent DSR low FLVER owner, so treating them as separate positive host t1 source would be a false mapping. Keep unless live host evidence demonstrates an exact owner.",
+      "evidence": "source DSR FLVER 151 DCX/158 FLVER2 and PTDE 1295-name sidecar census",
+      "action": "PRESERVED_PENDING_BROADER_HOST_CENSUS"
+    },
+    {
+      "key": "chr_t1_not_equipment",
+      "status": "CONCRETE_SOURCE_COUNTEREXAMPLE",
+      "file": "renderer-core/src/runtime/material_resource_draw_runtime.cpp",
+      "claim": "RX34 observed source character t1 (13 owner-authenticated chr SRVs, e.g. c2500_wp_a_0200_s); routing them as player equipment would bind wrong PTDE parts sidecars.",
+      "evidence": "2026-10-24 exact DSR chr provenance, device scoped negative table",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "stale_resource_srv_lifetime",
+      "status": "SOURCE_NECESSITY_RUNTIME_EVIDENCE",
+      "file": "renderer-core/src/runtime/material_resource_draw_runtime.cpp",
+      "claim": "Native D3D SRV pointers can be reused; view/device epoch and alias controls prevent stale texture identities from being applied to another resource.",
+      "evidence": "RX34 stale negative registry repair and V359 attested name alias results",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "mr_exact_raw_route_identity",
+      "status": "CONCRETE_SOURCE_COUNTEREXAMPLE",
+      "file": "renderer-core/include/dsrrl/runtime/v351_exact_material_route_recovery.hpp",
+      "claim": "Route selection must use the full source MTD SHA, semantic/family and nonambiguous route identity; route231 C_3530 Unique Wet candidate SHA was proven mismatched to original BND3.",
+      "evidence": "34/35 route exact BND3, route231 mismatch and ambiguous DullLeather",
+      "action": "PRESERVED"
+    },
+    {
+      "key": "v335_second_flver_tuple_lookup",
+      "status": "OPEN_NOT_MAIN_RELEASE_AUTHORITY",
+      "file": "renderer-core/include/dsrrl/runtime/v335_mr_exact_owner_route.hpp",
+      "claim": "Additional finite dsr_flver_owner_tuple_authenticated after owner_tuple_exact may be redundant for parser-origin identities and source-limited. Its V335 opt-in path not explicitly enabled in V230 base build script; requires compiled route/owner census before any removal.",
+      "evidence": "v335 source only; search V230 active macro and user log",
+      "action": "AUDIT_COMPILATION_AND_ACTUAL_CALL"
+    },
+    {
+      "key": "roughcloth_four_name_r8",
+      "status": "OPEN_OPERATOR_SPECIFIC",
+      "file": "renderer-core/include/dsrrl/runtime/v203_equipment_envspec36_gate.hpp",
+      "claim": "Four roughcloth names select a distinct Lerp R8 shader; evidence for same material/shader family on other names not established. This is not the shared nonmetal eligibility gate anymore; do not generalize shader R8 without consumer census.",
+      "evidence": "exact SPX roughcloth slot0, separate PMetal Lerp R19 from source",
+      "action": "REVIEW_SHADER_R8_FAMILY"
+    },
+    {
+      "key": "v312_v313_ptde_spx_cohort",
+      "status": "OPERATOR_ISLAND_SOURCE_LIMITATION",
+      "file": "renderer-core/tools/materialize_v312_exact_difspcbmp_cohorts.py",
+      "claim": "Compiler restricts generated material response to original homologous SPX, exact PTDE float bits and supported slot/factor representation. Other names/families remain open rather than being declared invalid.",
+      "evidence": "original 325 PTDE MTD corpus, authored scalar channel constraints",
+      "action": "EXTEND_WITH_NEW_OPERATOR_FAMILY_NOT_GLOBAL_GATE"
+    },
+    {
+      "key": "generic_mr_diffuse_only",
+      "status": "CONFIRMED_OPERATOR_ISOLATION_SOURCE",
+      "file": "renderer-core/src/runtime/material_response_draw_transaction.cpp",
+      "claim": "Generic MR supports only certified PTDE diffuse material signal; it does not implicitly produce PTDE EnvSpec specular. Do not turn missing specular into global diffuse/normal veto (former V296 issue).",
+      "evidence": "operator source consumer and user mixed MR prepared/issued logs",
+      "action": "PRESERVED_INDEPENDENTLY"
+    }
+  ],
+  "counts": {
+    "total": 18,
+    "removed": 3,
+    "open": 3
+  },
+  "no_pixel_claim": true
+}

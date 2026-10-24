@@ -39,10 +39,18 @@ std::atomic<std::uint64_t> g_v356_alias_desc_reject{0u};
 #endif''',"state")
 
 replace('''        g_ambiguous_view_device.clear();
+        g_v230_character_view_device.clear();
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        g_v230_view_origin.clear();
+#endif
     }
 
     for (auto &entry : dead)''',
 '''        g_ambiguous_view_device.clear();
+        g_v230_character_view_device.clear();
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        g_v230_view_origin.clear();
+#endif
 #if defined(DSRRL_V356_EXACT_BACKING_SRV_ALIAS)
         g_v356_backing_witnesses.clear();
         g_v356_backing_by_view.clear();

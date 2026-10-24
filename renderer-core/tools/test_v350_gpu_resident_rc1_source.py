@@ -36,7 +36,8 @@ for token in (
 ):
     assert token in pre,token
 loader=region("load_result load_dds(","void on_init_device_residency(")
-assert "hash_mismatch" in loader and "sha256(" in loader
+assert "magic != k_dds_magic" in loader and "header.pixel_format.size != 32u" in loader
+assert "sha256(" not in loader, "replacement DDS must not need fixed retail byte identity"
 assert "CreateTexture2D(" in loader and "CreateShaderResourceView(" in loader
 cold=region("acquired_sidecar acquire_sidecar(","bool snapshot_companion_cached(")
 for token in (
@@ -55,4 +56,4 @@ assert "DSRRL_V350_PTDE_LERP_RGB_COMPONENT_SWIZZLE" in build
 assert "DSRRL_V350_SCOPE_SHELL_GPU_RESIDENT_RC1.addon64" in build
 assert "v350_rc1_scope_shell_gpu_resident_default_on" in build
 assert "test_v350_sidecar_gpu_resident_source.py" not in build
-print("V350 GPU RESIDENT RC1 SOURCE PASS: permanent ON, no residency TXT, exact source/PTDE guards, UMA memory bound, device teardown")
+print("V350 GPU RESIDENT RC1 SOURCE PASS: permanent ON, no residency TXT, exact live-source identity and DDS format, UMA memory bound, device teardown")

@@ -243,6 +243,63 @@ std::atomic_bool g_mr_once_receiver_hit{false};
 std::atomic_bool g_mr_once_owner_join{false};
 std::atomic_bool g_mr_once_decision_active{false};
 std::atomic_bool g_mr_once_identity{false};
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+// Diagnostic-only: per exact (route, RX, material-slot, stage).
+// Previous route-only latch hid later RX34/other-slot success after an early
+// RX33 failure. 512 routes * 24 MR receivers * 16 slot buckets, 32 stage bits.
+// Slots >=15 share the final diagnostic bucket; never a material gate.
+// No admission, shader state mutation, resource or operator changes.
+std::array<std::atomic<std::uint32_t>, 512u * 24u * 16u>
+    g_v230_nonmetal_route_logged{};
+void v230_nonmetal_route_trace(
+    std::uint32_t stage,
+    std::uint32_t receiver,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision) noexcept
+{
+    if (!material.valid || material.semantic_name_hash == 0u ||
+        material.route_index == 345u || material.route_index == 229u ||
+        material.route_index >= 512u || receiver < 24u ||
+        receiver > 47u || stage >= 12u)
+        return;
+    const auto slot_bucket =
+        std::min(material.material_slot, 15u);
+    const auto key =
+        ((static_cast<std::size_t>(material.route_index) * 24u +
+          (receiver - 24u)) * 16u + slot_bucket);
+    const auto mask = 1u << stage;
+    if ((g_v230_nonmetal_route_logged[key].fetch_or(
+             mask, std::memory_order_relaxed) & mask) != 0u)
+        return;
+    static const char *const names[12] = {
+        "identity_visible", "mr_evaluated", "generic_candidate",
+        "lerp_mr_prepared", "stable_mr_prepared",
+        "generic_mr_not_prepared", "batch_mutation_ready",
+        "indexed_issued", "indexed_failopen", "batch_prepare_fail",
+        "draw_issued", "draw_failopen"
+    };
+    char msg[512]{};
+    std::snprintf(msg, sizeof(msg),
+        "[DSRRL NONMETAL FIRST CUT] stage=%s route=%u rx=%u sem=%016llx "
+        "slot=%u owner=%u actual_mtd=%u mat_valid=%u "
+        "active=%u reason=%u ops=%08x raw_mtd=%02x%02x%02x%02x pixel_pass=0",
+        names[stage], static_cast<unsigned>(material.route_index),
+        static_cast<unsigned>(receiver),
+        static_cast<unsigned long long>(material.semantic_name_hash),
+        static_cast<unsigned>(material.material_slot),
+        material.owner_tuple_exact ? 1u : 0u,
+        material.actual_material_exact ? 1u : 0u,
+        material.valid ? 1u : 0u,
+        decision.active ? 1u : 0u,
+        static_cast<unsigned>(decision.reason),
+        static_cast<unsigned>(decision.certified_operations),
+        material.raw_mtd_sha256[0],material.raw_mtd_sha256[1],
+        material.raw_mtd_sha256[2],material.raw_mtd_sha256[3]);
+    reshade::log::message(reshade::log::level::warning, msg);
+}
+#endif
+
 std::atomic_bool g_mr_once_batch_ready{false};
 std::atomic_bool g_mr_once_draw_issued{false};
 std::atomic<std::uint32_t> g_pointlight_gate_log_mask{0u};
@@ -1141,6 +1198,9 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::upper_lower,
     dsrrl::core::operator_id::hemdir3,
     dsrrl::core::operator_id::env_spec,
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    dsrrl::core::operator_id::env_diffuse,
+#endif
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::point_light,
@@ -2739,6 +2799,10 @@ bool observe_draw_identity(
     if (owner_ok)
         hot_count(g_draw_owner_hits);
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (owner_ok && (stable_receiver || hemenvlerp_receiver))
+        v230_nonmetal_route_trace(0u, receiver_id, out_material, out_decision);
+#endif
     if (!receiver_ok) {
         if (owner_ok)
             hot_count(g_draw_owner_only);
@@ -2781,7 +2845,15 @@ bool observe_draw_identity(
                  dsrrl::core::operator_id::hemdir3)) ||
             (subsurface_bound &&
              g_core.features().enabled(
-                 dsrrl::core::operator_id::subsurface));
+                 dsrrl::core::operator_id::subsurface)) ||
+            // Resource-only t0/t2 has its own exact stock-SRV authority.
+            // Owner/FLVER/MTD is still mandatory for shader/material islands.
+            ((stable_receiver || hemenvlerp_receiver) &&
+             receiver_id >= 24u && receiver_id <= 35u &&
+             (g_core.features().enabled(
+                  dsrrl::core::operator_id::diffuse) ||
+              g_core.features().enabled(
+                  dsrrl::core::operator_id::normal)));
         return ownerless_island_enabled;
     }
 
@@ -2919,6 +2991,10 @@ bool observe_draw_identity(
             true, out_material, out_decision);
     }
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (stable_receiver || hemenvlerp_receiver)
+        v230_nonmetal_route_trace(1u, receiver_id, out_material, out_decision);
+#endif
     return true;
 }
 
@@ -4595,6 +4671,25 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+        // Create-time, addon-private original PTDE EnvDiffuse-only shader.
+        // Registration does not replace any retail shader or EnvSpec bank.
+        // A missing shader leaves the original drawing path unchanged.
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::env_diffuse)) {
+            std::uint32_t independent_rx = 0u;
+            std::vector<std::uint8_t> independent_dxbc;
+            if (dsrrl::operators::env_spec::
+                    materialize_ptde_envdiffuse_stable_only(
+                        source,pixel_shader->code_size,
+                        independent_dxbc,independent_rx)) {
+                (void)g_pmetal_envspec.register_independent_envdiffuse(
+                    independent_dxbc.data(),
+                    independent_dxbc.size(),independent_rx);
+            }
+        }
+#endif
+
         // Exact P_Metal EnvSpec is now built from the exact stock shader via
         // the clean diffuse-v1 operator base. No V2.10/V2.11 F0 proxy is
         // consumed or authorized anywhere in this construction.
@@ -5604,6 +5699,81 @@ void observe_equipment_specrgb_carrier(
     }
 }
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+// Session-bounded RX33-35 runtime bridge witness, not pixel proof.
+// Only exact P_Metal route 345. One row per receiver/family/stage.
+// No D3D state reads/writes: all resource and slot data are from the
+// already-prepared transaction, captured before release.
+std::atomic<std::uint64_t> g_v230_rt_probe_seen{0u};
+
+void v230_rt_probe_once(
+    unsigned phase,
+    const char *stage,
+    std::uint32_t rx,
+    std::uint32_t route,
+    bool lerp,
+    const dsrrl::runtime::prepared_pmetal_envspec_draw *prepared) noexcept
+{
+    if (rx < 33u || rx > 35u || route != 345u || phase >= 8u)
+        return;
+    // 8 phases x 2 families x 3 RX = 48 bits; unique session slots
+    // for both consumer families and successful/failing transaction states.
+    const unsigned index = (rx - 33u) * 16u +
+        (lerp ? 8u : 0u) + phase;
+    const std::uint64_t bit = 1ull << index;
+    if ((g_v230_rt_probe_seen.fetch_or(
+            bit, std::memory_order_relaxed) & bit) != 0u)
+        return;
+
+    std::uint32_t srv_mask = 0u;
+    std::uint32_t sampler_mask = 0u;
+    std::uint32_t owned_cb12 = 0u;
+    std::uint32_t shader_ready = 0u;
+    std::uint32_t pack_envspec = 0u;
+    std::uint32_t pack_envdiffuse = 0u;
+    std::uint32_t spec_rgb = 0u;
+    std::uint16_t probe_a = 0u;
+    std::uint16_t probe_b = 0u;
+    if (prepared != nullptr && prepared->ready) {
+        const auto &req = prepared->request;
+        shader_ready = req.pixel_shader != nullptr ? 1u : 0u;
+        pack_envspec =
+            prepared->env_resources.ready ? 1u : 0u;
+        pack_envdiffuse =
+            prepared->envdiffuse_resources.ready ? 1u : 0u;
+        spec_rgb =
+            prepared->material_resources.spec_rgb ? 1u : 0u;
+        probe_a = prepared->env_resources.probe_a;
+        probe_b = prepared->env_resources.probe_b;
+        for (std::uint32_t i = 0u; i < req.srv_count; ++i) {
+            if (req.srvs[i].slot < 32u && req.srvs[i].srv != nullptr)
+                srv_mask |= 1u << req.srvs[i].slot;
+        }
+        for (std::uint32_t i = 0u; i < req.sampler_count; ++i) {
+            if (req.samplers[i].slot < 32u &&
+                req.samplers[i].sampler != nullptr)
+                sampler_mask |= 1u << req.samplers[i].slot;
+        }
+        for (std::uint32_t i = 0u; i < req.constant_buffer_count; ++i) {
+            if (req.constant_buffers[i].slot == 12u &&
+                req.constant_buffers[i].buffer != nullptr)
+                owned_cb12 = 1u;
+        }
+    }
+    char line[460]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V230 RUNTIME] stage=%s rx=%u route=%u family=%s "
+        "exact_owner=1 shader=%u cb12=%u envspec_ready=%u "
+        "envdiffuse_ready=%u spec_rgb=%u probe_a=%u probe_b=%u "
+        "srv_mask=0x%08X sampler_mask=0x%08X pixel_pass=0",
+        stage,rx,route,lerp ? "LERP" : "STABLE",
+        shader_ready,owned_cb12,pack_envspec,pack_envdiffuse,spec_rgb,
+        static_cast<unsigned>(probe_a),static_cast<unsigned>(probe_b),
+        srv_mask,sampler_mask);
+    reshade::log::message(reshade::log::level::warning,line);
+}
+#endif
+
 bool prepare_island_batch(
     reshade::api::command_list *cmd_list,
     bool fixed_pointlight_bound,
@@ -6147,6 +6317,39 @@ bool prepare_island_batch(
     }
 #endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (!exact_pmetal_envspec)
+        v230_nonmetal_route_trace(2u, receiver_id, material, decision);
+#endif
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    // EnvDiffuse is a separate PTDE operator: private PS + original c86
+    // in its own CB12 and exact t11/s11, with EnvSpec t12/t14 left stock.
+    // When EnvSpec is independently enabled and ready, its existing
+    // transaction retains priority; on its failure EnvDiffuse can still
+    // issue without using the EnvSpec probe or SpecRGB t10.
+    auto try_stable_envdiffuse = [&]() noexcept -> bool {
+        if (hemenvlerp_bound ||
+            decision.receiver_id < 33u ||
+            decision.receiver_id > 35u ||
+            material.route_index != 345u)
+            return false;
+        if (!g_pmetal_envspec.prepare_independent_envdiffuse(
+                cmd_list,material,decision,prepared.envspec))
+            return false;
+        prepared.envspec_in_batch = true;
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,prepared.envspec.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+        return true;
+    };
+    if (!g_core.features().enabled(
+            dsrrl::core::operator_id::env_spec) &&
+        try_stable_envdiffuse())
+        return true;
+#endif
     if (exact_pmetal_envspec) {
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
@@ -6165,12 +6368,53 @@ bool prepare_island_batch(
                 decision,
                 envspec_family,
                 prepared.envspec)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+            v230_rt_probe_once(0u,"prepare_reject",
+                decision.receiver_id,material.route_index,
+                envspec_family ==
+                    dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp,
+                nullptr);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
             dsrrl::runtime::v287_nonmetal_trace::log(
                 "atomic_prepare_fail",
                 material, decision,
                 static_cast<std::uint32_t>(envspec_family));
 #endif
+            // Clean any partially prepared EnvSpec resources before
+            // committing a resource-only draw transaction.
+            g_pmetal_envspec.release(prepared.envspec);
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+            // An EnvSpec probe, shader or SpecRGB denial does not veto
+            // independently verified EnvDiffuse. No shared source/ordinal.
+            if (try_stable_envdiffuse())
+                return true;
+#endif
+            // P_Metal EnvSpec/SpecRGB is not permission for independent
+            // Diffuse/Normal texture resources. Failed shader/probe/source
+            // must not suppress a correct live t0/t2 companion transaction.
+            auto *resource_context = reinterpret_cast<ID3D11DeviceContext *>(
+                cmd_list->get_native());
+            if (resource_context != nullptr &&
+                decision.receiver_id >= 24u && decision.receiver_id <= 35u) {
+                dsrrl::operators::material_response::mtd_semantic_query q{};
+                q.material = material;
+                q.receiver_id = decision.receiver_id;
+                (void)g_material_resources.prepare_draw_requests(
+                    resource_context, decision.receiver_id, q, false, false,
+                    prepared.resources);
+                for (std::uint32_t i = 0u;
+                     i < prepared.resources.request_count; ++i) {
+                    if (dsrrl::runtime::append_island_draw_request(
+                            prepared.batch, prepared.resources.requests[i]) !=
+                        dsrrl::runtime::island_draw_batch_result::ready) {
+                        release_prepared_island_batch(prepared);
+                        return false;
+                    }
+                }
+                if (prepared.resources.request_count != 0u)
+                    return true;
+            }
             return false;
         }
 
@@ -6216,6 +6460,13 @@ bool prepare_island_batch(
         dsrrl::runtime::v287_nonmetal_trace::log(
             "atomic_batch_ready", material, decision,
             static_cast<std::uint32_t>(envspec_family));
+#endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_rt_probe_once(1u,"batch_ready",
+            decision.receiver_id,material.route_index,
+            envspec_family ==
+                dsrrl::runtime::pmetal_envspec_receiver_family::hemenvlerp,
+            &prepared.envspec);
 #endif
         return true;
     }
@@ -6279,6 +6530,9 @@ bool prepare_island_batch(
         }
 
         if (lerp_mr_prepared) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+            v230_nonmetal_route_trace(3u, receiver_id, material, decision);
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
             dsrrl::runtime::v287_nonmetal_trace::log(
                 "lerp_diffuse_only_ready", material, decision, 1u);
@@ -6384,6 +6638,28 @@ bool prepare_island_batch(
             return true;
         }
 
+        // A Lerp material may still have valid t0/t2 replacements when the
+        // independent Material Response shader/c100 route is unavailable.
+        // This binds only live stock-SRV matched companions, never t10.
+        if (context != nullptr && receiver_id >= 24u && receiver_id <= 35u) {
+            dsrrl::operators::material_response::mtd_semantic_query resource_query{};
+            resource_query.material = material;
+            resource_query.receiver_id = receiver_id;
+            (void)g_material_resources.prepare_draw_requests(
+                context, receiver_id, resource_query, false, false,
+                prepared.resources);
+            for (std::uint32_t i = 0u;
+                 i < prepared.resources.request_count; ++i) {
+                if (dsrrl::runtime::append_island_draw_request(
+                        prepared.batch, prepared.resources.requests[i]) !=
+                    dsrrl::runtime::island_draw_batch_result::ready) {
+                    release_prepared_island_batch(prepared);
+                    return false;
+                }
+            }
+            if (prepared.resources.request_count != 0u)
+                return true;
+        }
         return false;
     }
 
@@ -6424,6 +6700,12 @@ bool prepare_island_batch(
             prepared.mr)) {
         prepared.mr_in_batch = true;
     }
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    v230_nonmetal_route_trace(
+        prepared.mr_in_batch ? 4u : 5u,
+        receiver_id, material, decision);
+#endif
 
     dsrrl::operators::material_response::mtd_semantic_query query{};
     query.material = material;
@@ -6588,7 +6870,25 @@ bool on_draw(
             integrated_draw_route_bound(
                 cmd_list));
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Capture the exact Warrior parts owner BEFORE any shader-route fast
+    // return erases the TLS identity. This does not authorize a bridge.
+    dsrrl::operators::material_response::material_identity warrior_owner{};
+    const bool warrior_owner_pending =
+        dsrrl::runtime::material_owner_selection_peek(warrior_owner);
+    if (warrior_owner_pending)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::pre_route,
+            warrior_owner, route_mask, 0u);
+#endif
+
     if (route_mask == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_pipeline_route,
+                warrior_owner, route_mask, 0u);
+#endif
 #if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
         // Capture sidecar-bound draws *outside* current shader families,
         // otherwise the 1295-name funnel misses the largest unknown class.
@@ -6634,6 +6934,12 @@ bool on_draw(
     // already executes the replacement shader and there is nothing to join,
     // snapshot, replay or restore here.
     if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_dynamic_route,
+                warrior_owner, route_mask, 0u);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -6721,6 +7027,16 @@ bool on_draw(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                material, route_mask, receiver_id, &decision);
+        else if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                warrior_owner, route_mask, receiver_id, &decision);
+#endif
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
@@ -6769,6 +7085,12 @@ bool on_draw(
     // whose material tuple is outside the exact PTDE authority; preparing and
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::identity_ready,
+            material, route_mask, receiver_id, &decision);
+#endif
     if (direct_pointlight_route &&
         !decision.active) {
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
@@ -6824,6 +7146,16 @@ bool on_draw(
             material,
             decision,
             prepared)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::prepare_reject,
+                material, route_mask, receiver_id, &decision);
+#endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid && !hemenvlerp_bound)
+            v230_nonmetal_route_trace(9u, receiver_id, material, decision);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -6843,6 +7175,17 @@ bool on_draw(
         return false;
     }
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::prepared,
+            material, route_mask, receiver_id, &decision);
+#endif
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(6u, receiver_id, material, decision);
+#endif
     const auto effect_prepared =
         prepared_effect_mask(prepared);
     mark_effect_probe_mask(
@@ -6894,6 +7237,12 @@ bool on_draw(
         if (prepared.envspec_in_batch)
             dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
                 "native_armed",material,decision,prepared.envspec);
+#endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (prepared.envspec_in_batch)
+            v230_rt_probe_once(2u,"native_armed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
 #endif
         release_prepared_island_batch(
             prepared);
@@ -6989,7 +7338,29 @@ bool on_draw(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction) ? 10u : 11u,
+            receiver_id, material, decision);
+#endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.envspec_in_batch) {
+        if (dispatch.transaction ==
+                dsrrl::runtime::draw_tx_result::issued_restore_failed)
+            v230_rt_probe_once(7u,"restore_failed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
+        const bool issued =
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+        v230_rt_probe_once(
+            issued ? 3u : 4u,
+            issued ? "draw_issued" : "draw_failopen",
+            decision.receiver_id,material.route_index,
+            hemenvlerp_bound,&prepared.envspec);
+    }
+#endif
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
@@ -7142,7 +7513,25 @@ bool on_draw_indexed(
             integrated_draw_route_bound(
                 cmd_list));
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Capture the exact Warrior parts owner BEFORE any shader-route fast
+    // return erases the TLS identity. This does not authorize a bridge.
+    dsrrl::operators::material_response::material_identity warrior_owner{};
+    const bool warrior_owner_pending =
+        dsrrl::runtime::material_owner_selection_peek(warrior_owner);
+    if (warrior_owner_pending)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::pre_route,
+            warrior_owner, route_mask, 0u);
+#endif
+
     if (route_mask == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_pipeline_route,
+                warrior_owner, route_mask, 0u);
+#endif
 #if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
         // Capture sidecar-bound draws *outside* current shader families,
         // otherwise the 1295-name funnel misses the largest unknown class.
@@ -7188,6 +7577,12 @@ bool on_draw_indexed(
     // already executes the replacement shader and there is nothing to join,
     // snapshot, replay or restore here.
     if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_dynamic_route,
+                warrior_owner, route_mask, 0u);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -7257,6 +7652,16 @@ bool on_draw_indexed(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                material, route_mask, receiver_id, &decision);
+        else if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                warrior_owner, route_mask, receiver_id, &decision);
+#endif
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
@@ -7305,6 +7710,12 @@ bool on_draw_indexed(
     // whose material tuple is outside the exact PTDE authority; preparing and
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::identity_ready,
+            material, route_mask, receiver_id, &decision);
+#endif
     if (direct_pointlight_route &&
         !decision.active) {
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
@@ -7360,6 +7771,16 @@ bool on_draw_indexed(
             material,
             decision,
             prepared)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::prepare_reject,
+                material, route_mask, receiver_id, &decision);
+#endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid && !hemenvlerp_bound)
+            v230_nonmetal_route_trace(9u, receiver_id, material, decision);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7379,6 +7800,17 @@ bool on_draw_indexed(
         return false;
     }
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::prepared,
+            material, route_mask, receiver_id, &decision);
+#endif
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(6u, receiver_id, material, decision);
+#endif
     const auto effect_prepared =
         prepared_effect_mask(prepared);
     mark_effect_probe_mask(
@@ -7432,6 +7864,12 @@ bool on_draw_indexed(
             dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
                 "native_armed",material,decision,prepared.envspec);
 #endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (prepared.envspec_in_batch)
+            v230_rt_probe_once(2u,"native_armed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade executes exactly one original
@@ -7479,7 +7917,29 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.mr_in_batch && !prepared.envspec_in_batch)
+        v230_nonmetal_route_trace(
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction) ? 7u : 8u,
+            receiver_id, material, decision);
+#endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (prepared.envspec_in_batch) {
+        if (dispatch.transaction ==
+                dsrrl::runtime::draw_tx_result::issued_restore_failed)
+            v230_rt_probe_once(7u,"restore_failed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
+        const bool issued =
+            dsrrl::runtime::draw_tx_issued(dispatch.transaction);
+        v230_rt_probe_once(
+            issued ? 5u : 6u,
+            issued ? "indexed_issued" : "indexed_failopen",
+            decision.receiver_id,material.route_index,
+            hemenvlerp_bound,&prepared.envspec);
+    }
+#endif
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
     if (prepared.envspec_in_batch)
         dsrrl::runtime::v291_material_trace::log_lerp_cubemaps(
@@ -7698,6 +8158,16 @@ bool AddonInit(
 {
     if (!reshade::register_addon(addon_module, reshade_module))
         return false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Core library must not depend on reshade.hpp. A function-pointer sink
+    // delivers only bounded exact Warrior model+slot first-cut warnings.
+    dsrrl::runtime::warrior_9360_set_log_sink(
+        +[](const char *line) noexcept {
+            if (line != nullptr)
+                reshade::log::message(
+                    reshade::log::level::warning, line);
+        });
+#endif
     dsrrl::runtime::qpc_bisect::init_from_game_directory();
     char qpc_mode_line[200]{};
     std::snprintf(qpc_mode_line,sizeof(qpc_mode_line),
@@ -8214,6 +8684,9 @@ void AddonUninit(
     HMODULE addon_module,
     HMODULE reshade_module)
 {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    dsrrl::runtime::warrior_9360_set_log_sink(nullptr);
+#endif
     if (k_addon_loaded_only_bisect) {
         reshade::unregister_addon(addon_module, reshade_module);
         return;

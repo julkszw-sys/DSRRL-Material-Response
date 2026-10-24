@@ -1,0 +1,274 @@
+# Minimal transaction contracts — V230 resource-gate refactor
+
+Scope: independent draw/resource transactions derived from the owner-verified
+v2.3.0 pre-release source `232ac131`. PTDE behavior remains the target,
+stock DSR the fail-open fallback. This is NOT authorization to bypass an
+unidentified shader consumer or rewrite unrelated operators.
+
+## The operational rule
+
+Each transaction requires **only its own operands and actual consumer**.
+Cross-operator completion/sidecar whitelists are neither implicit inputs nor
+valid vetoes. Resource identity is established once, at live stock SRV
+registration; the draw looks up the exact registered SRV and matching sidecar.
+D3D11 draw-specific mutation must still restore the relevant original state.
+
+- Diffuse: `supported Bmp RX + live stock t0 + same-name valid DDS SRV`
+  -> bind t0 for the draw, preserve other resources. No t1, t2, FLVER,
+  c100, EnvSpec or PointLight gate. Separate c100/MR remains independently
+  authorized when its consumer is used.
+- Normal: `supported Bmp RX + live stock t2 + same-name valid DDS SRV`
+  -> bind t2, preserve stock s2. No Diffuse/Specular tuple.
+- SpecRGB: `actual equipment material + exact specular t1 identity +
+  exact PTDE SpecRGB sidecar + certified shader t10 consumer`. Preserve
+  native t1/roughness unless the operator-local shader is independently
+  authorized. A valid Diffuse/Normal sidecar cannot authorize SpecRGB.
+- Cubemap / EnvSpec resource: `actual bound probe identity + compatible
+  cubemap asset/view + correct shader resource slot & sampler`. Stable
+  receiver needs A only; HemEnvLerp needs A+B if both are consumed. Never
+  require unrelated Diffuse/Normal/SpecRGB for a resource-only cube bind.
+- PTDE EnvDiffuse operator (not yet active in this patch):
+  `exact HemEnv/EnvLerp consumer + current t11 (and t13 when blended) +
+  PTDE probe/legacy identity + source c86 (and c84/beta if blended) +
+  atomic shader/CB/SRV/sampler mutation with full restore`.
+  It does **not** inherit t12/t14 EnvSpec, t10 SpecRGB, PBL F0, PointLight,
+  or full Material Response prerequisites.
+
+## Composition rule: SpecRGB cannot pass pixel tests by itself
+
+**Transport readiness** for equipment SpecRGB is narrow: exact owner+slot/MTD,
+actual bound stock t1 logical identity, allowed PTDE Specular companion SRV,
+certified t10 receiver, and stock t1 roughness/alpha preserved.
+
+**PTDE pixel-behavior readiness** for HemEnv is stricter, but it is not an
+extra prerequisite on independent resource-only operators:
+
+```text
+PTDE EnvSpec material pixel:
+    receiver/MTD exact
+    + PTDE SpecRGB t10 with stock t1 roughness
+    + correctly mapped PTDE EnvSpec cubemap t12 (t14 if blended)
+    + PTDE material response c100/c101 + verified private consumer
+    + source endpoints, beta, and complete downstream composition
+    -> pixel candidate, NOT pixel PASS until reference comparison
+```
+
+The entire HemEnv private shader must fail open to stock DSR if a consumed
+component is unverified. Source=1 publication and Diffuse/Normal swaps are
+independent. Neither a successful t10 bind nor a cubemap upload authorizes
+a hybrid PTDE SpecRGB + stock DSR PBL/F0 renderer output.
+
+The runtime now uses a single `material_chain_ready` condition on both
+stable HemEnv and HemEnvLerp private shader transactions; the latter
+separately requires the exact terminal SAT operator. PTDE EnvSpec resource
+preparation remains before SpecRGB. The *t10 resource-only preflight*
+instead requires only the actual equipment owner/t1 logical identity,
+corresponding PTDE sidecar and certified SpecRGB consumer; it must not
+be vetoed by the unrelated generic `full_material_response_ready` bit.
+The caller owning the complete HemEnv private shader validates the combined
+MR+EnvSpec+SpecRGB operator before committing any mutation.
+The equipment-only SpecRGB PROTECT is unchanged.
+
+## Disabled operator fast path
+
+The generic resource router only resolves a bound t0, t1 or t2 companion when
+that operator is enabled and its receiver family is supported. No stock SRV
+identity/sidecar lookups are run for disabled classes. This is a performance
+filter, **not** a source-authority veto; exact owner still applies to
+equipment t10, whereas t0/t2 use actual stock SRV identity. The material
+response/cubemap/pixel check stays on the private HemEnv shader.
+
+## Exact zero-beta Lerp reduction
+
+For a verified HemEnvLerp source and finite endpoints the PTDE linear
+composition is `E=A+beta*(B-A)`. When `beta == 0.0f`, `E=A`
+regardless of B. The runtime now aliases PTDE B cubemaps to A
+(`t14=t12` for EnvSpec, `t13=t11` for EnvDiffuse), uses the same sampler
+and exact A EnvDiffuse source for c84, and skips a separate B probe lookup.
+The private Lerp shader still receives valid resources at both slots.
+This is **exact zero only**, not an epsilon or a visual heuristic.
+For any nonzero beta, require the original exact two-endpoint routing,
+two valid PTDE cubemaps and separate c86/c84 signals. Full pixel
+equivalence still requires runtime testing.
+
+## Source=1 diagnosis (OPEN)
+
+The canonical runtime log `201838` proves a source_kind=1 RX34 EnvSpec
+transaction can complete, but its EnvDiffuse PTDE t11 is NULL even while c86
+exists. The EnvSpec-only resource path never prepares the independent t11.
+Therefore removing authorization branches alone cannot realize EnvDiffuse;
+it needs its own t11/c86 shader/CB consumer. The experimental V369 standalone
+branch was pixel-rejected because it retained DSR cb0 factors instead of the
+actual PTDE c86. V370/V371 experimental work remains unmerged and requires
+source lineage and runtime review. Never claim Source1 PTDE EnvDiffuse fixed
+because an unrelated resource transaction built.
+
+## Verification status
+
+The C++ branch changes live resource registration, t0/t2 route decisions,
+ownerless resource draw fallback, EnvSpec atomic-failure fallback and fixed
+retail-DDS SHA attestation. Compilation is independently tracked in CI;
+in-game draw activation and PTDE pixel remain OPEN until evidenced. The
+protected P_Metal latest_hook_source fallback, PointLight, DoF and DSR EXE
+remain untouched.
+
+## V230 continuation: normalized B-bank source + exact RX34 witnesses (2026-10-24)
+
+**Source-level correction:** Native `envspec_blend_hook_entry` receives its
+original `source_a/source_b` pointers. With finite `beta >= 1.0` and
+different selectors, `pmetal_selector_policy::select()` reduces the
+expression to B-only, with normalized `endpoints.a=B`, `beta=0`.
+Reading this normalized B selector from **native A bank** is incorrect.
+The hook now reads from `source_b` and publishes that same selected bank
+as its exact donor identity, while passing the original input pointers and
+beta unchanged to the host packer. The protected `latest_hook_source`
+TLS/global fallback is unchanged.
+
+**Receiver-first runtime evidence, not a new patch authority:**
+
+- `[DSRRL RX34 RESOURCE ID WITNESS]`: six bounded RX34/route345
+  unresolved-sidecar snapshots, three stock slots each. Records native
+  t0/t1/t2 SRV handles, DXGI view format/dimension, registry logical hash
+  and independent sidecar status. `AMBIGUOUS_NATIVE_VIEW` means the
+  existing quarantine gate remains in effect; `NO_NAME_SIDECAR_REGISTRY_ENTRY`
+  means the callback registry has no authoritative identity *for that view*,
+  but does not distinguish a missing name from a missing matching sidecar.
+  `TRACKED_NO_CLASS_SIDECAR` means the registry has an entry but the
+  requested class replacement is unavailable. Unrequested slots are marked
+  `requested=0` and cannot be considered failed operators.
+- `[DSRRL RX34 T11 DOMAIN WITNESS]`: eight bounded exact P_Metal
+  RX34 post-source reads of actual PS slots t11, s11, b12 and the native
+  t11 resource descriptor (view/texture format, width, height, mip count,
+  array count and misc flags), plus exact source EnvDiffuse readiness
+  and beta. The witness reads native state with `PSGet*`, and additionally compares the t11 handle against the ReShade descriptor shadow (`shadow`, `shadow_t11`, `same`). It does **not** write
+  `PSSet*`, bind replacement SRVs, create a shader or establish a PTDE
+  probe alias. A non-NULL t11 is not proof of PTDE asset homology.
+  The witness records source-ready and source-rejected cases separately, capped at six samples per case. A source-rejected draw remains rejected. On a deferred context, native PSGet state may differ from the ReShade descriptor shadow; a NULL native t11 alone must not be interpreted as absence of the shader-visible t11.
+
+The two witnesses intentionally answer different questions: `t0/t1/t2`
+companion admission is not `t11` EnvDiffuse identity, and a source donor
+is not a pixel consumer. In the next owner-run matched-scene log, join both
+markers with the exact RX34 route/material/slot and the existing source
+stage counters. Preserve stock DSR on unresolved identity; **do not**
+turn either diagnostic into a new bypass.
+
+**Status:** source-code change committed, CI native build to be checked on
+the new HEAD; in-game RX34 hit, exact PTDE t11/c86 consumer activation,
+state restoration and PTDE pixel improvement are still OPEN. The active
+V359-RC1 release is not replaced by this draft.
+
+## Simplified resource/sampler transaction (2026-10-24)
+
+The private stable/Lerp HemEnv consumer still requires every *actual*
+PTDE carrier. The simplification unifies **only the routing code**, not
+the source/consumer semantics. This is the explicit asset checklist for
+the integrated one-addon draw:
+
+| Binding | Resource | Source/identity | Gate and status |
+| --- | --- | --- | --- |
+| t0 | independent Diffuse DDS | exact live stock t0 logical name + valid `DSRRL/Diffuse/*.dds` | resource-only, not gated by c100, independent |
+| t2 | independent Normal DDS | exact live stock t2 logical name + valid `DSRRL/Normals/*.dds` | resource-only, preserves stock s2 |
+| t10 | PTDE equipment SpecRGB | exact live stock t1 identity, equipment owner/MTD/receiver and `DSRRL/Specular/*.dds` | separate transport; full PS owns the material response |
+| t11/s11 | PTDE EnvDiffuse A RGBA cube and sampler | PackedGI 342 canonical ordinal, `PTDE_GI_ENVDIFFUSE_PACK_RGBA.bin` (8,404,992 bytes, SHA-256 `5ab4a471fedbbc95d8dceb55ed0f4648582a824b4290bec03e6134d7cb81cd8c`) | complete PTDE shader only; exact c86 donor and post-filter RGB/A |
+| t12/s12 | PTDE EnvSpec A RGBA cube in the full PTDE build; native DSR BC6H A only in the explicitly selected V13 diagnostic | `PTDE_GI_ENVSPEC_PACK_RGBA.bin` (33,619,968 bytes, SHA-256 `c16c3fd75bcf34f3cc075da6da1ad10c9440ee4a3ca580fe7f74d07a2ce4eac3`) | verified stock probe identity and EnvSpc slot |
+| t13/s13 | PTDE EnvDiffuse B | same exact pack, independent probe B | Lerp only; `beta==0` binds B=A |
+| t14/s14 | PTDE EnvSpec B in the full build; native DSR BC6H B only in the V13 diagnostic | same exact pack, slot/probe B | bound in both variants; `beta==0` binds B=A |
+| s7 | shadow PCF sampler | dedicated R7 shadow-only carrier | conditional exact stable RX33/34; independent of GI |
+| b12 | PTDE LightBank/EnvDiffuse/scene constant carrier | verified actual producer signal | the private shader owns CB12 ABI, never inferred from DDS presence |
+
+The exact pack SHA is a **load-time asset check**, not proof of active
+receiver, successful draw, shader composition or PTDE pixel equivalence.
+`PackedGI` ordinals do not establish native `LegacyGI` asset identity;
+do not substitute a legacy `EnvDif_m18_*` cubemap by ordinal alone. The
+source-only refactor of `pmetal_envspec_draw_runtime.cpp` now writes
+common t12/t14 and s12/s14 mappings once, preserving slot order and
+mode-specific t11/t13 and s11/s13 routes. No D3D11 transaction permission
+or shader bytecode is changed here.
+
+
+### Reused implementation, independent asset authority
+
+The next cleanup also removes duplicate source-code mechanics in
+`envspec_resource_runtime.cpp`:
+
+- A single `resolve_tracked_probe_locked` looks up exact native stock SRV
+  identity in the tracked view map for either PTDE cube replacement or the
+  explicitly requested native-DSR V13 diagnostic. The original caller-specific
+  range checks and the exact `beta == 0` A/B alias remain; the read always
+  occurs under `g_mutex`, with lifetime epochs intact. **Build materializer
+  V356 still inserts its independently SHA-certified native BC6H backing
+  fallback here, only when the PTDE path passes `allow_verified_alias=true`.**
+  The native-DSR diagnostic passes `false`, retaining its original stricter
+  known-view-only rule. Earlier pre-V230 sources retain the old V356 anchor.
+- A single `load_exact_cube_pack` implements file-size and SHA-256 checks.
+  EnvSpec and EnvDiffuse continue to pass **different** paths, byte lengths
+  and digests and have different readiness flags.
+- A single `create_ptde_rgba_cube` creates the six-face 32×32 RGBA8 GPU
+  resource/SRV after copying 24 KiB from the correct pack while holding the
+  registry lock. The callers continue to insert into different maps
+  (`g_ptde_cubes` vs `g_ptde_envdiffuse_cubes`) and validate carrier
+  liveness, retaining the exact original failure accounting.
+- The native DSR diagnostic retains stock SRVs and never consumes the PTDE
+  EnvDiffuse pack by virtue of sharing lookup mechanics. This does not resolve
+  unknown native `t11` / LegacyGI resource identity.
+
+These are **construction-level** refactors, with no shader logic changes.
+Static contracts and Windows CI must pass for each new HEAD before treating
+the refactor as build-compatible. Device/runtime and PTDE-visible pixel
+equivalence remain independent, open gates.
+
+
+## Live runtime evidence protocol (V230 telemetry)
+
+The one-addon V230 **candidate** build enables
+`DSRRL_V230_RUNTIME_TELEMETRY`. Its warnings are session-capped and
+survive ordinary release INFO-log stripping. They never perform PSGet/PSSet
+or texture readback.
+
+The actual owner game must be launched with the newly-built addon and
+the same exact external asset sidecars as the baseline. Without the
+matching PTDE PackedGI EnvSpec *and* EnvDiffuse packs at the two paths
+above, the bridge must fail open. Do not substitute one pack for the
+other or assume that DLL compilation includes those external files.
+
+The captured ReShade log is evaluated with:
+
+```powershell
+python renderer-core/tools/verify_v230_runtime_log.py "ReShade.log"
+```
+
+The command requires an **actual recorded DSR session**. A separately
+provided `--selftest` only checks the parser on synthetic rows and is
+**not** runtime evidence. Save the addon SHA, the exact asset hashes,
+ReShade log and matched PTDE-vs-DSR scene/motion/time exposure setup.
+
+Evidence ladder:
+
+- `[DSRRL PS PAYLOAD AUTHORITY]`: final create-time DXBC hash and RX
+  identity; not evidence that the shader was bound or drew.
+- `[DSRRL ENVSPEC APPLY]`: bounded prepare stage and fail-open reason,
+  present as a warning in this instrumented V230 candidate.
+- `[DSRRL V230 RUNTIME]`: exact route 345 RX33–35 Stable/Lerp
+  `prepare_reject`, `batch_ready`, `native_armed`,
+  `draw_issued`/`indexed_issued`, failure or `restore_failed`.
+  The prepared row includes b12 and t11/t12/t13/t14 + matching sampler
+  slot bitmasks and explicit EnvSpec/EnvDiffuse resource readiness.
+- `[DSRRL V230 NATIVE DRAW]`: instrumented *native D3D11 hook* after
+  the real original Draw path, for draw, indexed, instanced and indexed
+  instanced. Distinguishes capture failure, original executed with
+  restore failure (quarantine), and original executed with successful
+  state restoration. This record carries operator ownership and draw
+  kind, but does not itself identify RX or prove matched pixels.
+- **Pixel behavior:** always OPEN until the owner supplies matched
+  PTDE/DSR screenshots/video and the operator-local delta is measured.
+  A build, shader hash, SRV mask, hook arm or a restored Draw is NOT pixel
+  equivalence.
+
+A native-armed log without `draw_applied_restored` or an actual
+`draw_issued` is *not* a successful bridge activation. A single native
+post-draw owner record must not be attributed to a particular RX without
+explicit same-draw correlation evidence.
+
+No executable modification on disk; the output stays one
+`DSRRL_Restored_Lighting_v2.3.0.addon64` candidate plus the independently
+hashed PTDE sidecars.

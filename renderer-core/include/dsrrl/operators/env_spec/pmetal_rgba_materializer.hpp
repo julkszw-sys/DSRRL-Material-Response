@@ -43,6 +43,13 @@ struct pmetal_rgba_materialize_outcome {
     bool envdiffuse_linear_consumer_diag = false;
 };
 
+// Independent original PTDE EnvDiffuse, exact stable RX33..35.
+// Stock EnvSpec, t12/t14 and all other material operators remain untouched.
+bool materialize_ptde_envdiffuse_stable_only(
+    const std::uint8_t *stock, std::size_t n,
+    std::vector<std::uint8_t> &out,
+    std::uint32_t &receiver_id) noexcept;
+
 pmetal_rgba_materialize_outcome
 materialize_pmetal_rgba_receiver(
     const core::feature_registry &features,
@@ -50,5 +57,18 @@ materialize_pmetal_rgba_receiver(
     std::size_t stock_size,
     bool compose_upper_lower,
     std::vector<std::uint8_t> &output) noexcept;
+
+#if defined(DSRRL_V230_INDEPENDENT_ENVDIFFUSE)
+// Create-time exact stock-HemEnv shader island. Changes ONLY the t11
+// EnvDiffuse consumer (RGBA filter -> RGB/A -> independently supplied
+// pre-draw-gain endpoint). EnvSpec t12 and its entire DSR shader body,
+// SpecRGB, MR, common merge and other unrelated operators stay stock.
+// Unknown stock PS identity/ABI fails open; no guessed shader family.
+bool materialize_independent_envdiffuse_stable(
+    const std::uint8_t *stock_source,
+    std::size_t stock_size,
+    std::uint32_t &receiver_id,
+    std::vector<std::uint8_t> &output) noexcept;
+#endif
 
 } // namespace dsrrl::operators::env_spec

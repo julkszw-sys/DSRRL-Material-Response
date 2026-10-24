@@ -38,6 +38,34 @@ namespace {
 namespace mr = operators::material_response;
 namespace hashing = operators::legacy_plan::hashing;
 
+// The materialized PS is not an immutable file. Record its final DXBC
+// digest AFTER the exact receiver/materializer and optional Lerp composition,
+// once per successfully-created PS. This is a create-time identity witness;
+// it neither changes shader bytes nor grants the draw any authority.
+void log_final_pmetal_shader_digest(
+    const char *family,
+    std::uint32_t receiver,
+    const hashing::sha256_digest &digest,
+    std::size_t byte_count) noexcept
+{
+    constexpr char alphabet[] = "0123456789abcdef";
+    char hex[65]{};
+    for (std::size_t i = 0u; i < digest.size(); ++i) {
+        hex[i * 2u] = alphabet[digest[i] >> 4u];
+        hex[i * 2u + 1u] = alphabet[digest[i] & 0x0fu];
+    }
+    char line[256]{};
+    std::snprintf(
+        line, sizeof(line),
+        "[DSRRL PS PAYLOAD AUTHORITY] family=%s rx=%u bytes=%zu final_dxbc_sha256=%s created=1 pixel_pass=0",
+        family,
+        static_cast<unsigned>(receiver),
+        byte_count,
+        hex);
+    reshade::log::message(
+        reshade::log::level::warning, line);
+}
+
 constexpr std::uint32_t k_pmetal_route_index = 345u;
 constexpr const char *k_pmetal_name =
     "P_Metal[DSB].mtd";
@@ -58,6 +86,100 @@ constexpr std::uint32_t k_effect_fail_device = 1u << 12u;
 constexpr std::uint32_t k_effect_fail_b12 = 1u << 13u;
 constexpr std::uint32_t k_effect_fail_mutation = 1u << 14u;
 constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
+
+// Read-only exact-owner RX34 t11/s11/b12 witness. This is diagnostic
+// resource-domain evidence, never authority to bind a PTDE probe or modify
+// a shader. The live texture dimensions/format separate PackedGI candidates
+// from legacy resources without inventing logical-name mappings.
+std::atomic<std::uint32_t> g_rx34_t11_witness_source_ready{0u};
+std::atomic<std::uint32_t> g_rx34_t11_witness_source_reject{0u};
+
+void witness_rx34_native_envdiffuse(
+    reshade::api::command_list *cmd_list,
+    ID3D11DeviceContext *context,
+    const pmetal_envspec_source &source,
+    bool source_ready) noexcept
+{
+    auto &counter = source_ready ?
+        g_rx34_t11_witness_source_ready :
+        g_rx34_t11_witness_source_reject;
+    auto sample = counter.load(std::memory_order_relaxed);
+    if (sample >= 6u ||
+        !counter.compare_exchange_strong(
+            sample, sample + 1u, std::memory_order_relaxed))
+        return;
+
+    ID3D11ShaderResourceView *t11 = nullptr;
+    ID3D11SamplerState *s11 = nullptr;
+    ID3D11Buffer *b12 = nullptr;
+    context->PSGetShaderResources(11u, 1u, &t11);
+    context->PSGetSamplers(11u, 1u, &s11);
+    context->PSGetConstantBuffers(12u, 1u, &b12);
+    ID3D11ShaderResourceView *shadow_views[1]{};
+    const bool shadow_ready =
+        pixel_srv_shadow_snapshot(cmd_list, 11u, 1u, shadow_views);
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc{};
+    D3D11_TEXTURE2D_DESC texture_desc{};
+    D3D11_SAMPLER_DESC sampler_desc{};
+    D3D11_BUFFER_DESC cb_desc{};
+    bool texture2d = false;
+    ID3D11Resource *resource = nullptr;
+    if (t11 != nullptr) {
+        t11->GetDesc(&srv_desc);
+        t11->GetResource(&resource);
+    }
+    if (resource != nullptr) {
+        ID3D11Texture2D *texture = nullptr;
+        if (SUCCEEDED(resource->QueryInterface(
+                __uuidof(ID3D11Texture2D),
+                reinterpret_cast<void **>(&texture))) &&
+            texture != nullptr) {
+            texture->GetDesc(&texture_desc);
+            texture2d = true;
+            texture->Release();
+        }
+        resource->Release();
+    }
+    if (s11 != nullptr) {
+        s11->GetDesc(&sampler_desc);
+        s11->Release();
+    }
+    if (b12 != nullptr) {
+        b12->GetDesc(&cb_desc);
+        b12->Release();
+    }
+
+    char line[768]{};
+    std::snprintf(
+        line, sizeof(line),
+        "[DSRRL RX34 T11 DOMAIN WITNESS] sample=%u route=345 source_gate=%u t11=%p shadow=%u shadow_t11=%p same=%u srv_fmt=%u srv_dim=%u tex2d=%u tex_fmt=%u width=%u height=%u array=%u mips=%u misc=%08x s11=%u sampler_filter=%u b12=%u cb_bytes=%u ptde_c86_donor=%u beta=%.9g",
+        static_cast<unsigned>(sample + 1u),
+        source_ready ? 1u : 0u,
+        static_cast<void *>(t11),
+        shadow_ready ? 1u : 0u,
+        static_cast<void *>(shadow_views[0]),
+        shadow_ready && shadow_views[0] == t11 ? 1u : 0u,
+        static_cast<unsigned>(srv_desc.Format),
+        static_cast<unsigned>(srv_desc.ViewDimension),
+        texture2d ? 1u : 0u,
+        static_cast<unsigned>(texture_desc.Format),
+        texture_desc.Width,
+        texture_desc.Height,
+        texture_desc.ArraySize,
+        texture_desc.MipLevels,
+        texture_desc.MiscFlags,
+        s11 != nullptr ? 1u : 0u,
+        static_cast<unsigned>(sampler_desc.Filter),
+        b12 != nullptr ? 1u : 0u,
+        cb_desc.ByteWidth,
+        source.envdiffuse_linear_valid ? 1u : 0u,
+        static_cast<double>(source.beta));
+    reshade::log::message(
+        reshade::log::level::warning, line);
+    if (t11 != nullptr)
+        t11->Release();
+}
 
 std::atomic_bool g_source_cut_logged{false};
 std::atomic_bool g_resource_mode_logged{false};
@@ -112,9 +234,15 @@ void log_prepare_stage_once(
             material.semantic_name_hash),
         static_cast<unsigned long long>(
             material.flver_identity_hash));
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Fail-open cause: the normal V230 release strips INFO logs. Keep this
+    // already-bounded exact-family stage witness, but no extra GPU queries.
     reshade::log::message(
-        reshade::log::level::info,
-        line);
+        reshade::log::level::warning, line);
+#else
+    reshade::log::message(
+        reshade::log::level::info, line);
+#endif
 }
 
 #if defined(DSRRL_PMETAL_FORCE_PTDE_PACKEDGI)
@@ -301,6 +429,14 @@ release_resources() noexcept
             entry.buffer->Release();
     }
     b12_by_context_.clear();
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    for(auto &[_,shader] : independent_envdiffuse_shaders_)
+        if(shader!=nullptr)shader->Release();
+    independent_envdiffuse_shaders_.clear();
+    for(auto &[_,cb] : independent_envdiffuse_cb_by_context_)
+        if(cb.buffer!=nullptr)cb.buffer->Release();
+    independent_envdiffuse_cb_by_context_.clear();
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
@@ -425,6 +561,14 @@ on_destroy_device(
             entry.buffer->Release();
     }
     b12_by_context_.clear();
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    for(auto &[_,shader] : independent_envdiffuse_shaders_)
+        if(shader!=nullptr)shader->Release();
+    independent_envdiffuse_shaders_.clear();
+    for(auto &[_,cb] : independent_envdiffuse_cb_by_context_)
+        if(cb.buffer!=nullptr)cb.buffer->Release();
+    independent_envdiffuse_cb_by_context_.clear();
+#endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_R7_SHADOW)
     if (shadow_sampler_ != nullptr) {
@@ -541,6 +685,9 @@ register_replacement(
         payload_sha256;
     record.payload_size =
         dxbc_size;
+    log_final_pmetal_shader_digest(
+        "StableHemEnv", outcome.receiver_id,
+        payload_sha256, dxbc_size);
 
     ++replacement_register_ok_;
     return true;
@@ -692,6 +839,9 @@ register_lerp_replacement(
     lerp_replacement_size_[
         outcome.semantic_receiver_id] =
         dxbc_size;
+    log_final_pmetal_shader_digest(
+        "HemEnvLerp", outcome.semantic_receiver_id,
+        payload_sha256, dxbc_size);
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
     char log[256]{};
     std::snprintf(log,sizeof(log),
@@ -762,6 +912,174 @@ register_lerp_nonmetal_r8_candidate(
         outcome.semantic_receiver_id]=shader;
     return true;
 #endif
+}
+#endif
+
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+// Independent private receiver: never publishes a patch to stock pipeline,
+// and never mutates/aliases the combined EnvSpec replacement bank.
+bool pmetal_envspec_draw_runtime::register_independent_envdiffuse(
+    const void *dxbc,std::size_t n,std::uint32_t rx) noexcept
+{
+    if(dxbc==nullptr || n==0u || rx<33u || rx>35u)return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if(device_==nullptr || quarantined_.load())return false;
+    if(independent_envdiffuse_shaders_.count(rx)!=0u)return true;
+    ID3D11PixelShader *shader=nullptr;
+    if(FAILED(device_->CreatePixelShader(dxbc,n,nullptr,&shader)) ||
+       shader==nullptr)return false;
+    independent_envdiffuse_shaders_.emplace(rx,shader);
+    char line[170]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V370 ED] PRIVATE_PTDE_C86_SHADER rx=%u bytes=%zu"
+        " original_29_dword=1 t12=STOCK pixel=OPEN",rx,n);
+    reshade::log::message(reshade::log::level::info,line);
+    return true;
+}
+
+bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
+    reshade::api::command_list *cmd_list,
+    const mr::material_identity &material,
+    const mr::decision &decision,
+    prepared_pmetal_envspec_draw &prepared) noexcept
+{
+    prepared={};
+    if(cmd_list==nullptr || quarantined_.load() ||
+       !material.valid || !material.owner_tuple_exact ||
+       !material.material_slot_valid || !decision.active ||
+       decision.receiver_id<33u || decision.receiver_id>35u ||
+       !core_.features().enabled(core::operator_id::env_diffuse) ||
+       // Own source owner, NOT EnvSpec operator permission: a disabled
+       // EnvSpec island must not prevent an authenticated diffuse draw.
+       !exact_pmetal_material(material))
+        return false;
+    pmetal_envspec_source source{};
+    if(!source_.latest(material,source) ||
+       !source.envdiffuse_linear_valid ||
+       !std::isfinite(source.beta) || source.beta!=0.0f)
+        return false;
+    for(float c:source.envdiffuse_a)
+        if(!std::isfinite(c) || c<0.0f)return false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(device_==nullptr)return false;
+        const auto found=independent_envdiffuse_shaders_.find(
+            decision.receiver_id);
+        if(found==independent_envdiffuse_shaders_.end() ||
+           found->second==nullptr)return false;
+        found->second->AddRef();
+        prepared.shader=found->second;
+    }
+    auto *ctx=reinterpret_cast<ID3D11DeviceContext *>(
+        cmd_list->get_native());
+    if(ctx==nullptr){release(prepared);return false;}
+    ID3D11ShaderResourceView *t11[1]{};
+    if(!pixel_srv_shadow_snapshot(cmd_list,11u,1u,t11)) {
+        if(t11[0]!=nullptr){t11[0]->Release();t11[0]=nullptr;}
+        ctx->PSGetShaderResources(11u,1u,t11);
+    }
+    // Independent DSR t11 SHA/producer registry; never reuse t12 EnvSpec
+    // ordinal as a diffuse identity. Unknown or duplicate source fails open.
+    const bool exact_resource=env_resources_.prepare_envdiffuse_bound(
+        t11[0],nullptr,false,prepared.envdiffuse_resources);
+    if(t11[0]!=nullptr)t11[0]->Release();
+    if(!exact_resource){release(prepared);return false;}
+
+    // Exact old coupled ABI b12[3] = PTDE LightBank c86.rgb. Rows 0-2
+    // remain zero; this private shader only reads b12[3].xyz.
+    std::array<float,16> payload{};
+    payload[12]=source.envdiffuse_a[0];
+    payload[13]=source.envdiffuse_a[1];
+    payload[14]=source.envdiffuse_a[2];
+    std::array<std::uint32_t,16> bits{};
+    std::memcpy(bits.data(),payload.data(),sizeof(payload));
+    ID3D11Device *ctx_device=nullptr;
+    ctx->GetDevice(&ctx_device);
+    if(ctx_device==nullptr){release(prepared);return false;}
+    const auto key=reinterpret_cast<std::uintptr_t>(ctx);
+    ID3D11Buffer *buffer=nullptr;
+    bool upload=true;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(ctx_device!=device_ || quarantined_.load()) {
+            ctx_device->Release();release(prepared);return false;
+        }
+        auto it=independent_envdiffuse_cb_by_context_.find(key);
+        if(it!=independent_envdiffuse_cb_by_context_.end() &&
+           it->second.buffer!=nullptr) {
+            buffer=it->second.buffer;
+            buffer->AddRef();
+            upload=!it->second.valid || it->second.payload_bits!=bits;
+        } else {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth=64u;
+            desc.Usage=D3D11_USAGE_DYNAMIC;
+            desc.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
+            if(FAILED(device_->CreateBuffer(&desc,nullptr,&buffer)) ||
+               buffer==nullptr) {
+                ctx_device->Release();release(prepared);return false;
+            }
+            envdiffuse_cb_cache entry{};
+            entry.buffer=buffer;
+            independent_envdiffuse_cb_by_context_.emplace(key,entry);
+            buffer->AddRef();
+        }
+    }
+    ctx_device->Release();
+    if(upload) {
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if(FAILED(ctx->Map(buffer,0u,D3D11_MAP_WRITE_DISCARD,0u,&mapped)) ||
+           mapped.pData==nullptr) {
+            buffer->Release();release(prepared);return false;
+        }
+        std::memcpy(mapped.pData,payload.data(),sizeof(payload));
+        ctx->Unmap(buffer,0u);
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto it=independent_envdiffuse_cb_by_context_.find(key);
+        if(it!=independent_envdiffuse_cb_by_context_.end() &&
+           it->second.buffer==buffer) {
+            it->second.payload_bits=bits;
+            it->second.valid=true;
+        }
+    }
+    prepared.b12=buffer;
+    const auto owner=core::operator_bit(core::operator_id::env_diffuse);
+    auto &q=prepared.request;
+    q.primary=core::operator_id::env_diffuse;
+    q.receiver_verified=true;
+    q.material_verified=true;
+    q.pixel_shader=prepared.shader;
+    q.replace_pixel_shader=true;
+    q.constant_buffers[0]={12u,prepared.b12,owner};
+    q.constant_buffer_count=1u;
+    q.srvs[0]={11u,prepared.envdiffuse_resources.ptde_a};
+    q.srv_count=1u;
+    q.samplers[0]={11u,prepared.envdiffuse_resources.sampler};
+    q.sampler_count=1u;
+    prepared.ready=true;
+    static std::atomic<std::uint32_t> observations{0u};
+    const auto n=observations.fetch_add(1u,std::memory_order_relaxed)+1u;
+    if(n<=16u || (n&(n-1u))==0u) {
+        char line[445]{};
+        std::snprintf(line,sizeof(line),
+            "[DSRRL V370 ED REQUEST] n=%u rx=%u route=%u slot=%u"
+            " flver=%016llx bank=%016llx row=%u serial=%llu"
+            " c86=%.8g,%.8g,%.8g b12=1 t11=PTDE t12=STOCK"
+            " beta=%.8g pixel=OPEN",
+            n,decision.receiver_id,decision.route_index,
+            material.material_slot,
+            static_cast<unsigned long long>(material.flver_identity_hash),
+            static_cast<unsigned long long>(source.bank_signature_a),
+            source.row_id_a,
+            static_cast<unsigned long long>(source.serial),
+            static_cast<double>(source.envdiffuse_a[0]),
+            static_cast<double>(source.envdiffuse_a[1]),
+            static_cast<double>(source.envdiffuse_a[2]),
+            static_cast<double>(source.beta));
+        reshade::log::message(reshade::log::level::warning,line);
+    }
+    return true;
 }
 #endif
 
@@ -840,27 +1158,24 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_feature_ready_);
 
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp &&
-        (!core_.features().enabled(
-             core::operator_id::material_response) ||
-         !core_.features().enabled(
-             core::operator_id::diffuse_material_domain) ||
-         !core_.features().enabled(
-             core::operator_id::spec_rgb) ||
-         !core_.features().enabled(
-             core::operator_id::terminal_sat_rgb))) {
+    // This private HemEnv shader composes PTDE cubemap, SpecRGB and
+    // Material Response. An independent resource sidecar may be prepared
+    // without these, but the *combined pixel shader* may not: no DSR PBL
+    // tail is a substitute for the PTDE material-domain consumer.
+    const bool material_chain_ready =
+        core_.features().enabled(core::operator_id::material_response) &&
+        core_.features().enabled(core::operator_id::diffuse_material_domain) &&
+        core_.features().enabled(core::operator_id::spec_rgb);
+    const bool lerp_terminal_ready =
+        family != pmetal_envspec_receiver_family::hemenvlerp ||
+        core_.features().enabled(core::operator_id::terminal_sat_rgb);
+    if (!material_chain_ready || !lerp_terminal_ready) {
         telemetry::hot_count(semantic_rejects_);
-        effect_fail(
-            effect_fail_mask_,
-            k_effect_fail_lerp_feature);
-        log_prepare_stage_once(
-            1u << 2u,
-            "lerp_feature_reject",
-            material,
-            decision,
-            family);
+        effect_fail(effect_fail_mask_,
+            family == pmetal_envspec_receiver_family::hemenvlerp
+                ? k_effect_fail_lerp_feature : k_effect_fail_feature);
+        log_prepare_stage_once(1u << 2u,
+            "incomplete_ptde_material_spec_chain", material, decision, family);
         return false;
     }
 
@@ -906,6 +1221,19 @@ bool pmetal_envspec_draw_runtime::prepare(
     pmetal_envspec_source source{};
     if (!source_.latest(material, source) ||
         !std::isfinite(source.beta)) {
+        // Keep the native t11 source-vs-resource cut visible even if the
+        // exact LightBank producer has not authorized its semantic donor.
+        // This is read-only; the draw still fails open below.
+        if (decision.receiver_id == 34u &&
+            material.route_index == 345u &&
+            cmd_list != nullptr) {
+            auto *native_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            if (native_context != nullptr)
+                witness_rx34_native_envdiffuse(
+                    cmd_list, native_context, source, false);
+        }
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -1143,6 +1471,12 @@ bool pmetal_envspec_draw_runtime::prepare(
         return false;
     }
 
+    // Exact P_Metal RX34 post-source, pre-transaction witness. No PS/CB/SRV
+    // set calls, no shadow resource cache mutation and no authorization.
+    if (decision.receiver_id == 34u &&
+        material.route_index == 345u)
+        witness_rx34_native_envdiffuse(cmd_list, context, source, true);
+
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
 #if defined(DSRRL_V289_NONMETAL_LERP_R8_SPEC_LINEAR_AB) && !defined(DSRRL_V345_UNIFIED_HEMENVLERP)
@@ -1230,11 +1564,11 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
     effect_latch(effect_replacement_ready_);
 
-    const bool probe_b_required =
-        family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp ||
-        source.beta != 0.0f;
+    // For beta == 0, lerp(A, B, beta) == A. Bind B=A (including t14)
+    // instead of rejecting the draw because the unconsumed B probe is absent.
+    // The shader still receives a valid second SRV; nonzero blends retain
+    // exact two-endpoint assignment and content validation.
+    const bool probe_b_required = source.beta != 0.0f;
 
     ID3D11ShaderResourceView *shadow_env[3]{};
     const bool shadow_env_ready =
@@ -1270,6 +1604,51 @@ bool pmetal_envspec_draw_runtime::prepare(
     if (!env_resource_ready) {
         if (shader != nullptr)
             shader->Release();
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        // An EnvSpec probe reject is not a SpecRGB sidecar reject.
+        // Record source A/B and the current verified pack/sampler state
+        // without asking a similar texture/probe to stand in. No mutation.
+        if (decision.receiver_id >= 33u &&
+            decision.receiver_id <= 35u &&
+            material.route_index == 345u) {
+            static std::atomic<std::uint32_t> seen{0u};
+            const auto sample = seen.fetch_add(
+                1u,std::memory_order_relaxed);
+            if (sample < 32u) {
+                const auto env_t =
+                    env_resources_.telemetry();
+                char line[460]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V230 PROBE FAIL CUT] sample=%u rx=%u "
+                    "family=%u env_slot=%u beta=%.9g "
+                    "b_required=%u native_feed=%u shadow_ready=%u "
+                    "shadow_a=%p shadow_b=%p "
+                    "pack_ready=%u sampler_ready=%u "
+                    "native_candidates=%llu native_matches=%llu "
+                    "view_matches=%llu pixel_pass=0",
+                    sample+1u,
+                    static_cast<unsigned>(decision.receiver_id),
+                    static_cast<unsigned>(family),
+                    static_cast<unsigned>(env_semantics.envspc_slot),
+                    static_cast<double>(source.beta),
+                    probe_b_required?1u:0u,
+                    k_native_dsr_cubemap_feed?1u:0u,
+                    shadow_env_ready?1u:0u,
+                    static_cast<void *>(shadow_env[0]),
+                    static_cast<void *>(shadow_env[2]),
+                    env_t.pack_ready?1u:0u,
+                    env_t.sampler_ready?1u:0u,
+                    static_cast<unsigned long long>(
+                        env_t.native_candidates),
+                    static_cast<unsigned long long>(
+                        env_t.native_matches),
+                    static_cast<unsigned long long>(
+                        env_t.view_matches));
+                reshade::log::message(
+                    reshade::log::level::warning,line);
+            }
+        }
+#endif
         telemetry::hot_count(probe_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -1335,7 +1714,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                       shadow_material,
                       decision.receiver_id,
                       query,
-                      true,
+                      material_chain_ready,
                       true,
                       prepared.material_resources)
             : material_resources_.
@@ -1343,9 +1722,24 @@ bool pmetal_envspec_draw_runtime::prepare(
                       context,
                       decision.receiver_id,
                       query,
-                      true,
+                      material_chain_ready,
                       true,
                       prepared.material_resources);
+
+    // Source-censused chr-bound stock t1 is not a missing player equipment
+    // sidecar. Preserve the whole native character draw without trying the
+    // PTDE equipment island or recording a false SpecRGB fail-open.
+    if (prepared.material_resources.verified_character_not_equipment) {
+        if (shader != nullptr)
+            shader->Release();
+        env_resources_.release(prepared.env_resources);
+        material_resources_.release_prepared_draw(
+            prepared.material_resources);
+        log_prepare_stage_once(
+            1u << 29u, "character_not_equipment_stock",
+            material, decision, family);
+        return false;
+    }
 
     if (!material_ready ||
         !prepared.material_resources.spec_rgb) {
@@ -1659,9 +2053,8 @@ bool pmetal_envspec_draw_runtime::prepare(
     // probe ordinal and never derives assignment from DSR t11 content.
     const bool ptde_envdiffuse_b_required =
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-        family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp;
+        family == pmetal_envspec_receiver_family::hemenvlerp &&
+        source.beta != 0.0f;
 #else
         false;
 #endif
@@ -1880,69 +2273,45 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.request.constant_buffer_count =
         1u;
 
+    // The complete operator has four possible carrier slots:
+    //   t11 = PTDE EnvDiffuse A (or native DSR A in legacy diagnostic),
+    //   t12 = exact EnvSpec A cubemap,
+    //   t13 = PTDE EnvDiffuse B for verified Lerp only,
+    //   t14 = exact EnvSpec B cubemap (B=A when beta is exactly zero).
+    // EnvSpec slots are common to every mode, including native-DSR
+    // falsifiers. Independent t0/t2/t10 sidecars are appended elsewhere.
     std::uint32_t request_srv_count = 0u;
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.srvs[
-        request_srv_count++] = {
-            11u,
-            prepared.envdiffuse_resources.ptde_a
-        };
-#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
-        prepared.request.srvs[
-            request_srv_count++] = {
-                13u,
-                prepared.envdiffuse_resources.ptde_b
-            };
-    }
-#endif
-    prepared.request.srvs[
-        request_srv_count++] = {
-            12u,
-            prepared.env_resources.ptde_a
-        };
-    prepared.request.srvs[
-        request_srv_count++] = {
-            14u,
-            prepared.env_resources.ptde_b
-        };
+    prepared.request.srvs[request_srv_count++] = {
+        11u, prepared.envdiffuse_resources.ptde_a
+    };
 #elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
-    prepared.request.srvs[
-        request_srv_count++] = {
-            11u,
-            prepared.native_dsr_envdiffuse_a
-        };
-    prepared.request.srvs[
-        request_srv_count++] = {
-            12u,
-            prepared.env_resources.ptde_a
-        };
-    if (native_envdiffuse_b_required) {
-        prepared.request.srvs[
-            request_srv_count++] = {
-                13u,
-                prepared.native_dsr_envdiffuse_b
-            };
-    }
-    prepared.request.srvs[
-        request_srv_count++] = {
-            14u,
-            prepared.env_resources.ptde_b
-        };
-#else
-    prepared.request.srvs[
-        request_srv_count++] = {
-            12u,
-            prepared.env_resources.ptde_a
-        };
-    prepared.request.srvs[
-        request_srv_count++] = {
-            14u,
-            prepared.env_resources.ptde_b
+    prepared.request.srvs[request_srv_count++] = {
+        11u, prepared.native_dsr_envdiffuse_a
+    };
+#endif
+
+    prepared.request.srvs[request_srv_count++] = {
+        12u, prepared.env_resources.ptde_a
+    };
+
+#if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+#if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
+    if (family == pmetal_envspec_receiver_family::hemenvlerp)
+        prepared.request.srvs[request_srv_count++] = {
+            13u, prepared.envdiffuse_resources.ptde_b
         };
 #endif
+#elif !defined(DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG) && !defined(DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG)
+    if (native_envdiffuse_b_required)
+        prepared.request.srvs[request_srv_count++] = {
+            13u, prepared.native_dsr_envdiffuse_b
+        };
+#endif
+
+    prepared.request.srvs[request_srv_count++] = {
+        14u, prepared.env_resources.ptde_b
+    };
     prepared.request.srv_count =
         request_srv_count;
 
@@ -2011,44 +2380,27 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            11u,
-            prepared.envdiffuse_resources.sampler
-        };
+    // The PTDE EnvDiffuse resource is consumed only by the complete PTDE
+    // shader, and carries its own exact sampler; no s11/s13 on native
+    // diagnostic paths. Lerp's B sampler remains bound even for B=A.
+    prepared.request.samplers[request_sampler_count++] = {
+        11u, prepared.envdiffuse_resources.sampler
+    };
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
-        prepared.request.samplers[
-            request_sampler_count++] = {
-                13u,
-                prepared.envdiffuse_resources.sampler
-            };
-    }
-#endif
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            12u,
-            prepared.env_resources.sampler
-        };
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            14u,
-            prepared.env_resources.sampler
-        };
-#else
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            12u,
-            prepared.env_resources.sampler
-        };
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            14u,
-            prepared.env_resources.sampler
+    if (family == pmetal_envspec_receiver_family::hemenvlerp)
+        prepared.request.samplers[request_sampler_count++] = {
+            13u, prepared.envdiffuse_resources.sampler
         };
 #endif
+#endif
+    // Both EnvSpec cubemaps always use the same exact PTDE sampler,
+    // including the A-only/zero-beta path where t14 is an alias.
+    prepared.request.samplers[request_sampler_count++] = {
+        12u, prepared.env_resources.sampler
+    };
+    prepared.request.samplers[request_sampler_count++] = {
+        14u, prepared.env_resources.sampler
+    };
     prepared.request.sampler_count =
         request_sampler_count;
 

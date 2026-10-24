@@ -217,19 +217,25 @@ island_draw_batch_result append_island_draw_request(
     if (result != island_draw_adapter_result::ready)
         return island_draw_batch_result::adapter_rejected;
 
+    // Stage all shader/CB/SRV/sampler edits in private memory. A later slot
+    // conflict or capacity failure must leave the previously authorized
+    // batch byte-for-byte unchanged; the caller may attempt a different
+    // operator-local fallback after append returns.
+    island_draw_batch staged = batch;
+
     if (one.replace_pixel_shader) {
-        if (batch.mutation.replace_pixel_shader &&
-            batch.mutation.pixel_shader != one.pixel_shader)
+        if (staged.mutation.replace_pixel_shader &&
+            staged.mutation.pixel_shader != one.pixel_shader)
             return island_draw_batch_result::shader_conflict;
 
-        batch.mutation.replace_pixel_shader = true;
-        batch.mutation.pixel_shader = one.pixel_shader;
+        staged.mutation.replace_pixel_shader = true;
+        staged.mutation.pixel_shader = one.pixel_shader;
     }
 
     auto merged =
         merge_slot_bindings(
-            batch.mutation.constant_buffers,
-            batch.mutation.constant_buffer_count,
+            staged.mutation.constant_buffers,
+            staged.mutation.constant_buffer_count,
             one.constant_buffers,
             one.constant_buffer_count,
             island_draw_batch_result::constant_buffer_conflict);
@@ -238,8 +244,8 @@ island_draw_batch_result append_island_draw_request(
 
     merged =
         merge_slot_bindings(
-            batch.mutation.srvs,
-            batch.mutation.srv_count,
+            staged.mutation.srvs,
+            staged.mutation.srv_count,
             one.srvs,
             one.srv_count,
             island_draw_batch_result::srv_conflict);
@@ -248,24 +254,25 @@ island_draw_batch_result append_island_draw_request(
 
     merged =
         merge_slot_bindings(
-            batch.mutation.samplers,
-            batch.mutation.sampler_count,
+            staged.mutation.samplers,
+            staged.mutation.sampler_count,
             one.samplers,
             one.sampler_count,
             island_draw_batch_result::sampler_conflict);
     if (merged != island_draw_batch_result::ready)
         return merged;
 
-    batch.mutation.owners |= one.owners;
-    batch.mutation.shader_owners |=
+    staged.mutation.owners |= one.owners;
+    staged.mutation.shader_owners |=
         one.shader_owners;
-    batch.mutation.constant_buffer_owners |=
+    staged.mutation.constant_buffer_owners |=
         one.constant_buffer_owners;
-    batch.mutation.resource_owners |=
+    staged.mutation.resource_owners |=
         one.resource_owners;
-    batch.mutation.carrier_owners |=
+    staged.mutation.carrier_owners |=
         one.carrier_owners;
-    ++batch.island_count;
+    ++staged.island_count;
+    batch = staged; // single commit after every category passes
     return island_draw_batch_result::ready;
 }
 
