@@ -21,6 +21,29 @@ def once(s: str, old: str, new: str) -> str:
         raise RuntimeError(f"V214 source mismatch for anchor {old[:75]!r}: {s.count(old)}")
     return s.replace(old,new,1)
 
+def patch_v230_view_witness(s: str) -> str:
+    """Expose exact view-init origin for missed RX34 sidecars; no routing grants."""
+    if "enum class v230_view_stage" not in s:
+        return s
+    begin=s.index("void witness_rx34_resource_identity(")
+    end=s.index("void on_init_resource_view(",begin)
+    witness=s[begin:end]
+    witness=once(witness,
+        "        std::uint64_t registry_hash = 0u;",
+        "        std::uint64_t registry_hash = 0u;\\n"
+        "        v230_view_origin origin{};\\n"
+        "        bool origin_found = false;")
+    witness=once(witness,
+        "            const auto found = g_cache.find(key);",
+        "            const auto observed = g_v230_view_origin.find(key);\\n"
+        "            if (observed != g_v230_view_origin.end()) {\\n"
+        "                origin=observed->second; origin_found=true;\\n"
+        "            }\\n"
+        "            const auto found = g_cache.find(key);")
+    s=s[:begin]+witness+s[end:]
+    return s
+
+
 def patch(source: str) -> str:
     s=source
     s=once(s,
