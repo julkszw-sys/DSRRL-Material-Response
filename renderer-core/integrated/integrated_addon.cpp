@@ -6735,7 +6735,25 @@ bool on_draw(
             integrated_draw_route_bound(
                 cmd_list));
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Capture the exact Warrior parts owner BEFORE any shader-route fast
+    // return erases the TLS identity. This does not authorize a bridge.
+    dsrrl::operators::material_response::material_identity warrior_owner{};
+    const bool warrior_owner_pending =
+        dsrrl::runtime::material_owner_selection_peek(warrior_owner);
+    if (warrior_owner_pending)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::pre_route,
+            warrior_owner, route_mask, 0u);
+#endif
+
     if (route_mask == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_pipeline_route,
+                warrior_owner, route_mask, 0u);
+#endif
 #if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
         // Capture sidecar-bound draws *outside* current shader families,
         // otherwise the 1295-name funnel misses the largest unknown class.
@@ -6781,6 +6799,12 @@ bool on_draw(
     // already executes the replacement shader and there is nothing to join,
     // snapshot, replay or restore here.
     if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_dynamic_route,
+                warrior_owner, route_mask, 0u);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -6868,6 +6892,16 @@ bool on_draw(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                material, route_mask, receiver_id, &decision);
+        else if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                warrior_owner, route_mask, receiver_id, &decision);
+#endif
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
@@ -6916,6 +6950,12 @@ bool on_draw(
     // whose material tuple is outside the exact PTDE authority; preparing and
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::identity_ready,
+            material, route_mask, receiver_id, &decision);
+#endif
     if (direct_pointlight_route &&
         !decision.active) {
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
@@ -6971,6 +7011,12 @@ bool on_draw(
             material,
             decision,
             prepared)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::prepare_reject,
+                material, route_mask, receiver_id, &decision);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -6989,6 +7035,13 @@ bool on_draw(
         release_prepared_island_batch(prepared);
         return false;
     }
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::prepared,
+            material, route_mask, receiver_id, &decision);
+#endif
 
     const auto effect_prepared =
         prepared_effect_mask(prepared);
@@ -7311,7 +7364,25 @@ bool on_draw_indexed(
             integrated_draw_route_bound(
                 cmd_list));
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Capture the exact Warrior parts owner BEFORE any shader-route fast
+    // return erases the TLS identity. This does not authorize a bridge.
+    dsrrl::operators::material_response::material_identity warrior_owner{};
+    const bool warrior_owner_pending =
+        dsrrl::runtime::material_owner_selection_peek(warrior_owner);
+    if (warrior_owner_pending)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::pre_route,
+            warrior_owner, route_mask, 0u);
+#endif
+
     if (route_mask == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_pipeline_route,
+                warrior_owner, route_mask, 0u);
+#endif
 #if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
         // Capture sidecar-bound draws *outside* current shader families,
         // otherwise the 1295-name funnel misses the largest unknown class.
@@ -7357,6 +7428,12 @@ bool on_draw_indexed(
     // already executes the replacement shader and there is nothing to join,
     // snapshot, replay or restore here.
     if ((route_mask & k_dynamic_draw_route_mask) == 0u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::no_dynamic_route,
+                warrior_owner, route_mask, 0u);
+#endif
         hot_count(g_draw_fast_skip);
         dsrrl::runtime::
             material_owner_selection_clear();
@@ -7426,6 +7503,16 @@ bool on_draw_indexed(
                 decision);
 
     if (!draw_identity_ready) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                material, route_mask, receiver_id, &decision);
+        else if (warrior_owner_pending)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::identity_reject,
+                warrior_owner, route_mask, receiver_id, &decision);
+#endif
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
         dsrrl::runtime::v291_material_trace::log(
             "identity_failopen",material,decision,receiver_id,
@@ -7474,6 +7561,12 @@ bool on_draw_indexed(
     // whose material tuple is outside the exact PTDE authority; preparing and
     // AddRef/Release'ing the replacement for all of those draws created a
     // large reject-only hot path.
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::identity_ready,
+            material, route_mask, receiver_id, &decision);
+#endif
     if (direct_pointlight_route &&
         !decision.active) {
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
@@ -7529,6 +7622,12 @@ bool on_draw_indexed(
             material,
             decision,
             prepared)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        if (material.valid)
+            dsrrl::runtime::warrior_9360_trace(
+                dsrrl::runtime::warrior_9360_stage::prepare_reject,
+                material, route_mask, receiver_id, &decision);
+#endif
         mark_effect_probe_mask(
             effect_candidates,
             effect_probe_stage::fail_open,
@@ -7547,6 +7646,13 @@ bool on_draw_indexed(
         release_prepared_island_batch(prepared);
         return false;
     }
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if (material.valid)
+        dsrrl::runtime::warrior_9360_trace(
+            dsrrl::runtime::warrior_9360_stage::prepared,
+            material, route_mask, receiver_id, &decision);
+#endif
 
     const auto effect_prepared =
         prepared_effect_mask(prepared);
