@@ -101,6 +101,14 @@ def patch_v230_view_witness(s: str) -> str:
         "        g_v230_view_origin.erase(key);\n"
         "#endif\n"
         "        if (g_ambiguous_view_device.erase(key) != 0u)")
+    s=once(s,
+        "        dead.swap(g_cache);\n"
+        "        g_ambiguous_view_device.clear();",
+        "        dead.swap(g_cache);\n"
+        "        g_ambiguous_view_device.clear();\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "        g_v230_view_origin.clear();\n"
+        "#endif")
     return s
 
 
