@@ -100,6 +100,45 @@ std::atomic_bool g_native_arm_reject_logged{false};
 std::atomic_bool g_vtable_rearm_logged{false};
 std::atomic_bool g_vtable_conflict_logged{false};
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+std::atomic<std::uint32_t> g_v230_native_rt_seen{0u};
+
+// Actual post-draw native-hook outcome; a successful arm is NOT a draw hit.
+// Only the existing EnvSpec operator owner qualifies; don't infer RX/MTD
+// from a D3D11 context or probe ordinal. State and restore are original.
+void v230_native_rt_once(
+    unsigned lane,
+    unsigned outcome,
+    const char *draw_type,
+    const char *stage,
+    const draw_tx_mutation &mutation) noexcept
+{
+    if (lane >= 4u || outcome >= 3u ||
+        (mutation.owners &
+            core::operator_bit(core::operator_id::env_spec)) == 0u)
+        return;
+    const unsigned bit_id = lane * 3u + outcome;
+    const auto bit = 1u << bit_id;
+    if ((g_v230_native_rt_seen.fetch_or(
+            bit,std::memory_order_relaxed) & bit) != 0u)
+        return;
+    std::uint32_t srv_mask = 0u;
+    for (std::uint32_t i = 0u; i < mutation.srv_count; ++i)
+        if (mutation.srvs[i].slot < 32u &&
+            mutation.srvs[i].srv != nullptr)
+            srv_mask |= 1u << mutation.srvs[i].slot;
+    char line[300]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V230 NATIVE DRAW] kind=%s stage=%s "
+        "envspec_owner=1 ps_replace=%u srv_mask=0x%08X "
+        "original_draw_reached=%u restored=%u pixel_pass=0",
+        draw_type,stage,mutation.replace_pixel_shader ? 1u : 0u,
+        srv_mask,outcome == 0u ? 0u : 1u,
+        outcome == 2u ? 1u : 0u);
+    reshade::log::message(reshade::log::level::warning,line);
+}
+#endif
+
 void retain_mutation(
     draw_tx_mutation &mutation) noexcept
 {
@@ -1884,6 +1923,10 @@ pmetal_native_draw_bridge::draw_hook(
         bridge->impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(0u,0u,"draw",
+            "capture_fail_stock",pending.mutation);
+#endif
         original(
             context,
             vertex_count,
@@ -1908,10 +1951,18 @@ pmetal_native_draw_bridge::draw_hook(
         bridge->impl_->restore_fail.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(0u,1u,"draw",
+            "restore_failed_quarantine",pending.mutation);
+#endif
         bridge->impl_->quarantined.store(
             true,
             std::memory_order_release);
     } else {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(0u,2u,"draw",
+            "draw_applied_restored",pending.mutation);
+#endif
         bridge->impl_->draw_applied.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -1985,6 +2036,10 @@ pmetal_native_draw_bridge::draw_indexed_hook(
         bridge->impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(1u,0u,"draw_indexed",
+            "capture_fail_stock",pending.mutation);
+#endif
         original(
             context,
             index_count,
@@ -2011,10 +2066,18 @@ pmetal_native_draw_bridge::draw_indexed_hook(
         bridge->impl_->restore_fail.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(1u,1u,"draw_indexed",
+            "restore_failed_quarantine",pending.mutation);
+#endif
         bridge->impl_->quarantined.store(
             true,
             std::memory_order_release);
     } else {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(1u,2u,"draw_indexed",
+            "draw_applied_restored",pending.mutation);
+#endif
         bridge->impl_->
             draw_indexed_applied.fetch_add(
                 1u,
@@ -2091,6 +2154,10 @@ pmetal_native_draw_bridge::draw_instanced_hook(
         bridge->impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(2u,0u,"draw_instanced",
+            "capture_fail_stock",pending.mutation);
+#endif
         original(
             context,
             vertex_count_per_instance,
@@ -2119,10 +2186,18 @@ pmetal_native_draw_bridge::draw_instanced_hook(
         bridge->impl_->restore_fail.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(2u,1u,"draw_instanced",
+            "restore_failed_quarantine",pending.mutation);
+#endif
         bridge->impl_->quarantined.store(
             true,
             std::memory_order_release);
     } else {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(2u,2u,"draw_instanced",
+            "draw_applied_restored",pending.mutation);
+#endif
         bridge->impl_->draw_applied.fetch_add(
             1u,
             std::memory_order_relaxed);
@@ -2200,6 +2275,10 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
         bridge->impl_->arm_reject.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(3u,0u,"draw_indexed_instanced",
+            "capture_fail_stock",pending.mutation);
+#endif
         original(
             context,
             index_count_per_instance,
@@ -2230,10 +2309,18 @@ pmetal_native_draw_bridge::draw_indexed_instanced_hook(
         bridge->impl_->restore_fail.fetch_add(
             1u,
             std::memory_order_relaxed);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(3u,1u,"draw_indexed_instanced",
+            "restore_failed_quarantine",pending.mutation);
+#endif
         bridge->impl_->quarantined.store(
             true,
             std::memory_order_release);
     } else {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_native_rt_once(3u,2u,"draw_indexed_instanced",
+            "draw_applied_restored",pending.mutation);
+#endif
         bridge->impl_->
             draw_indexed_applied.fetch_add(
                 1u,
