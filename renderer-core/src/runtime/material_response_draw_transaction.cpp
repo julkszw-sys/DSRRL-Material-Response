@@ -259,16 +259,23 @@ bool material_response_draw_runtime::acquire_replacement(
         cached.receiver_id == receiver_id &&
         cached.bank == bank_id &&
         cached.epoch == epoch) {
-        if (!cached.present ||
-            cached.shader == nullptr)
-            return false;
+        if (cached.present && cached.shader != nullptr) {
+            cached.shader->AddRef();
+            replacement.shader = cached.shader;
+            replacement.composed_owners = cached.composed_owners;
+            return true;
+        }
 
-        cached.shader->AddRef();
-        replacement.shader =
-            cached.shader;
-        replacement.composed_owners =
-            cached.composed_owners;
-        return true;
+        // Retry a cached negative only when this same exact bank/receiver
+        // shader was published later. Never invalidate unrelated positive
+        // TLS entries or acquire a map mutex for permanent absent keys.
+        const auto key_index =
+            static_cast<std::size_t>(bank_id) *
+            k_replacement_key_receivers + receiver_id;
+        if (receiver_id < k_replacement_key_receivers &&
+            !replacement_key_published_[key_index].load(
+                std::memory_order_acquire))
+            return false;
     }
 
     std::lock_guard<std::mutex> lock(
@@ -426,17 +433,20 @@ bool material_response_draw_runtime::register_replacement_record(
             dxbc_size
         });
 
-    // Fix exact MR shader registration visibility. acquire_replacement()
-    // caches absent (bank, receiver) keys as present=false with the current
-    // epoch. Without invalidation, a thread which asked for the key before
-    // this create-time registration can fail-open FOREVER even after the
-    // exact shader has been registered. Advance only when a NEW replacement
-    // is installed. Existing TLS AddRef references remain safe; the next
-    // lookup refreshes once using the verified live registry. No operator,
-    // receiver, material or resource permission is widened.
-    resource_epoch_.fetch_add(
-        1u,
-        std::memory_order_release);
+    // Publish only the exact newly installed shader key.
+    // Existing TLS positive references are still valid; negative misses
+    // for this (bank,receiver) key alone become retryable.
+    std::size_t bank_index = 5u;
+    if (&bank == &replacements_) bank_index = 0u;
+    else if (&bank == &lerp_replacements_) bank_index = 1u;
+    else if (&bank == &lerp_upper_lower_replacements_) bank_index = 2u;
+    else if (&bank == &upper_lower_replacements_) bank_index = 3u;
+    else if (&bank == &subsurface_spec_replacements_) bank_index = 4u;
+    if (bank_index < 5u && receiver_id < k_replacement_key_receivers)
+        replacement_key_published_[
+            bank_index * k_replacement_key_receivers + receiver_id]
+            .store(true, std::memory_order_release);
+
     ++ok_counter;
     return true;
 }
@@ -448,6 +458,8 @@ void material_response_draw_runtime::release_resources() noexcept
     resource_epoch_.fetch_add(
         1u,
         std::memory_order_release);
+    for (auto &key : replacement_key_published_)
+        key.store(false, std::memory_order_release);
 
     for (auto &entry : replacements_) {
         auto *shader = entry.second.shader;
