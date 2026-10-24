@@ -186,7 +186,7 @@ std::unordered_map<std::uint64_t, companion_set> g_cache;
 enum class v230_view_stage : std::uint8_t {
     unknown = 0, no_name_scope, no_target_sidecar,
     named_eligible, registered, registered_without_upload,
-    conflicting_view_identity
+    conflicting_view_identity, verified_character_not_equipment
 };
 struct v230_view_origin {
     std::uint64_t resource_handle = 0u;
@@ -207,6 +207,7 @@ const char *v230_stage_name(v230_view_stage stage) noexcept
     case v230_view_stage::registered: return "REGISTERED";
     case v230_view_stage::registered_without_upload: return "REGISTERED_NO_DDS_UPLOAD";
     case v230_view_stage::conflicting_view_identity: return "CONFLICT_QUARANTINE";
+    case v230_view_stage::verified_character_not_equipment: return "VERIFIED_CHR_NOT_PLAYER_EQUIPMENT";
     default: return "NO_VIEW_INIT_OBSERVATION";
     }
 }
