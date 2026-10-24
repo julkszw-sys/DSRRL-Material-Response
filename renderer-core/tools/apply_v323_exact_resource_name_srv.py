@@ -44,6 +44,38 @@ def patch_v230_view_witness(s: str) -> str:
         "            }\n"
         "#endif\n"
         "            const auto found = g_cache.find(key);")
+    # Deduplicate repeated draw calls by exact t0/t1/t2 view handles and
+    # requested slots, otherwise six initial draws hide later equipment.
+    old_sample="""    auto sample = g_rx34_identity_witness_samples.load(
+        std::memory_order_relaxed);
+    if (sample >= 6u ||
+        !g_rx34_identity_witness_samples.compare_exchange_strong(
+            sample, sample + 1u, std::memory_order_relaxed))
+        return;
+"""
+    new_sample="""#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    static std::mutex witness_guard;
+    static std::array<std::array<std::uint64_t, 4>, 96> seen{};
+    static std::size_t seen_count = 0;
+    const std::array<std::uint64_t,4> signature{
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(views[0])),
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(views[1])),
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(views[2])),
+        static_cast<std::uint64_t>(requested_mask)
+    };
+    std::uint32_t sample = 0u;
+    {
+        std::lock_guard<std::mutex> lock(witness_guard);
+        if (std::find(seen.begin(),seen.begin()+seen_count,signature)
+                != seen.begin()+seen_count || seen_count==seen.size())
+            return;
+        sample = static_cast<std::uint32_t>(seen_count++);
+        seen[sample] = signature;
+    }
+#else
+""" + old_sample + """#endif
+"""
+    witness=once(witness,old_sample,new_sample)
     # Single exact stock SRV record. This is observation, not authority.
     witness=once(witness,
         "sidecar=%u reason=%s\",",
