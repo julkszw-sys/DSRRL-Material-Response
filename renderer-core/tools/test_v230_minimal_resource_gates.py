@@ -669,7 +669,8 @@ assert "h1 != 0u" in bound
 assert "replacement != nullptr" in bound
 assert "spec_equipment_allowed(h1)" not in bound  # two-line C++ layout
 assert "spec_equipment_allowed(\n                    h1)" in bound
-assert "if (exact_nonmetal)" in bound
+assert "if (exact_nonmetal)" not in bound # removed unsupported 38-entry texture veto
+assert "exact_nonmetal" in bound # still selects its PTDE-island consumer
 assert "spec_rgb_consumer_ready" in bound
 assert "material.owner_tuple_exact" in bound or "const bool exact_material" in bound
 assert "g_material_resources.prepare_draw_requests" in integrated
