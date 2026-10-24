@@ -230,3 +230,20 @@ assert "if (native_envdiffuse_b_required)" in srv_bindings
 assert "DSRRL_PMETAL_V13_NATIVE_DSR_NO_TAIL_DIAG" in srv_bindings
 assert "DSRRL_PMETAL_V13_NATIVE_DSR_MATERIAL_MOD_DIAG" in srv_bindings
 print("V230_CUBEMAP_BIND_UNIFICATION_PASS t11_t12_t13_t14_order_and_modes")
+
+# Each resource slot has its matching sampler even after simplification:
+# t11/s11 EnvDiffuse A, t12/s12 EnvSpec A, t13/s13 EnvDiffuse B,
+# t14/s14 EnvSpec B. R7 shadow s7 is independent.
+sampler_bindings = composed.split(
+    "    std::uint32_t request_sampler_count = 0u;", 1
+)[1].split("    prepared.request.sampler_count =", 1)[0]
+for slot, resource in (
+    (11, "envdiffuse_resources.sampler"),
+    (12, "env_resources.sampler"),
+    (13, "envdiffuse_resources.sampler"),
+    (14, "env_resources.sampler"),
+):
+    assert sampler_bindings.count(f"{slot}u, prepared.{resource}") == 1
+assert "shadow_sampler" in sampler_bindings
+assert "if (family == pmetal_envspec_receiver_family::hemenvlerp)" in sampler_bindings
+print("V230_CUBEMAP_SAMPLER_UNIFICATION_PASS exact_s11_s12_s13_s14_shadow_s7")
