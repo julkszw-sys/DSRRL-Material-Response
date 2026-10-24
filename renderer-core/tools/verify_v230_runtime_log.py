@@ -164,6 +164,10 @@ def selftest() -> None:
     result = evaluate(sample + "\n[DSRRL V230 NATIVE DRAW] stage=restore_failed_quarantine")
     assert result["runtime_result"] == "RESTORE_FAULT"
     assert evaluate("")["runtime_result"] == "NO_BRIDGE_DRAW_PROOF"
+    fixture = "[DSRRL RX34 RESOURCE ID WITNESS] slot=t1 name=47e4afc842fe2f4b"
+    assert get_rx34_sidecar_rows(fixture)[0]["spec_route"] == "DIRECT_DSR"
+    fixture = "[DSRRL RX34 RESOURCE ID WITNESS] slot=t1 name=03f695a24f8f9be0"
+    assert get_rx34_sidecar_rows(fixture)[0]["spec_route"] == "OUTSIDE_PTDE_SPEC_CORPUS"
     print("V230_RUNTIME_PARSER_SELFTEST_PASS synthetic_only_not_gameplay_evidence")
 
 
