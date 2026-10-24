@@ -626,6 +626,24 @@
           1322
         ]
       }
+    },
+    {
+      "semantic_name": "C_Metal[DSB].mtd",
+      "raw_mtd_sha256": "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85",
+      "status": "CONFIRMED",
+      "scope": "DSR source owner identity only: Warrior HD_M_9360 slot0 (FLVER bfbef63e9611bd8b753f8197e5cabeabbf08ec400e098f2191561bdc5ce7396b), route229; no shader/EnvSpec/PBL admission",
+      "authority_class": "MATERIAL_IDENTITY_ONLY",
+      "basis": {
+        "path": "renderer-core/data/material_response_routes_v1.json",
+        "binding_key": "mr.full24.mtd.c_metal_dsb",
+        "route_index": 229,
+        "route_sha256": "ae2e8df867fe2859eef37104c13c939e7e7fe4f703b7fe49c408d0230fc71d85",
+        "dsr_flver_sha256": "bfbef63e9611bd8b753f8197e5cabeabbf08ec400e098f2191561bdc5ce7396b",
+        "material_slot": 0,
+        "source_audit": "DSRRL_WARRIOR_SET_9360_FAILOPEN_SOURCE_AUDIT_20261024.zip",
+        "evidence_scope": "source FLVER+material name and previously CONFIRMED raw route SHA; live C_Metal raw parser and receiver still require runtime verification",
+        "pixel_equivalence": "OPEN"
+      }
     }
   ]
 }
