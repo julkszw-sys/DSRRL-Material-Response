@@ -666,7 +666,7 @@ assert "v203_equipment::exact_proven_slot_spec_hash(query, h1)" in bound
 assert bound.index("v203_equipment::exact_proven_slot_spec_hash(query, h1)") < bound.index(
     "context_spec.exact_name_ptde_companion_verified =")
 assert "spec_equipment_allowed(h1)" not in bound  # two-line C++ layout
-assert "spec_equipment_allowed(\\n                    h1)" in bound
+assert "spec_equipment_allowed(\n                    h1)" in bound
 assert "if (exact_nonmetal)" in bound
 assert "spec_rgb_consumer_ready" in bound
 assert "material.owner_tuple_exact" in bound or "const bool exact_material" in bound
