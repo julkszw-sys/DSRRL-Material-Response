@@ -5629,8 +5629,8 @@ void v230_rt_probe_once(
 {
     if (rx < 33u || rx > 35u || route != 345u || phase >= 8u)
         return;
-    // 8 phases x 2 families x 3 RX would exceed 64 bits. Use 8 phases
-    // per receiver and share Stable/Lerp through a 48-bit bounded mask.
+    // 8 phases x 2 families x 3 RX = 48 bits; unique session slots
+    // for both consumer families and successful/failing transaction states.
     const unsigned index = (rx - 33u) * 16u +
         (lerp ? 8u : 0u) + phase;
     const std::uint64_t bit = 1ull << index;
@@ -7145,6 +7145,11 @@ bool on_draw(
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     if (prepared.envspec_in_batch) {
+        if (dispatch.transaction ==
+                dsrrl::runtime::draw_tx_result::issued_restore_failed)
+            v230_rt_probe_once(7u,"restore_failed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
         const bool issued =
             dsrrl::runtime::draw_tx_issued(dispatch.transaction);
         v230_rt_probe_once(
@@ -7652,6 +7657,11 @@ bool on_draw_indexed(
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     if (prepared.envspec_in_batch) {
+        if (dispatch.transaction ==
+                dsrrl::runtime::draw_tx_result::issued_restore_failed)
+            v230_rt_probe_once(7u,"restore_failed",
+                decision.receiver_id,material.route_index,
+                hemenvlerp_bound,&prepared.envspec);
         const bool issued =
             dsrrl::runtime::draw_tx_issued(dispatch.transaction);
         v230_rt_probe_once(
