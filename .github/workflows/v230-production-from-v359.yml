@@ -37,6 +37,32 @@ jobs:
       - name: Build exact V359 descendant with v2.3.0 identity
         shell: pwsh
         run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Dump generated draw code on native compile failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $p='build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp'
+          if (Test-Path $p) {
+            $lines=Get-Content $p
+            $start=-1
+            $end=-1
+            for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^bool on_draw\(') { $start=$i }
+              if ($lines[$i] -match '^bool on_draw_indexed\(') { $end=$i; break }
+            }
+            if ($start -ge 0 -and $end -gt $start) {
+              Write-Host "GENERATED_DRAW_BLOCK_START=$($start+1) END=$($end+1)"
+              for ($i=$start; $i -lt $end; $i++) {
+                Write-Host ('GENSRC:{0:D5}:{1}' -f ($i+1),$lines[$i])
+              }
+            }
+          }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: V230-Generated-Native-Compile-Failure
+          path: build-v230-release/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp
+          if-no-files-found: ignore
       - name: Verify single PE addon, identity and legacy instrumentation absence
         shell: pwsh
         run: |
