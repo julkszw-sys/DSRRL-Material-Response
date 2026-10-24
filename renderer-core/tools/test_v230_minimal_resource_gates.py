@@ -517,3 +517,20 @@ assert "v230_disk_mask" in v230_resources
 assert "disk_mask=%u" in generated_v323
 assert "static_cast<unsigned>(origin.disk_mask)" in generated_v323
 print("V230_INSTALLED_DDS_VS_ALLOWLIST_WITNESS_PASS")
+
+# Source owner class must win over texture-name substrings. Genuine owner
+# reverse join: c2500_wp_a_0200_s => chr/c2500.chrbnd, whereas
+# wp_a_0200_s belongs independently to parts/WP_A_0200.partsbnd.
+char_source = "0x236adf2eb0a2afccull"
+assert char_source in v230_resources
+assert "v230_observed_character_t1" in v230_resources
+assert "verified_character_not_equipment" in v230_resources
+assert "VERIFIED_CHR_NOT_PLAYER_EQUIPMENT" in v230_resources
+assert "v230_view_stage::verified_character_not_equipment" in v230_resources
+assert "prepared.verified_character_not_equipment = true;" in v230_resources
+assert "v230_observed_character_t1(it->second.logical_hash)" in v230_resources
+assert "if (prepared.material_resources.verified_character_not_equipment)" in pmetal_rt
+assert '"character_not_equipment_stock"' in pmetal_rt
+assert pmetal_rt.index("if (prepared.material_resources.verified_character_not_equipment)") < pmetal_rt.index("if (!material_ready ||")
+assert "spec_equipment_allowed(logical_hash)" in v230_resources
+print("V230_RX34_CHR_NOT_EQUIPMENT_PASS original_owner_negative_exact_stock")
