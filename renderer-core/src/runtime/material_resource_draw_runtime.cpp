@@ -153,6 +153,61 @@ core::renderer_core *g_core = nullptr;
 std::mutex g_mutex;
 std::unordered_map<std::uint64_t, companion_set> g_cache;
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+// Exact VIEW-lifetime evidence only. This does not authorize or repair a
+// resource identity. It records why a bound stock t0/t1/t2 had no companion
+// at init_resource_view. Never guess a name from a similar DDS or MTD.
+// The bounded map is invalidated by destroy_resource_view/device.
+enum class v230_view_stage : std::uint8_t {
+    unknown = 0, no_name_scope, no_target_sidecar,
+    named_eligible, registered, registered_without_upload,
+    conflicting_view_identity
+};
+struct v230_view_origin {
+    std::uint64_t resource_handle = 0u;
+    std::uint64_t logical_hash = 0u;
+    v230_view_stage stage = v230_view_stage::unknown;
+    std::uint8_t class_mask = 0u;
+    std::uint8_t uploaded_mask = 0u;
+};
+std::unordered_map<std::uint64_t, v230_view_origin> g_v230_view_origin;
+constexpr std::size_t k_v230_view_origin_max = 16384u;
+const char *v230_stage_name(v230_view_stage stage) noexcept
+{
+    switch (stage) {
+    case v230_view_stage::no_name_scope: return "NO_LOADER_NAME_AT_VIEW_INIT";
+    case v230_view_stage::no_target_sidecar: return "NAME_HAS_NO_ELIGIBLE_SIDECAR";
+    case v230_view_stage::named_eligible: return "ELIGIBLE_BUT_REGISTRATION_NOT_REACHED";
+    case v230_view_stage::registered: return "REGISTERED";
+    case v230_view_stage::registered_without_upload: return "REGISTERED_NO_DDS_UPLOAD";
+    case v230_view_stage::conflicting_view_identity: return "CONFLICT_QUARANTINE";
+    default: return "NO_VIEW_INIT_OBSERVATION";
+    }
+}
+void v230_observe_view(
+    std::uint64_t view_key,
+    std::uint64_t resource_key,
+    std::uint64_t name_hash,
+    v230_view_stage stage,
+    std::uint8_t class_mask,
+    std::uint8_t uploaded_mask) noexcept
+{
+    if (view_key == 0u) return;
+    try {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto found = g_v230_view_origin.find(view_key);
+        if (found == g_v230_view_origin.end() &&
+            g_v230_view_origin.size() >= k_v230_view_origin_max)
+            g_v230_view_origin.erase(g_v230_view_origin.begin());
+        g_v230_view_origin[view_key] = {
+            resource_key,name_hash,stage,class_mask,uploaded_mask
+        };
+    } catch (...) {
+        // Diagnostic allocation failure is never resource permission.
+    }
+}
+#endif
+
 // One sidecar GPU SRV may back multiple concurrently live stock SRVs with
 // exactly the same (device, class, name, logical hash). The cache retains one
 // reference *only while stock owners remain alive*. No blanket preload.
@@ -1381,7 +1436,7 @@ void witness_rx34_resource_identity(
 
 void on_init_resource_view(
     reshade::api::device *device,
-    reshade::api::resource,
+    reshade::api::resource resource_handle,
     reshade::api::resource_usage usage,
     const reshade::api::resource_view_desc &,
     reshade::api::resource_view view)
@@ -1392,8 +1447,9 @@ void on_init_resource_view(
         device == nullptr ||
         device->get_api() !=
             reshade::api::device_api::d3d11 ||
-        usage !=
-            reshade::api::resource_usage::shader_resource ||
+        (usage &
+            reshade::api::resource_usage::shader_resource) ==
+                reshade::api::resource_usage::undefined ||
         view.handle == 0u)
         return;
 
@@ -1401,8 +1457,13 @@ void on_init_resource_view(
     std::size_t logical_name_length = 0u;
     if (!texture_identity_transport::snapshot_raw(
             logical_name_raw,
-            logical_name_length))
+            logical_name_length)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_observe_view(view.handle, resource_handle.handle, 0u,
+            v230_view_stage::no_name_scope, 0u, 0u);
+#endif
         return;
+    }
 
     const auto logical_hash =
         fnv_name(
@@ -1429,8 +1490,21 @@ void on_init_resource_view(
     }
     const bool spec_member = spec_equipment_allowed(logical_hash) ||
         exact_subsurface_body_spec_hash(logical_hash);
-    if (!spec_member && !diffuse_member && !normal_member)
+    if (!spec_member && !diffuse_member && !normal_member) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+            v230_view_stage::no_target_sidecar,0u,0u);
+#endif
         return;
+    }
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const std::uint8_t v230_class_mask =
+        (spec_member ? 2u : 0u) |
+        (diffuse_member ? 1u : 0u) |
+        (normal_member ? 4u : 0u);
+    v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+        v230_view_stage::named_eligible,v230_class_mask,0u);
+#endif
 
     auto *native_device =
         reinterpret_cast<ID3D11Device *>(
@@ -1482,6 +1556,13 @@ void on_init_resource_view(
     // std::wstring move is noexcept: do not introduce allocations or
     // exceptions on the ReShade resource-view callback path.
     set.logical_name = std::move(logical_name);
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const std::uint8_t v230_uploaded_mask =
+        (set.specular != nullptr ? 2u : 0u) |
+        (set.diffuse != nullptr ? 1u : 0u) |
+        (set.normal != nullptr ? 4u : 0u);
+#endif
 
     const auto key =
         static_cast<std::uint64_t>(
@@ -1539,6 +1620,14 @@ void on_init_resource_view(
     if (!accepted)
         release_set(set);
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    v230_observe_view(view.handle,resource_handle.handle,logical_hash,
+        !accepted ? v230_view_stage::conflicting_view_identity :
+        v230_uploaded_mask == 0u
+            ? v230_view_stage::registered_without_upload :
+              v230_view_stage::registered,
+        v230_class_mask,v230_uploaded_mask);
+#endif
     ++g_named_views;
 }
 
