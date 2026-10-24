@@ -1198,6 +1198,9 @@ constexpr dsrrl::core::operator_id k_integrated_islands[] = {
     dsrrl::core::operator_id::upper_lower,
     dsrrl::core::operator_id::hemdir3,
     dsrrl::core::operator_id::env_spec,
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    dsrrl::core::operator_id::env_diffuse,
+#endif
     dsrrl::core::operator_id::terminal_sat_rgb,
     dsrrl::core::operator_id::diffuse_material_domain,
     dsrrl::core::operator_id::point_light,
@@ -4668,6 +4671,25 @@ bool on_create_pipeline(
             ++g_mr_payload_materialize_fail;
         }
 
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+        // Create-time, addon-private original PTDE EnvDiffuse-only shader.
+        // Registration does not replace any retail shader or EnvSpec bank.
+        // A missing shader leaves the original drawing path unchanged.
+        if (g_core.features().enabled(
+                dsrrl::core::operator_id::env_diffuse)) {
+            std::uint32_t independent_rx = 0u;
+            std::vector<std::uint8_t> independent_dxbc;
+            if (dsrrl::operators::env_spec::
+                    materialize_ptde_envdiffuse_stable_only(
+                        source,pixel_shader->code_size,
+                        independent_dxbc,independent_rx)) {
+                (void)g_pmetal_envspec.register_independent_envdiffuse(
+                    independent_dxbc.data(),
+                    independent_dxbc.size(),independent_rx);
+            }
+        }
+#endif
+
         // Exact P_Metal EnvSpec is now built from the exact stock shader via
         // the clean diffuse-v1 operator base. No V2.10/V2.11 F0 proxy is
         // consumed or authorized anywhere in this construction.
@@ -6299,6 +6321,35 @@ bool prepare_island_batch(
     if (!exact_pmetal_envspec)
         v230_nonmetal_route_trace(2u, receiver_id, material, decision);
 #endif
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+    // EnvDiffuse is a separate PTDE operator: private PS + original c86
+    // in its own CB12 and exact t11/s11, with EnvSpec t12/t14 left stock.
+    // When EnvSpec is independently enabled and ready, its existing
+    // transaction retains priority; on its failure EnvDiffuse can still
+    // issue without using the EnvSpec probe or SpecRGB t10.
+    auto try_stable_envdiffuse = [&]() noexcept -> bool {
+        if (hemenvlerp_bound ||
+            decision.receiver_id < 33u ||
+            decision.receiver_id > 35u ||
+            material.route_index != 345u)
+            return false;
+        if (!g_pmetal_envspec.prepare_independent_envdiffuse(
+                cmd_list,material,decision,prepared.envspec))
+            return false;
+        prepared.envspec_in_batch = true;
+        if (dsrrl::runtime::append_island_draw_request(
+                prepared.batch,prepared.envspec.request) !=
+            dsrrl::runtime::island_draw_batch_result::ready) {
+            release_prepared_island_batch(prepared);
+            return false;
+        }
+        return true;
+    };
+    if (!g_core.features().enabled(
+            dsrrl::core::operator_id::env_spec) &&
+        try_stable_envdiffuse())
+        return true;
+#endif
     if (exact_pmetal_envspec) {
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
         if (material.route_index != 345u) {
@@ -6333,6 +6384,12 @@ bool prepare_island_batch(
             // Clean any partially prepared EnvSpec resources before
             // committing a resource-only draw transaction.
             g_pmetal_envspec.release(prepared.envspec);
+#if defined(DSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE)
+            // An EnvSpec probe, shader or SpecRGB denial does not veto
+            // independently verified EnvDiffuse. No shared source/ordinal.
+            if (try_stable_envdiffuse())
+                return true;
+#endif
             // P_Metal EnvSpec/SpecRGB is not permission for independent
             // Diffuse/Normal texture resources. Failed shader/probe/source
             // must not suppress a correct live t0/t2 companion transaction.
