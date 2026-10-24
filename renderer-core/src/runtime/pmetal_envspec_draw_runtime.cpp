@@ -2130,44 +2130,27 @@ bool pmetal_envspec_draw_runtime::prepare(
 #endif
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            11u,
-            prepared.envdiffuse_resources.sampler
-        };
+    // The PTDE EnvDiffuse resource is consumed only by the complete PTDE
+    // shader, and carries its own exact sampler; no s11/s13 on native
+    // diagnostic paths. Lerp's B sampler remains bound even for B=A.
+    prepared.request.samplers[request_sampler_count++] = {
+        11u, prepared.envdiffuse_resources.sampler
+    };
 #if defined(DSRRL_PMETAL_R19_LERP_EXACT_ENVDIFFUSE)
-    if (family ==
-            pmetal_envspec_receiver_family::
-                hemenvlerp) {
-        prepared.request.samplers[
-            request_sampler_count++] = {
-                13u,
-                prepared.envdiffuse_resources.sampler
-            };
-    }
-#endif
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            12u,
-            prepared.env_resources.sampler
-        };
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            14u,
-            prepared.env_resources.sampler
-        };
-#else
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            12u,
-            prepared.env_resources.sampler
-        };
-    prepared.request.samplers[
-        request_sampler_count++] = {
-            14u,
-            prepared.env_resources.sampler
+    if (family == pmetal_envspec_receiver_family::hemenvlerp)
+        prepared.request.samplers[request_sampler_count++] = {
+            13u, prepared.envdiffuse_resources.sampler
         };
 #endif
+#endif
+    // Both EnvSpec cubemaps always use the same exact PTDE sampler,
+    // including the A-only/zero-beta path where t14 is an alias.
+    prepared.request.samplers[request_sampler_count++] = {
+        12u, prepared.env_resources.sampler
+    };
+    prepared.request.samplers[request_sampler_count++] = {
+        14u, prepared.env_resources.sampler
+    };
     prepared.request.sampler_count =
         request_sampler_count;
 
