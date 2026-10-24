@@ -1065,7 +1065,7 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
         std::snprintf(line,sizeof(line),
             "[DSRRL V370 ED REQUEST] n=%u rx=%u route=%u slot=%u"
             " flver=%016llx bank=%016llx row=%u serial=%llu"
-            " c86=%.8g,%.8g,%.8g b12=1 t11=PTDE t12=STOCK"
+            " c86=%.8g,%.8g,%.8g diff_probe=%u b12=1 t11=PTDE t12=STOCK"
             " beta=%.8g pixel=OPEN",
             n,decision.receiver_id,decision.route_index,
             material.material_slot,
@@ -1076,6 +1076,7 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
             static_cast<double>(source.envdiffuse_a[0]),
             static_cast<double>(source.envdiffuse_a[1]),
             static_cast<double>(source.envdiffuse_a[2]),
+            static_cast<unsigned>(prepared.envdiffuse_resources.probe_a),
             static_cast<double>(source.beta));
         reshade::log::message(reshade::log::level::warning,line);
     }
