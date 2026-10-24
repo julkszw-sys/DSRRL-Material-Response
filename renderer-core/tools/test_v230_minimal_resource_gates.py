@@ -267,7 +267,14 @@ assert "probe = found->second.probe_ordinal;" in registry
 assert "if (view == nullptr)" in registry
 assert ptde_resolution.count("resolve_tracked_probe_locked(") == 2
 assert native_resolution.count("resolve_tracked_probe_locked(") == 2
-assert "probe_for_native_view(" not in env
+# V359 retains its original source-read ABI, now a *single*
+# forwarding shim to the shared exact registry resolver.
+assert env.count("bool probe_for_native_view(") == 1
+v359_forwarder = env.split("bool probe_for_native_view(",1)[1].split(
+    "bool get_ptde_cube(",1
+)[0]
+assert "std::lock_guard<std::mutex> lock(g_mutex)" in v359_forwarder
+assert "return resolve_tracked_probe_locked(view,probe,true);" in v359_forwarder
 assert "const auto resolve_probe_locked =" not in env
 assert "probe_a >=\n            env::k_legacy_envspec_probe_count" in ptde_resolution
 assert "probe_b >=\n            env::k_legacy_envspec_probe_count" in ptde_resolution
