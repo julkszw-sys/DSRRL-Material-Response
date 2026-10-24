@@ -1503,8 +1503,10 @@ bool add_b12_rdef(
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
 bool apply_exact_ptde_envdiffuse_consumer(
-    std::vector<std::uint8_t> &bytes) noexcept
+    std::vector<std::uint8_t> &bytes,
+    std::uint32_t scratch_register = 12u) noexcept
 {
+    if (scratch_register >= 128u) return false;
     std::vector<chunk> chunks;
     std::vector<std::uint32_t> words;
     std::vector<instruction_view> instructions;
@@ -1642,21 +1644,21 @@ bool apply_exact_ptde_envdiffuse_consumer(
     // Keep the exact coordinate/resource/sampler operands but capture all four
     // filtered channels in r12 so alpha survives until the post-filter divide.
     ptde_sample[3] = 0x001000f2u;
-    ptde_sample[4] = 12u;
+    ptde_sample[4] = scratch_register;
 
     const std::array<std::uint32_t,7>
         decode_rgb_over_alpha{{
             0x0700000eu,
-            0x001000e2u,12u,
-            0x00100e56u,12u,
-            0x00100006u,12u
+            0x001000e2u,scratch_register,
+            0x00100e56u,scratch_register,
+            0x00100006u,scratch_register
         }};
 
     const std::array<std::uint32_t,8>
         apply_ptde_endpoint{{
             0x08000038u,
             0x00100072u,2u,
-            0x00100e56u,12u,
+            0x00100e56u,scratch_register,
             0x00208246u,12u,3u
         }};
 
@@ -5246,5 +5248,93 @@ materialize_pmetal_rgba_receiver(
     return outcome;
 #endif
 }
+
+
+#if defined(DSRRL_V230_INDEPENDENT_ENVDIFFUSE) && defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
+bool materialize_independent_envdiffuse_stable(
+    const std::uint8_t *stock_source,
+    std::size_t stock_size,
+    std::uint32_t &receiver_id,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    receiver_id = 0u;
+    output.clear();
+    if (stock_source == nullptr || stock_size < 32u ||
+        !legacy_plan::dxbc::checksum_container_valid(stock_source,stock_size))
+        return false;
+
+    // Exact stock DSR shader identity only. This does not compose the
+    // EnvSpec Build131 island, generic MR, specular or terminal operators.
+    const auto digest = hashing::sha256(stock_source,stock_size);
+    const pmetal_rgba_authority::entry *owner = nullptr;
+    for (const auto &candidate : pmetal_rgba_authority::k_entries) {
+        if (!hashing::matches_hex(digest,candidate.stock_sha256))
+            continue;
+        if (owner != nullptr) return false;
+        owner = &candidate;
+    }
+    if (owner == nullptr || owner->receiver_id < 33u ||
+        owner->receiver_id > 35u) return false;
+
+    std::vector<chunk> chunks;
+    std::vector<std::uint32_t> words;
+    std::vector<instruction_view> instructions;
+    std::size_t code_index=0u;
+    if (!parse_dxbc(stock_source,stock_size,chunks,code_index) ||
+        !extract_words(chunks,code_index,words) ||
+        !decode(words,instructions)) return false;
+
+    // Reserve a genuinely NEW register for the RGBA intermediate rather
+    // than borrowing r12 from the completed EnvSpec Build131 island.
+    // No original DSR instruction can reference a register outside its
+    // original dcl_temps range: this prevents unrelated live-range damage.
+    std::size_t temps_at=static_cast<std::size_t>(-1);
+    std::uint32_t scratch=0u;
+    for (const auto &ins:instructions) {
+        if (ins.opcode != 0x68u) continue; // DCL_TEMPS (SM5)
+        if (temps_at != static_cast<std::size_t>(-1) ||
+            ins.length != 2u || ins.offset + 1u >= words.size())
+            return false;
+        temps_at=ins.offset;
+        scratch=words[ins.offset+1u];
+    }
+    if (temps_at==static_cast<std::size_t>(-1) ||
+        scratch==0u || scratch>=128u) return false;
+    words[temps_at+1u]=scratch+1u;
+
+    // Same exact b12[4] carrier ABI as the established PTDE HemEnv
+    // materializer, without admitting EnvSpec or MR as co-owners.
+    constexpr std::array<std::uint32_t,4> decl{{
+        0x04000059u,0x00208e46u,0x0000000cu,0x00000004u
+    }};
+    if (words.size() < 12u || words[1u]!=words.size())
+        return false;
+    try {
+        words.insert(words.begin()+11u,decl.begin(),decl.end());
+    } catch (...) { return false; }
+    words[1u]+=4u;
+
+    std::vector<std::uint8_t> isolated;
+    if (!rebuild(stock_source,stock_size,
+                 std::move(chunks),code_index,words,isolated) ||
+        !apply_exact_ptde_envdiffuse_consumer(isolated,scratch) ||
+        !add_b12_rdef(isolated) ||
+        !legacy_plan::dxbc::checksum_container_valid(
+            isolated.data(),isolated.size()))
+        return false;
+
+    receiver_id=owner->receiver_id;
+    output=std::move(isolated);
+    return true;
+}
+#elif defined(DSRRL_V230_INDEPENDENT_ENVDIFFUSE)
+bool materialize_independent_envdiffuse_stable(
+    const std::uint8_t *, std::size_t,
+    std::uint32_t &receiver_id,
+    std::vector<std::uint8_t> &output) noexcept
+{
+    receiver_id=0u; output.clear(); return false;
+}
+#endif
 
 } // namespace dsrrl::operators::env_spec
