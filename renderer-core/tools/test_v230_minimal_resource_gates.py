@@ -137,3 +137,25 @@ for a, b, beta, should_select_b in [
 ]:
     assert (a != b and beta >= 1.0) == should_select_b
 print("V230_BLEND_ENDPOINT_BANK_PASS original_source_unchanged B_only_source_correct")
+
+# Receiver-first, diagnostic-only view-identity witness for unresolved
+# exact route 345/RX34. No unverified view may become authorized by logging.
+assert 'void witness_rx34_resource_identity(' in src
+witness = src.split('void witness_rx34_resource_identity(', 1)[1].split('void on_init_resource_view(', 1)[0]
+assert 'g_ambiguous_view_device.find(key)' in witness
+assert 'g_cache.find(key)' in witness
+assert 'NO_NAME_SIDECAR_REGISTRY_ENTRY' in witness
+assert 'AMBIGUOUS_NATIVE_VIEW' in witness
+assert 'TRACKED_NO_CLASS_SIDECAR' in witness
+assert 'sample >= 6u' in witness
+assert 'std::lock_guard<std::mutex> lock(g_mutex)' in witness
+assert 'reshade::log::level::warning' in witness
+draw_witness = draw.split('const auto h0 = hashes[0];', 1)[1].split('if (want_spec_rgb) {', 1)[0]
+assert 'query.material.route_index == 345u' in draw_witness
+assert 'receiver_id == 34u' in draw_witness
+assert 'unresolved_mask != 0u' in draw_witness
+assert 'witness_rx34_resource_identity(' in draw_witness
+assert 'prepared.spec_rgb' not in witness
+assert 'prepared.diffuse' not in witness
+assert 'prepared.normal' not in witness
+print("V230_RX34_IDENTITY_WITNESS_PASS scoped_readonly_capped_failopen")
