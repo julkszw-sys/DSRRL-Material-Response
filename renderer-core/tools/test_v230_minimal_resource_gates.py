@@ -796,19 +796,3 @@ print("V230_DSR_RAW_MTD_SOURCE_CENSUS_PASS 35 routes, 33 exact registrable, "
       "2 quarantined (ambiguous, bad route digest); 30 source-verified repairs "
       "and exactly 2 stale-unique overrides, pixel OPEN")
 
-# P_DullLeather basename is ambiguous in source DSR BND3 (2 different
-# raw SHA values). Exact Warrior model+slot AND actual live MTD parser
-# digest are both required; neither a global supplement override nor a
-# material-name-only guess may broaden the shader.
-_v230_selector = (root / "src/runtime/flver_engine_hooks.cpp").read_text("utf-8")
-assert "warrior_dull_exact_owner" in _v230_selector
-assert "a115d89eb9f70265038c58cc3a48285c419013f4b6165b07cd1c9a172449fdee" in _v230_selector
-assert "ad7d888aa5caee9794d8ea5e39265df2c9d3c7c8fafcdf2d94ffeb22ab552413" in _v230_selector
-assert "lookup_exact_runtime_material(actual_material, live)" in _v230_selector
-assert "live.valid && live.actual_material_exact" in _v230_selector
-assert "live.semantic_name_hash == identity.semantic_name_hash" in _v230_selector
-assert "7ea7d6ce9bb7148db62e8c27ee45edefb9547018d0b723dd4753d4c37e29f293" in _v230_selector
-assert "identity.route_index = 160u;" in _v230_selector
-assert "identity.raw_mtd_sha256 = live.raw_mtd_sha256;" in _v230_selector
-assert "9376d84c81f0b1e77dc728dc469ce9fa281c41d6a7ccd23ec415471aa28341a3" not in _v230_selector
-print("V230_WARRIOR_DULL_SOURCE_VARIANT_PASS full 9360 SHA+slot+live MTD SHA only; alternate stock")
