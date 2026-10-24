@@ -673,3 +673,15 @@ assert "material.owner_tuple_exact" in bound or "const bool exact_material" in b
 assert "g_material_resources.prepare_draw_requests" in integrated
 assert "material_resource_draw_runtime" in integrated
 print("V230_WARRIOR_HELM_NARROW_OPERATOR_PASS exact FLVER slot MTD t1 plus receiver fail-open")
+
+# V314 read-only source instrument is inserted INSIDE an existing no-route
+# branch; a second if (route_mask == 0u) was the exact Windows C1075 cause.
+v314_materializer = (root / "tools/materialize_v314_unrouted_receiver_probe.py").read_text("utf-8")
+assert "replace_twice('''#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)" in v314_materializer
+v314_unrouted_patch = v314_materializer.split(
+    "replace_twice('''#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)", 1
+)[1]
+assert "'''#if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)" in v314_unrouted_patch
+assert "'''    if (route_mask == 0u) {" not in v314_unrouted_patch
+assert v314_unrouted_patch.count("v314::report_stock_unrouted(") == 1
+print("V230_V314_BRACE_CONTRACT_PASS no_duplicate_unrouted_scope")
