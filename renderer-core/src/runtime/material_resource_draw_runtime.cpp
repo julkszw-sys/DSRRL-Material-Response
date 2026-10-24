@@ -61,6 +61,15 @@ inline bool spec_equipment_allowed(std::uint64_t hash) noexcept
 #endif
     if (generated::spec_equipment_name_hash_allowed_v12(hash)) return true;
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+    // Two exact base equipment t1 names established by the 2026-10-24
+    // Warrior parts FLVER source census. This only stages a candidate DDS:
+    // nonmetal PTDE t10 binding still requires the exact SHA256 model,
+    // material slot, raw MTD, live stock t1, PTDE consumer and receiver.
+    if (hash == 0xe9c532be429d6f7eull || // hd_m_9360_s
+        hash == 0xb73e2e38d914a8f1ull)  // hd_f_9360_s
+        return true;
+#endif
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     return sidecar_20261010::spec_allowed(hash);
 #else
     return false;
