@@ -43,6 +43,13 @@ struct pmetal_rgba_materialize_outcome {
     bool envdiffuse_linear_consumer_diag = false;
 };
 
+// Independent original PTDE EnvDiffuse, exact stable RX33..35.
+// Stock EnvSpec, t12/t14 and all other material operators remain untouched.
+bool materialize_ptde_envdiffuse_stable_only(
+    const std::uint8_t *stock, std::size_t n,
+    std::vector<std::uint8_t> &out,
+    std::uint32_t &receiver_id) noexcept;
+
 pmetal_rgba_materialize_outcome
 materialize_pmetal_rgba_receiver(
     const core::feature_registry &features,
