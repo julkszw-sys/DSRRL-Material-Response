@@ -63,17 +63,21 @@ constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 // resource-domain evidence, never authority to bind a PTDE probe or modify
 // a shader. The live texture dimensions/format separate PackedGI candidates
 // from legacy resources without inventing logical-name mappings.
-std::atomic<std::uint32_t> g_rx34_t11_witness_samples{0u};
+std::atomic<std::uint32_t> g_rx34_t11_witness_source_ready{0u};
+std::atomic<std::uint32_t> g_rx34_t11_witness_source_reject{0u};
 
 void witness_rx34_native_envdiffuse(
     reshade::api::command_list *cmd_list,
     ID3D11DeviceContext *context,
-    const pmetal_envspec_source &source) noexcept
+    const pmetal_envspec_source &source,
+    bool source_ready) noexcept
 {
-    auto sample = g_rx34_t11_witness_samples.load(
-        std::memory_order_relaxed);
-    if (sample >= 8u ||
-        !g_rx34_t11_witness_samples.compare_exchange_strong(
+    auto &counter = source_ready ?
+        g_rx34_t11_witness_source_ready :
+        g_rx34_t11_witness_source_reject;
+    auto sample = counter.load(std::memory_order_relaxed);
+    if (sample >= 6u ||
+        !counter.compare_exchange_strong(
             sample, sample + 1u, std::memory_order_relaxed))
         return;
 
@@ -121,8 +125,9 @@ void witness_rx34_native_envdiffuse(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "[DSRRL RX34 T11 DOMAIN WITNESS] sample=%u route=345 t11=%p shadow=%u shadow_t11=%p same=%u srv_fmt=%u srv_dim=%u tex2d=%u tex_fmt=%u width=%u height=%u array=%u mips=%u misc=%08x s11=%u sampler_filter=%u b12=%u cb_bytes=%u ptde_c86_donor=%u beta=%.9g",
+        "[DSRRL RX34 T11 DOMAIN WITNESS] sample=%u route=345 source_gate=%u t11=%p shadow=%u shadow_t11=%p same=%u srv_fmt=%u srv_dim=%u tex2d=%u tex_fmt=%u width=%u height=%u array=%u mips=%u misc=%08x s11=%u sampler_filter=%u b12=%u cb_bytes=%u ptde_c86_donor=%u beta=%.9g",
         static_cast<unsigned>(sample + 1u),
+        source_ready ? 1u : 0u,
         static_cast<void *>(t11),
         shadow_ready ? 1u : 0u,
         static_cast<void *>(shadow_views[0]),
@@ -992,6 +997,19 @@ bool pmetal_envspec_draw_runtime::prepare(
     pmetal_envspec_source source{};
     if (!source_.latest(material, source) ||
         !std::isfinite(source.beta)) {
+        // Keep the native t11 source-vs-resource cut visible even if the
+        // exact LightBank producer has not authorized its semantic donor.
+        // This is read-only; the draw still fails open below.
+        if (decision.receiver_id == 34u &&
+            material.route_index == 345u &&
+            cmd_list != nullptr) {
+            auto *native_context =
+                reinterpret_cast<ID3D11DeviceContext *>(
+                    cmd_list->get_native());
+            if (native_context != nullptr)
+                witness_rx34_native_envdiffuse(
+                    cmd_list, native_context, source, false);
+        }
         telemetry::hot_count(source_rejects_);
         effect_fail(
             effect_fail_mask_,
@@ -1233,7 +1251,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     // set calls, no shadow resource cache mutation and no authorization.
     if (decision.receiver_id == 34u &&
         material.route_index == 345u)
-        witness_rx34_native_envdiffuse(cmd_list, context, source);
+        witness_rx34_native_envdiffuse(cmd_list, context, source, true);
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
