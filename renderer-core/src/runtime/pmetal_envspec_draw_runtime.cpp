@@ -66,6 +66,7 @@ constexpr std::uint32_t k_effect_fail_native_envdiffuse = 1u << 15u;
 std::atomic<std::uint32_t> g_rx34_t11_witness_samples{0u};
 
 void witness_rx34_native_envdiffuse(
+    reshade::api::command_list *cmd_list,
     ID3D11DeviceContext *context,
     const pmetal_envspec_source &source) noexcept
 {
@@ -82,6 +83,9 @@ void witness_rx34_native_envdiffuse(
     context->PSGetShaderResources(11u, 1u, &t11);
     context->PSGetSamplers(11u, 1u, &s11);
     context->PSGetConstantBuffers(12u, 1u, &b12);
+    ID3D11ShaderResourceView *shadow_views[1]{};
+    const bool shadow_ready =
+        pixel_srv_shadow_snapshot(cmd_list, 11u, 1u, shadow_views);
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc{};
     D3D11_TEXTURE2D_DESC texture_desc{};
@@ -117,9 +121,12 @@ void witness_rx34_native_envdiffuse(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "[DSRRL RX34 T11 DOMAIN WITNESS] sample=%u route=345 t11=%p srv_fmt=%u srv_dim=%u tex2d=%u tex_fmt=%u width=%u height=%u array=%u mips=%u misc=%08x s11=%u sampler_filter=%u b12=%u cb_bytes=%u ptde_c86_donor=%u beta=%.9g",
+        "[DSRRL RX34 T11 DOMAIN WITNESS] sample=%u route=345 t11=%p shadow=%u shadow_t11=%p same=%u srv_fmt=%u srv_dim=%u tex2d=%u tex_fmt=%u width=%u height=%u array=%u mips=%u misc=%08x s11=%u sampler_filter=%u b12=%u cb_bytes=%u ptde_c86_donor=%u beta=%.9g",
         static_cast<unsigned>(sample + 1u),
         static_cast<void *>(t11),
+        shadow_ready ? 1u : 0u,
+        static_cast<void *>(shadow_views[0]),
+        shadow_ready && shadow_views[0] == t11 ? 1u : 0u,
         static_cast<unsigned>(srv_desc.Format),
         static_cast<unsigned>(srv_desc.ViewDimension),
         texture2d ? 1u : 0u,
@@ -1226,7 +1233,7 @@ bool pmetal_envspec_draw_runtime::prepare(
     // set calls, no shadow resource cache mutation and no authorization.
     if (decision.receiver_id == 34u &&
         material.route_index == 345u)
-        witness_rx34_native_envdiffuse(context, source);
+        witness_rx34_native_envdiffuse(cmd_list, context, source);
 
     ID3D11PixelShader *shader = nullptr;
     core::operator_mask composed_owners = 0u;
