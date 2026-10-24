@@ -9,7 +9,8 @@ FIRST = re.compile(r'\[DSRRL WARRIOR 9360 FIRST CUT\]\s+(.*)')
 FIELD = re.compile(r'([a-z][a-z0-9_]*)=([^\s]+)')
 STAGES = ('selector_invalid','selector_not_authenticated','selector_published',
           'pre_route','no_pipeline_route','no_dynamic_route','identity_reject',
-          'identity_ready','prepare_reject','prepared')
+          'identity_ready','prepare_reject','prepared',
+          'parser_registered','selector_flver_lookup')
 
 def parse(source):
     rows=[]
