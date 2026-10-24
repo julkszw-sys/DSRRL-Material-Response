@@ -1523,6 +1523,12 @@ void on_init_resource_view(
     }
     const bool spec_member = spec_equipment_allowed(logical_hash) ||
         exact_subsurface_body_spec_hash(logical_hash);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const std::uint8_t v230_disk_mask =
+        (diffuse_member ? 1u : 0u) |
+        (spec_disk_present ? 2u : 0u) |
+        (normal_member ? 4u : 0u);
+#endif
     if (!spec_member && !diffuse_member && !normal_member) {
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
         v230_observe_view(view.handle,resource_handle.handle,logical_hash,
