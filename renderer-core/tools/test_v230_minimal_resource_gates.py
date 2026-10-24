@@ -174,13 +174,17 @@ for read in (
     'texture->GetDesc(&texture_desc);',
     'cb_desc.ByteWidth',
     'source.envdiffuse_linear_valid',
-    'sample >= 8u',
+    'sample >= 6u',
 ):
     assert read in t11_witness
 for write in ('PSSetShaderResources(', 'PSSetSamplers(', 'PSSetConstantBuffers(', 'PSSetShader('):
     assert write not in t11_witness
 assert 'decision.receiver_id == 34u &&' in composed
+assert 'g_rx34_t11_witness_source_ready' in composed
+assert 'g_rx34_t11_witness_source_reject' in composed
+assert 'witness_rx34_native_envdiffuse(' in composed
+assert 'cmd_list, native_context, source, false);' in composed
 assert 'material.route_index == 345u' in composed
-assert 'witness_rx34_native_envdiffuse(context, source);' in composed
-assert composed.index('witness_rx34_native_envdiffuse(context, source);') < composed.index('ID3D11PixelShader *shader = nullptr;')
+assert 'witness_rx34_native_envdiffuse(cmd_list, context, source, true);' in composed
+assert composed.index('witness_rx34_native_envdiffuse(cmd_list, context, source, true);') < composed.index('ID3D11PixelShader *shader = nullptr;')
 print("V230_RX34_T11_DOMAIN_WITNESS_PASS exact_material_readonly_t11_s11_b12")
