@@ -67,6 +67,24 @@ constexpr std::array<std::uint8_t,17> k_builder_b={
     0x0F,0xC2,0x01,0x01};
 struct hook{void *target=nullptr,*trampoline=nullptr,*detour=nullptr;std::size_t stolen=0;std::array<std::uint8_t,32> original{};bool patched=false;};
 std::uintptr_t g_base=0; hook g_p{},g_s{},g_d{},g_m{},g_b{}; hook_status g_state{};
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+constexpr std::uintptr_t k_v384_de_helper=0x572890u;
+constexpr std::uintptr_t k_v384_type180_a_return=0x56f842u;
+constexpr std::uintptr_t k_v384_type180_b_return=0x56f875u;
+// Entire original function: relocation-free and RET-terminated.
+constexpr std::array<std::uint8_t,14u> k_v384_de_bytes={
+  0x0f,0xb7,0x81,0xde,0x00,0x00,0x00,
+  0x66,0x89,0x02,0x48,0x8b,0xc2,0xc3};
+hook g_v384_de{};
+using v384_de_fn=void *(__fastcall *)(void *,void *);
+v384_de_fn g_v384_de_original=nullptr;
+struct v384_de_slot {
+ std::atomic<std::uint64_t> key{0u};
+ std::atomic<std::uint64_t> state{0u};
+};
+std::array<v384_de_slot,8192u> g_v384_de_slots{};
+std::atomic<unsigned> g_v384_de_event_count{0u};
+#endif
 using parser_fn=void(__fastcall *)(void *,const void *); using destructor_fn=void(__fastcall *)(void *);
 using mtd_fn=void(__fastcall *)(void *,const void *,std::uint32_t,const wchar_t *);
 parser_fn g_po=nullptr; destructor_fn g_do=nullptr; mtd_fn g_mo=nullptr;
