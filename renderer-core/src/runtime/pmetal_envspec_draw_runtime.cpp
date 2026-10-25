@@ -958,6 +958,7 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
        !source.envdiffuse_linear_valid ||
        !std::isfinite(source.beta) || source.beta!=0.0f)
         return false;
+    prepared.source_kind=source.consumer_source_kind;
     for(float c:source.envdiffuse_a)
         if(!std::isfinite(c) || c<0.0f)return false;
     {
@@ -1369,6 +1370,7 @@ bool pmetal_envspec_draw_runtime::prepare(
 
         return false;
     }
+    prepared.source_kind = source.consumer_source_kind;
     effect_latch(effect_source_ready_);
 
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
