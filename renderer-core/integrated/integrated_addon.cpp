@@ -7476,6 +7476,13 @@ bool on_draw(
             hemenvlerp_bound ? 1u : 0u);
 #endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const bool v381_issued=dsrrl::runtime::draw_tx_issued(
+        dispatch.transaction);
+    v381_trace_rx35(v381_issued?4u:5u,
+        v381_issued?"issued":"failopen",false,route_mask,
+        material,decision,&prepared,v381_issued);
+#endif
     const bool mr_in_batch =
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
@@ -8054,6 +8061,13 @@ bool on_draw_indexed(
             material, decision, hemenvlerp_bound ? 1u : 0u);
 #endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const bool v381_issued=dsrrl::runtime::draw_tx_issued(
+        dispatch.transaction);
+    v381_trace_rx35(v381_issued?4u:5u,
+        v381_issued?"issued":"failopen",true,route_mask,
+        material,decision,&prepared,v381_issued);
+#endif
     const bool mr_in_batch =
         prepared.mr_in_batch;
     const bool lerp_mr_in_batch =
