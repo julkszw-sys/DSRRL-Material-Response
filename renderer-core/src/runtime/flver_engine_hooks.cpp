@@ -84,6 +84,14 @@ struct v384_de_slot {
 };
 std::array<v384_de_slot,8192u> g_v384_de_slots{};
 std::atomic<unsigned> g_v384_de_event_count{0u};
+std::atomic<std::uint64_t> g_v385_de_hit_total{0u};
+std::atomic<std::uint64_t> g_v385_de_hit_a{0u};
+std::atomic<std::uint64_t> g_v385_de_hit_b{0u};
+std::atomic<std::uint64_t> g_v385_de_hit_other{0u};
+std::atomic<std::uintptr_t> g_v385_de_last_other_site{0u};
+std::atomic<unsigned> g_v385_de_other_log_count{0u};
+std::atomic<ULONGLONG> g_v385_de_last_health_time{0u};
+
 #endif
 using parser_fn=void(__fastcall *)(void *,const void *); using destructor_fn=void(__fastcall *)(void *);
 using mtd_fn=void(__fastcall *)(void *,const void *,std::uint32_t,const wchar_t *);
