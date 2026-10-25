@@ -927,6 +927,33 @@ void *resolve_actual_material(
  return material;
 }
 
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+void *__fastcall v384_de_observer(void *model,void *dest) noexcept {
+ const auto ret=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+ void *out=g_v384_de_original(model,dest);
+ if(ret<g_base||model==nullptr||dest==nullptr)return out;
+ const auto site=ret-g_base;
+ if(site!=k_v384_type180_a_return&&site!=k_v384_type180_b_return)return out;
+ if(!range_ok(model,0x100u))return out;
+ std::uint16_t def=0,pa=0,pb=0,received=0;
+ std::memcpy(&def,static_cast<std::uint8_t*>(model)+0xde,2);
+ std::memcpy(&pa,static_cast<std::uint8_t*>(model)+0xf0,2);
+ std::memcpy(&pb,static_cast<std::uint8_t*>(model)+0xf2,2);
+ std::memcpy(&received,dest,2);
+ static std::atomic<unsigned> count{0};
+ const auto n=count.fetch_add(1u,std::memory_order_relaxed)+1u;
+ if(n>8192u)return out;
+ char msg[280]{};
+ std::snprintf(msg,sizeof(msg),
+   "[DSRRL V384 REMO TYPE180 DE] n=%u model=%p branch=%c "
+   "default_de=%u inherited=%u pre_f0=%u pre_f2=%u tid=%lu pixel=OPEN",
+   n,model,site==k_v384_type180_a_return?'A':'B',def,received,pa,pb,
+   static_cast<unsigned long>(GetCurrentThreadId()));
+ reshade::log::message(reshade::log::level::warning,msg);
+ return out;
+}
+#endif
 bool write(void *p,const void *s,std::size_t n) noexcept {DWORD old=0;if(!VirtualProtect(p,n,PAGE_EXECUTE_READWRITE,&old))return false;std::memcpy(p,s,n);const bool ok=FlushInstructionCache(GetCurrentProcess(),p,n)!=FALSE;DWORD x=0;VirtualProtect(p,n,old,&x);return ok;}
 template<std::size_t N> bool prep(hook &h,std::uintptr_t r,const std::array<std::uint8_t,N>&e,void*d) noexcept {
  static_assert(N>=14&&N<=32);auto*t=reinterpret_cast<std::uint8_t*>(g_base+r);if(!range_ok(t,N)||std::memcmp(t,e.data(),N)!=0)return false;
