@@ -1656,6 +1656,61 @@ bool pmetal_envspec_draw_runtime::prepare(
                       prepared.env_resources);
 
     if (!env_resource_ready) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        // V378: expose the exact EnvSpec semantic cut for the attested
+        // nonmetal samples. Zero D3D calls and no probe/asset substitution.
+        if (material.valid && material.owner_tuple_exact &&
+            material.material_slot_valid &&
+            (decision.receiver_id == 33u || decision.receiver_id == 34u)) {
+            unsigned bucket = 8u;
+            switch (material.route_index) {
+            case 232u: bucket=0u; break;
+            case 160u: bucket=1u; break;
+            case 88u: bucket=2u; break;
+            case 12u: bucket=3u; break;
+            case 41u: bucket=4u; break;
+            case 359u: bucket=5u; break;
+            case 331u: bucket=6u; break;
+            case 5u: bucket=7u; break;
+            default: break;
+            }
+            if (bucket < 8u) {
+                static std::array<std::atomic_bool,32u> seen{};
+                const unsigned fam =
+                    family == pmetal_envspec_receiver_family::hemenvlerp
+                        ? 1u : 0u;
+                if (!seen[bucket*4u +
+                    (decision.receiver_id-33u)*2u+fam].exchange(
+                        true,std::memory_order_relaxed)) {
+                    const auto t=env_resources_.telemetry();
+                    char line[460]{};
+                    std::snprintf(line,sizeof(line),
+                        "[DSRRL V378 NONMETAL PROBE CUT] route=%u rx=%u "
+                        "family=%u env_slot=%u beta=%.9g need_b=%u "
+                        "shadow_a_ready=%u shadow_b_ready=%u "
+                        "stock_a=%p stock_b=%p "
+                        "pack=%u sampler=%u "
+                        "registered_native=%llu native_matches=%llu "
+                        "view_matches=%llu pixel_pass=0",
+                        static_cast<unsigned>(material.route_index),
+                        static_cast<unsigned>(decision.receiver_id),fam,
+                        static_cast<unsigned>(env_semantics.envspc_slot),
+                        static_cast<double>(source.beta),
+                        probe_b_required?1u:0u,
+                        shadow_env_a_ready?1u:0u,
+                        shadow_env_b_ready?1u:0u,
+                        static_cast<void *>(shadow_env[0]),
+                        static_cast<void *>(shadow_env[2]),
+                        t.pack_ready?1u:0u,t.sample_ready?1u:0u,
+                        static_cast<unsigned long long>(t.native_candidates),
+                        static_cast<unsigned long long>(t.native_matches),
+                        static_cast<unsigned long long>(t.view_matches));
+                    reshade::log::message(
+                        reshade::log::level::warning,line);
+                }
+            }
+        }
+#endif
         if (shader != nullptr)
             shader->Release();
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
