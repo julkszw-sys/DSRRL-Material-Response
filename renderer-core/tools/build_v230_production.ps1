@@ -78,6 +78,8 @@ python renderer-core/tools/test_v377_nonmetal_envspec_failure_cut.py
 if ($LASTEXITCODE -ne 0) { throw 'V377 nonmetal EnvSpec failure-stage contract failed' }
 python renderer-core/tools/test_v378_nonmetal_probe_cut.py
 if ($LASTEXITCODE -ne 0) { throw 'V378 exact nonmetal probe contract failed' }
+python renderer-core/tools/test_v379_native_reject_log_visibility.py
+if ($LASTEXITCODE -ne 0) { throw 'V379 exact native rejection visibility failed' }
 
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'
