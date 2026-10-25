@@ -1592,6 +1592,13 @@ fail:
  return false;
 }
 void uninstall() noexcept {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+ if(!restore(g_v384_de)){
+   g_state.restore_failed=true;
+   return;
+ }
+ g_v384_de_original=nullptr;
+#endif
  const bool builder_ok=restore(g_b);
  const bool selector_ok=restore(g_s);
  const bool mtd_ok=restore(g_m);
