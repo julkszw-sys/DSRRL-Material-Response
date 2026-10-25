@@ -1,7 +1,7 @@
 name: V230 exact V359 production candidate single addon
 on:
   push:
-    branches: [release/v2.3.0-v359-prep, fix/v230-minimal-per-resource-gates-20261024, agent/v382-rx35-source-witness, agent/v383-selector]
+    branches: [release/v2.3.0-v359-prep, fix/v230-minimal-per-resource-gates-20261024, agent/v382-rx35-source-witness, agent/v383-selector, agent/v384-remo-default-de-witness]
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,6 +25,7 @@ jobs:
           python3 renderer-core/tools/test_v381_rx35_all_material_census.py
           python3 renderer-core/tools/test_v382_witness_source.py
           python3 renderer-core/tools/test_v383_source_contract.py
+          python3 renderer-core/tools/test_v384_remo_default_source.py
           python3 renderer-core/tools/test_v230_minimal_resource_gates.py
           python3 renderer-core/tools/verify_v230_runtime_log.py --selftest
           python3 renderer-core/tools/audit_v230_asset_shader_tx_contract.py
@@ -82,7 +83,7 @@ jobs:
           $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
           if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE output' }
           $raw=[Text.Encoding]::ASCII.GetString($bytes)
-          foreach($marker in @('2.3.0','v230_production','[DSRRL WARRIOR 9360 FIRST CUT]','[DSRRL V383 REMO MODEL MATERIAL]','[DSRRL V383 NATIVE LIGHTBANK]')) {
+          foreach($marker in @('2.3.0','v230_production','[DSRRL WARRIOR 9360 FIRST CUT]','[DSRRL V383 REMO MODEL MATERIAL]','[DSRRL V383 NATIVE LIGHTBANK]','[DSRRL V384 REMO TYPE180 DE]','[DSRRL V384 REMO DE INSTALL]')) {
             if (!$raw.Contains($marker)) { throw "Missing identity $marker" }
           }
           foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]')) {
