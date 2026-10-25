@@ -33,6 +33,7 @@
 #include <bcrypt.h>
 #include <reshade.hpp>
 #include <cstdio>
+#include <intrin.h>
 #include <array>
 #include <algorithm>
 #include <cstddef>
