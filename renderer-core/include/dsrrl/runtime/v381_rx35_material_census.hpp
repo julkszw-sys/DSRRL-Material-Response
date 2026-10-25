@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <reshade.hpp>
+#include "dsrrl/operators/material_response/material_response_island.hpp"
 namespace dsrrl::runtime {
 inline void v381_rx35_census(
     unsigned phase,const char *stage,bool indexed,unsigned route_mask,
