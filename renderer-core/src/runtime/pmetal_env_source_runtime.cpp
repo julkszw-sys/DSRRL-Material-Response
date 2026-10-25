@@ -2950,6 +2950,7 @@ bool pmetal_env_source_runtime::latest(
             material,
             epoch,
             out)) {
+        out.consumer_source_kind = 1u;
         telemetry::hot_count(
             g_consumer_ok);
         return true;
@@ -2964,6 +2965,7 @@ bool pmetal_env_source_runtime::latest(
     // including for an already authenticated nonmetal EnvSpec consumer.
     // The upstream material/receiver admission still gates the draw.
     if (latest_hook_source(out)) {
+        out.consumer_source_kind = 2u;
         telemetry::hot_count(
             g_consumer_ok);
         return true;
