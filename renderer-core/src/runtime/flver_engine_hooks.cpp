@@ -17,6 +17,7 @@
 #endif
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
 #include "dsrrl/runtime/v383_remo_source_witness.hpp"
+#include "dsrrl/runtime/v386_source_match.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
 #endif
@@ -1132,10 +1133,12 @@ bool publish_exact_selector_identity(
             std::memcpy(&a,descriptor+0x4cu,sizeof(a));
             std::memcpy(&b,descriptor+0x4eu,sizeof(b));
             std::memcpy(&beta,descriptor+0x50u,sizeof(beta));
-            if(descriptor_owner==owner && descriptor[0x150u]<=1u)
+            if(descriptor_owner==owner && descriptor[0x150u]<=1u) {
+                v386_publish(identity,a,b,beta);
                 v383_model_material_selector(owner,descriptor,identity,
                     static_cast<std::int16_t>(a),static_cast<std::int16_t>(b),
                     beta,descriptor[0x150u],GetCurrentThreadId());
+            }
         }
     }
 #endif
