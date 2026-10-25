@@ -1140,6 +1140,21 @@ bool publish_exact_selector_identity(
     }
 #endif
 
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    const auto now=GetTickCount64();
+    auto prev=g_v385_de_last_health_time.load(std::memory_order_relaxed);
+    if(now>prev+2000u&&g_v385_de_last_health_time.compare_exchange_strong(
+       prev,now,std::memory_order_relaxed)) {
+      char line[230]{};
+      std::snprintf(line,sizeof(line),
+       "[DSRRL V385 DE HEALTH] total=%llu A=%llu B=%llu other=%llu",
+       (unsigned long long)g_v385_de_hit_total.load(),
+       (unsigned long long)g_v385_de_hit_a.load(),
+       (unsigned long long)g_v385_de_hit_b.load(),
+       (unsigned long long)g_v385_de_hit_other.load());
+      reshade::log::message(reshade::log::level::warning,line);
+    }
+#endif
     bool pointlight_spc = false;
     if (g_state.builder_armed &&
         operators::material_response::
