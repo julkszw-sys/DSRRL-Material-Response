@@ -1656,6 +1656,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                       prepared.env_resources);
 
     if (!env_resource_ready) {
+        if (shader != nullptr)
+            shader->Release();
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
         // V378: expose the exact EnvSpec semantic cut for the attested
         // nonmetal samples. Zero D3D calls and no probe/asset substitution.
@@ -1711,8 +1713,6 @@ bool pmetal_envspec_draw_runtime::prepare(
             }
         }
 #endif
-        if (shader != nullptr)
-            shader->Release();
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
         // An EnvSpec probe reject is not a SpecRGB sidecar reject.
         // Record source A/B and the current verified pack/sampler state
