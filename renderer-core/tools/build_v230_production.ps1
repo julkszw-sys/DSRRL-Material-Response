@@ -68,6 +68,8 @@ python renderer-core/tools/test_v372_bound_t11_composite.py
 if ($LASTEXITCODE -ne 0) { throw 'V372 bound t11 contract failed' }
 python renderer-core/tools/test_v373_operator_probe_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V373 operator probe witness contract failed' }
+python renderer-core/tools/test_v374_source1_owned_lifetime.py
+if ($LASTEXITCODE -ne 0) { throw 'V374 Source1 selector lifetime contract failed' }
 
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'
