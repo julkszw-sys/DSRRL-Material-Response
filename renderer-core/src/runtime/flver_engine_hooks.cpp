@@ -1519,7 +1519,11 @@ bool install(
     bool enable_clustered_builder,
     bool enable_upper_lower_selector,
     bool enable_hemdir3_selector) noexcept {
- if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched)return false;
+ if(g_p.patched||g_s.patched||g_d.patched||g_m.patched||g_b.patched
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+ ||g_v384_de.patched
+#endif
+ )return false;
  g_state={};
  selector_profile_reset();
 #ifdef DSRRL_PHYSICAL_CUT_UL_H3_SUBSURFACE
@@ -1563,6 +1567,25 @@ bool install(
  g_state.builder_armed=enable_clustered_builder;
  g_state.selector_owner_enrichment=true;
  g_state.exact_runtime_material_carrier=true;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+ if(prep(g_v384_de,k_v384_de_helper,k_v384_de_bytes,
+         reinterpret_cast<void *>(&v384_de_observer))){
+   g_v384_de_original=reinterpret_cast<v384_de_fn>(g_v384_de.trampoline);
+   if(!arm(g_v384_de)){
+     if(!restore(g_v384_de))goto fail;
+     g_v384_de_original=nullptr;
+     reshade::log::message(reshade::log::level::warning,
+       "[DSRRL V384 REMO DE INSTALL] status=ARM_FAILED_FAILOPEN");
+   }else{
+     reshade::log::message(reshade::log::level::warning,
+       "[DSRRL V384 REMO DE INSTALL] status=HOOK_ACTIVE exact_exe=1 "
+       "helper_rva=00572890 caller_A=0056F842 caller_B=0056F875 pixel=OPEN");
+   }
+ }else{
+   reshade::log::message(reshade::log::level::warning,
+     "[DSRRL V384 REMO DE INSTALL] status=SIGNATURE_MISMATCH_FAILOPEN");
+ }
+#endif
  return true;
 fail:
  uninstall();
