@@ -7269,6 +7269,8 @@ bool on_draw(
         dsrrl::runtime::warrior_9360_trace(
             dsrrl::runtime::warrior_9360_stage::prepared,
             material, route_mask, receiver_id, &decision);
+    v381_trace_rx35(2u,"prepared",false,route_mask,
+        material,decision,&prepared,false);
 #endif
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
@@ -7901,6 +7903,8 @@ bool on_draw_indexed(
         dsrrl::runtime::warrior_9360_trace(
             dsrrl::runtime::warrior_9360_stage::prepared,
             material, route_mask, receiver_id, &decision);
+    v381_trace_rx35(2u,"prepared",true,route_mask,
+        material,decision,&prepared,false);
 #endif
 
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
