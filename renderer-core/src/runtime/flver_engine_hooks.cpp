@@ -16,6 +16,7 @@
 #include "dsrrl/runtime/hemdir3_mode_transport.hpp"
 #endif
 #include "dsrrl/runtime/pmetal_env_source_runtime.hpp"
+#include "dsrrl/runtime/v383_remo_source_witness.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
 #endif
@@ -1036,6 +1037,30 @@ bool publish_exact_selector_identity(
             profile->selection_publish_ticks);
     if (!selection_ok)
         return false;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // Observe every authenticated FLVER material before source-specific islands.
+    // Descriptor A/B are model-side resolved values, NOT TAE Type180 input.
+    const auto witness_abs=reinterpret_cast<std::uintptr_t>(ret);
+    if(witness_abs>=g_base){
+        const auto witness_rva=witness_abs-g_base;
+        const auto *descriptor=static_cast<const std::uint8_t *>(
+            (witness_rva==k_ret_sel_1 || witness_rva==k_ret_sel_3)?r15:
+            (witness_rva==k_ret_sel_2)?r14:nullptr);
+        if(descriptor!=nullptr&&range_ok(descriptor,0x151u)){
+            void *descriptor_owner=nullptr;
+            std::uint16_t a=0u,b=0u;
+            float beta=0.0f;
+            std::memcpy(&descriptor_owner,descriptor,sizeof(descriptor_owner));
+            std::memcpy(&a,descriptor+0x4cu,sizeof(a));
+            std::memcpy(&b,descriptor+0x4eu,sizeof(b));
+            std::memcpy(&beta,descriptor+0x50u,sizeof(beta));
+            if(descriptor_owner==owner && descriptor[0x150u]<=1u)
+                v383_model_material_selector(owner,descriptor,identity,
+                    static_cast<std::int16_t>(a),static_cast<std::int16_t>(b),
+                    beta,descriptor[0x150u],GetCurrentThreadId());
+        }
+    }
+#endif
 
     bool pointlight_spc = false;
     if (g_state.builder_armed &&
