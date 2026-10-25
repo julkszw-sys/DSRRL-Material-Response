@@ -1,7 +1,7 @@
 name: V230 exact V359 production candidate single addon
 on:
   push:
-    branches: [release/v2.3.0-v359-prep, fix/v230-minimal-per-resource-gates-20261024]
+    branches: [release/v2.3.0-v359-prep, fix/v230-minimal-per-resource-gates-20261024, agent/v382-rx35-source-witness]
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +23,7 @@ jobs:
           python3 renderer-core/tools/test_v379_native_reject_log_visibility.py
           python3 renderer-core/tools/test_v380_cutscene_rx35_envdiffuse_cut.py
           python3 renderer-core/tools/test_v381_rx35_all_material_census.py
+          python3 renderer-core/tools/test_v382_witness_source.py
           python3 renderer-core/tools/test_v230_minimal_resource_gates.py
           python3 renderer-core/tools/verify_v230_runtime_log.py --selftest
           python3 renderer-core/tools/audit_v230_asset_shader_tx_contract.py
