@@ -15,6 +15,7 @@ jobs:
         run: |
           python3 -m py_compile renderer-core/tools/materialize_v230_release_cleanup.py renderer-core/tools/test_v230_release_contract.py renderer-core/tools/test_v230_minimal_resource_gates.py renderer-core/tools/audit_v230_asset_shader_tx_contract.py renderer-core/tools/parse_warrior_9360_runtime.py
           python3 renderer-core/tools/test_v373_operator_probe_witness.py
+          python3 renderer-core/tools/test_v374_source1_owned_lifetime.py
           python3 renderer-core/tools/test_v230_minimal_resource_gates.py
           python3 renderer-core/tools/verify_v230_runtime_log.py --selftest
           python3 renderer-core/tools/audit_v230_asset_shader_tx_contract.py
