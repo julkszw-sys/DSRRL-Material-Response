@@ -9,6 +9,7 @@
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
 #endif
+#include "dsrrl/runtime/v382_source_owner_witness.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
@@ -2951,6 +2952,11 @@ bool pmetal_env_source_runtime::latest(
             epoch,
             out)) {
         out.consumer_source_kind = 1u;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v382_source_owner_witness(
+            material,out,1u,false,false,
+            static_cast<unsigned>(GetCurrentThreadId()));
+#endif
         telemetry::hot_count(
             g_consumer_ok);
         return true;
@@ -2966,6 +2972,12 @@ bool pmetal_env_source_runtime::latest(
     // The upstream material/receiver admission still gates the draw.
     if (latest_hook_source(out)) {
         out.consumer_source_kind = 2u;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v382_source_owner_witness(
+            material,out,2u,g_hook_source_tls.valid,
+            g_hook_selector_identity_tls.valid,
+            static_cast<unsigned>(GetCurrentThreadId()));
+#endif
         telemetry::hot_count(
             g_consumer_ok);
         return true;
