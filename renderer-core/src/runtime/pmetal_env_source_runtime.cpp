@@ -11,6 +11,7 @@
 #endif
 #include "dsrrl/runtime/v382_source_owner_witness.hpp"
 #include "dsrrl/runtime/v383_remo_source_witness.hpp"
+#include "dsrrl/runtime/v386_source_match.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
@@ -3002,6 +3003,32 @@ bool pmetal_env_source_runtime::latest(
     // including for an already authenticated nonmetal EnvSpec consumer.
     // The upstream material/receiver admission still gates the draw.
     if (latest_hook_source(out)) {
+        // V386: only a fresh, same-thread, full-FLVER/MTD/material joined
+        // scalar selector mismatch fails open to stock DSR. Neither R43
+        // latest_hook_source nor LightBank producers are changed.
+        unsigned v386_expected=0u,v386_age=0u;
+        if(v386_mismatch(material,out,v386_expected,v386_age)) {
+            static std::atomic<unsigned> v386_mismatch_count{0u};
+            const auto n=v386_mismatch_count.fetch_add(
+                1u,std::memory_order_relaxed)+1u;
+            if(n<=256u) {
+                char v386_line[350]{};
+                std::snprintf(v386_line,sizeof(v386_line),
+                    "[DSRRL V386 SOURCE FAILOPEN] n=%u route=%u slot=%u "
+                    "semantic=%016llx expected_row=%u source2_row=%u "
+                    "serial=%llu age_ms=%u action=STOCK_DSR exact_join=1 "
+                    "ptde_pixel=OPEN",
+                    n,material.route_index,material.material_slot,
+                    static_cast<unsigned long long>(material.semantic_name_hash),
+                    v386_expected,out.row_id_a,
+                    static_cast<unsigned long long>(out.serial),v386_age);
+                reshade::log::message(
+                    reshade::log::level::warning,v386_line);
+            }
+            out={};
+            telemetry::hot_count(g_consumer_fail);
+            return false;
+        }
         out.consumer_source_kind = 2u;
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
         v382_source_owner_witness(
