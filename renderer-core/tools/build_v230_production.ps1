@@ -80,6 +80,8 @@ python renderer-core/tools/test_v378_nonmetal_probe_cut.py
 if ($LASTEXITCODE -ne 0) { throw 'V378 exact nonmetal probe contract failed' }
 python renderer-core/tools/test_v379_native_reject_log_visibility.py
 if ($LASTEXITCODE -ne 0) { throw 'V379 exact native rejection visibility failed' }
+python renderer-core/tools/test_v380_cutscene_rx35_envdiffuse_cut.py
+if ($LASTEXITCODE -ne 0) { throw 'V380 cutscene source1 witness contract failed' }
 
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'
