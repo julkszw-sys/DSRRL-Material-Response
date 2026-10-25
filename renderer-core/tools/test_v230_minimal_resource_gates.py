@@ -905,7 +905,7 @@ assert "ptde_sample[7]=0x00107936u" in _v230_ed_materializer
 assert "add_b12_rdef(decl)" in _v230_ed_materializer
 assert "register_independent_envdiffuse(" in _v230_ed_runtime
 _start=_v230_ed_runtime.index("bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(")
-_end=_v230_ed_runtime.index("\n#endif",_start)
+_end=_v230_ed_runtime.index("\n#endif\n\nbool pmetal_envspec_draw_runtime::prepare(",_start)
 _ed_body=_v230_ed_runtime[_start:_end]
 assert "prepare_envdiffuse_bound(" in _ed_body
 assert "env_resources_.prepare_native_dsr(" not in _ed_body
