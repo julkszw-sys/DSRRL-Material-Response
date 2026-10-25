@@ -74,6 +74,8 @@ python renderer-core/tools/test_v375_lerp_exact_shadow_slots.py
 if ($LASTEXITCODE -ne 0) { throw 'V375 Lerp exact t12/t14 shadow contract failed' }
 python renderer-core/tools/test_v376_nonmetal_fork_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V376 nonmetal fork contract failed' }
+python renderer-core/tools/test_v377_nonmetal_envspec_failure_cut.py
+if ($LASTEXITCODE -ne 0) { throw 'V377 nonmetal EnvSpec failure-stage contract failed' }
 
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'
