@@ -199,6 +199,49 @@ void log_prepare_stage_once(
 {
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
     if (material.route_index != 345u) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        // V377 exact nonmetal failure-stage witness. V350 continues to
+        // suppress the historic per-draw V287 SHA observer. Limit warning
+        // output to attested observed routes and one bit per stage/family/RX.
+        unsigned route_bucket = 6u;
+        switch (material.route_index) {
+        case 232u: route_bucket=0u; break;
+        case 160u: route_bucket=1u; break;
+        case 88u: route_bucket=2u; break;
+        case 12u: route_bucket=3u; break;
+        case 41u: route_bucket=4u; break;
+        case 359u: route_bucket=5u; break;
+        default: break;
+        }
+        if (route_bucket < 6u && material.valid &&
+            material.owner_tuple_exact && material.material_slot_valid &&
+            (decision.receiver_id == 33u || decision.receiver_id == 34u) &&
+            bit != 0u) {
+            static std::array<std::atomic<std::uint32_t>,24u> seen{};
+            const unsigned family_bit =
+                family == pmetal_envspec_receiver_family::hemenvlerp
+                    ? 1u : 0u;
+            const auto key = route_bucket * 4u +
+                (decision.receiver_id - 33u) * 2u + family_bit;
+            if ((seen[key].fetch_or(bit,std::memory_order_relaxed)
+                 & bit) == 0u) {
+                char line[400]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V377 NONMETAL ENVSPEC CUT] stage=%s "
+                    "route=%u rx=%u family=%u slot=%u owner=1 "
+                    "active=%u ops=%08x pixel_pass=0",
+                    stage,
+                    static_cast<unsigned>(material.route_index),
+                    static_cast<unsigned>(decision.receiver_id),
+                    family_bit,
+                    static_cast<unsigned>(material.material_slot),
+                    decision.active?1u:0u,
+                    static_cast<unsigned>(decision.certified_operations));
+                reshade::log::message(
+                    reshade::log::level::warning,line);
+            }
+        }
+#endif
         // Previous global stage bit masked Lerp family1 after Stable family0
         // and also collapsed different FLVER/MTD failure sources. V287
         // records a bounded per-owner+receiver+family+stage observation.
