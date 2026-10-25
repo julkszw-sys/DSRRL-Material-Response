@@ -5705,6 +5705,7 @@ void observe_equipment_specrgb_carrier(
 // No D3D state reads/writes: all resource and slot data are from the
 // already-prepared transaction, captured before release.
 std::atomic<std::uint64_t> g_v230_rt_probe_seen{0u};
+std::atomic<std::uint64_t> g_v374_rt_source1_seen{0u};
 
 void v230_rt_probe_once(
     unsigned phase,
@@ -5721,8 +5722,12 @@ void v230_rt_probe_once(
     const unsigned index = (rx - 33u) * 16u +
         (lerp ? 8u : 0u) + phase;
     const std::uint64_t bit = 1ull << index;
-    if ((g_v230_rt_probe_seen.fetch_or(
-            bit, std::memory_order_relaxed) & bit) != 0u)
+    const std::uint32_t source_kind =
+        prepared != nullptr && prepared->ready
+            ? prepared->source_kind : 0u;
+    auto &seen = source_kind == 1u
+        ? g_v374_rt_source1_seen : g_v230_rt_probe_seen;
+    if ((seen.fetch_or(bit, std::memory_order_relaxed) & bit) != 0u)
         return;
 
     std::uint32_t srv_mask = 0u;
@@ -5769,14 +5774,14 @@ void v230_rt_probe_once(
         "[DSRRL V230 RUNTIME] stage=%s rx=%u route=%u family=%s "
         "exact_owner=1 shader=%u cb12=%u envspec_ready=%u "
         "envdiffuse_ready=%u spec_rgb=%u probe_a=%u probe_b=%u "
-        "diff_probe_a=%u diff_probe_b=%u "
+        "diff_probe_a=%u diff_probe_b=%u source_kind=%u "
         "srv_mask=0x%08X sampler_mask=0x%08X pixel_pass=0",
         stage,rx,route,lerp ? "LERP" : "STABLE",
         shader_ready,owned_cb12,pack_envspec,pack_envdiffuse,spec_rgb,
         static_cast<unsigned>(probe_a),static_cast<unsigned>(probe_b),
         static_cast<unsigned>(diffuse_probe_a),
         static_cast<unsigned>(diffuse_probe_b),
-        srv_mask,sampler_mask);
+        source_kind,srv_mask,sampler_mask);
     reshade::log::message(reshade::log::level::warning,line);
 }
 #endif
