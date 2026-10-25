@@ -987,6 +987,44 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
     prepared_pmetal_envspec_draw &prepared) noexcept
 {
     prepared={};
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    // V380: exact RX35 cutscene receiver witness for the independent
+    // EnvDiffuse operator. The diagnostics do NOT authorize Source1 or R43,
+    // reuse a previous draw's producer, or substitute a t11 resource.
+    auto v380_rx35_cut = [&](
+        std::uint32_t bit,const char *stage,bool source_ok,
+        const pmetal_envspec_source *sample,int t11_bound) noexcept {
+        if(decision.receiver_id!=35u || material.route_index!=345u ||
+           !material.valid || !material.owner_tuple_exact ||
+           !material.material_slot_valid)
+            return;
+        static std::atomic<std::uint32_t> seen{0u};
+        if((seen.fetch_or(bit,std::memory_order_relaxed)&bit)!=0u)
+            return;
+        const auto t=source_.telemetry();
+        char line[680]{};
+        std::snprintf(line,sizeof(line),
+            "[DSRRL V380 RX35 ED CUT] stage=%s rx=%u route=%u "
+            "slot=%u admitted=%u source_ok=%u kind=%u linear=%u "
+            "beta=%.9g t11_bound=%d publish=%llu "
+            "consumer_ok=%llu consumer_fail=%llu "
+            "hook_publish=%llu hook_consume=%llu pixel_pass=0",
+            stage,static_cast<unsigned>(decision.receiver_id),
+            static_cast<unsigned>(material.route_index),
+            static_cast<unsigned>(material.material_slot),
+            decision.active?1u:0u,source_ok?1u:0u,
+            sample?static_cast<unsigned>(sample->consumer_source_kind):0u,
+            sample&&sample->envdiffuse_linear_valid?1u:0u,
+            sample?static_cast<double>(sample->beta):0.0,t11_bound,
+            static_cast<unsigned long long>(t.exact_publish),
+            static_cast<unsigned long long>(t.consumer_ok),
+            static_cast<unsigned long long>(t.consumer_fail),
+            static_cast<unsigned long long>(t.hook_publish),
+            static_cast<unsigned long long>(t.hook_consume));
+        reshade::log::message(reshade::log::level::warning,line);
+    };
+    v380_rx35_cut(1u,"entered",false,nullptr,-1);
+#endif
     if(cmd_list==nullptr || quarantined_.load() ||
        !material.valid || !material.owner_tuple_exact ||
        !material.material_slot_valid || !decision.active ||
@@ -994,13 +1032,23 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
        !core_.features().enabled(core::operator_id::env_diffuse) ||
        // Own source owner, NOT EnvSpec operator permission: a disabled
        // EnvSpec island must not prevent an authenticated diffuse draw.
-       !exact_pmetal_material(material))
+       !exact_pmetal_material(material)) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v380_rx35_cut(2u,"admission_reject",false,nullptr,-1);
+#endif
         return false;
+    }
     pmetal_envspec_source source{};
-    if(!source_.latest(material,source) ||
+    const bool source_ok=source_.latest(material,source);
+    if(!source_ok ||
        !source.envdiffuse_linear_valid ||
-       !std::isfinite(source.beta) || source.beta!=0.0f)
+       !std::isfinite(source.beta) || source.beta!=0.0f) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v380_rx35_cut(4u,"source_or_domain_reject",
+            source_ok,&source,-1);
+#endif
         return false;
+    }
     prepared.source_kind=source.consumer_source_kind;
     for(float c:source.envdiffuse_a)
         if(!std::isfinite(c) || c<0.0f)return false;
@@ -1010,7 +1058,13 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
         const auto found=independent_envdiffuse_shaders_.find(
             decision.receiver_id);
         if(found==independent_envdiffuse_shaders_.end() ||
-           found->second==nullptr)return false;
+           found->second==nullptr) {
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+            v380_rx35_cut(8u,"shader_missing",
+                source_ok,&source,-1);
+#endif
+            return false;
+        }
         found->second->AddRef();
         prepared.shader=found->second;
     }
@@ -1026,6 +1080,11 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
     // ordinal as a diffuse identity. Unknown or duplicate source fails open.
     const bool exact_resource=env_resources_.prepare_envdiffuse_bound(
         t11[0],nullptr,false,prepared.envdiffuse_resources);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if(!exact_resource)
+        v380_rx35_cut(16u,"t11_exact_resource_reject",
+            source_ok,&source,t11[0]!=nullptr?1:0);
+#endif
     if(t11[0]!=nullptr)t11[0]->Release();
     if(!exact_resource){release(prepared);return false;}
 
@@ -1102,6 +1161,9 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
     q.samplers[0]={11u,prepared.envdiffuse_resources.sampler};
     q.sampler_count=1u;
     prepared.ready=true;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    v380_rx35_cut(32u,"request_ready",source_ok,&source,1);
+#endif
     static std::atomic<std::uint32_t> observations{0u};
     const auto n=observations.fetch_add(1u,std::memory_order_relaxed)+1u;
     if(n<=16u || (n&(n-1u))==0u) {
