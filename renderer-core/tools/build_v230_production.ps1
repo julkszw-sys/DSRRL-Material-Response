@@ -70,6 +70,8 @@ python renderer-core/tools/test_v373_operator_probe_witness.py
 if ($LASTEXITCODE -ne 0) { throw 'V373 operator probe witness contract failed' }
 python renderer-core/tools/test_v374_source1_owned_lifetime.py
 if ($LASTEXITCODE -ne 0) { throw 'V374 Source1 selector lifetime contract failed' }
+python renderer-core/tools/test_v375_lerp_exact_shadow_slots.py
+if ($LASTEXITCODE -ne 0) { throw 'V375 Lerp exact t12/t14 shadow contract failed' }
 
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'
