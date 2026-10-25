@@ -203,7 +203,7 @@ void v358_log_probe_reject_native_origin(
         joined && origin.initial_data_exact?sha:"UNAVAILABLE",
         joined && origin.certified_native_probe?1u:0u,
         static_cast<unsigned>(origin.certified_probe));
-    reshade::log::message(reshade::log::level::info,line);
+    reshade::log::message(reshade::log::level::warning,line);
 }
 #endif
 
@@ -214,7 +214,7 @@ replace(draw,"std::atomic<std::uint32_t> g_value_cut_log_mask{0u};",
 file=root/draw
 s=file.read_text("utf8")
 idx=s.index("[DSRRL V354 PROBE REJECT]")
-target="            reshade::log::message(reshade::log::level::info,line);"
+target="            reshade::log::message(reshade::log::level::warning,line);"
 at=s.find(target,idx)
 if at<0 or at-idx>2200:
     raise SystemExit("V358 actual V354 PROBE REJECT log call not found")
