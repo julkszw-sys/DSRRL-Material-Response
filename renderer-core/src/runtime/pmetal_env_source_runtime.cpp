@@ -10,6 +10,7 @@
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
 #endif
 #include "dsrrl/runtime/v382_source_owner_witness.hpp"
+#include "dsrrl/runtime/v383_remo_source_witness.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
@@ -1931,6 +1932,10 @@ void publish_hook_source(
             std::memory_order_relaxed) +
         1u;
     next.serial = serial;
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    v383_native_lightbank_producer(source_a,source_b,selector_a,selector_b,
+        row_a,row_b,serial,GetCurrentThreadId());
+#endif
 
     hook_selector_identity_v1
         selector_identity{};
@@ -2157,6 +2162,19 @@ void __fastcall envspec_single_hook_entry(
     int selector) noexcept
 {
     telemetry::hot_count(g_hook_single_seen);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if(selector<0){
+        static std::atomic<unsigned> v383_negative{0u};
+        const auto n=v383_negative.fetch_add(1u,std::memory_order_relaxed)+1u;
+        if(n<=32u){
+            char line[220]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V383 NATIVE NEGATIVE] kind=single n=%u selector=%d producer=%p pixel=OPEN",
+                n,selector,source);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
 
     f4 donor{};
     std::uint64_t bank = 0u;
@@ -2223,6 +2241,19 @@ void __fastcall envspec_blend_hook_entry(
     float beta) noexcept
 {
     telemetry::hot_count(g_hook_blend_seen);
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    if(selector_a<0 || selector_b<0){
+        static std::atomic<unsigned> v383_negative{0u};
+        const auto n=v383_negative.fetch_add(1u,std::memory_order_relaxed)+1u;
+        if(n<=32u){
+            char line[250]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V383 NATIVE NEGATIVE] kind=blend n=%u selectorA=%d selectorB=%d pixel=OPEN",
+                n,selector_a,selector_b);
+            reshade::log::message(reshade::log::level::warning,line);
+        }
+    }
+#endif
 
     const auto endpoints =
         pmetal_selector_policy::select(
