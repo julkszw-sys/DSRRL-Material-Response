@@ -7242,6 +7242,8 @@ bool on_draw(
                 material, route_mask, receiver_id, &decision);
 #endif
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v381_trace_rx35(1u,"prepare_reject",false,route_mask,
+            material,decision,nullptr,false);
         if (material.valid && !hemenvlerp_bound)
             v230_nonmetal_route_trace(9u, receiver_id, material, decision);
 #endif
@@ -7876,6 +7878,8 @@ bool on_draw_indexed(
                 material, route_mask, receiver_id, &decision);
 #endif
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v381_trace_rx35(1u,"prepare_reject",true,route_mask,
+            material,decision,nullptr,false);
         if (material.valid && !hemenvlerp_bound)
             v230_nonmetal_route_trace(9u, receiver_id, material, decision);
 #endif
