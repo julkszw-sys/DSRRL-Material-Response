@@ -252,6 +252,48 @@ std::atomic_bool g_mr_once_identity{false};
 // No admission, shader state mutation, resource or operator changes.
 std::array<std::atomic<std::uint32_t>, 512u * 24u * 16u>
     g_v230_nonmetal_route_logged{};
+// V376 passive fork witness: determine whether the nonmetal draw reaches
+// normal Material Response or is intercepted by a distinct operator path.
+// One sample per verified route and receiver, never a route authorization.
+void v376_nonmetal_fork_witness(
+    std::uint32_t rx,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision,
+    bool fixed_pnt, bool clustered_pnt, bool lerp,
+    bool subsurface, bool hemdir3, bool upper_lower) noexcept
+{
+    if (!material.valid || !material.owner_tuple_exact ||
+        !material.material_slot_valid || rx < 33u || rx > 34u)
+        return;
+    unsigned route_bucket=5u;
+    switch(material.route_index) {
+    case 232u: route_bucket=0u;break;
+    case 160u: route_bucket=1u;break;
+    case 88u: route_bucket=2u;break;
+    case 12u: route_bucket=3u;break;
+    case 41u: route_bucket=4u;break;
+    default:return;
+    }
+    static std::array<std::atomic_bool,10u> seen{};
+    if (seen[route_bucket*2u+(rx-33u)].exchange(
+            true,std::memory_order_relaxed))
+        return;
+    char line[400]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V376 NONMETAL FORK] rx=%u route=%u slot=%u "
+        "active=%u ops=%08x fixed=%u clustered=%u lerp=%u "
+        "sss=%u hemdir3=%u ul=%u owner=%u pixel_pass=0",
+        static_cast<unsigned>(rx),
+        static_cast<unsigned>(material.route_index),
+        static_cast<unsigned>(material.material_slot),
+        decision.active?1u:0u,
+        static_cast<unsigned>(decision.certified_operations),
+        fixed_pnt?1u:0u,clustered_pnt?1u:0u,lerp?1u:0u,
+        subsurface?1u:0u,hemdir3?1u:0u,upper_lower?1u:0u,
+        material.owner_tuple_exact?1u:0u);
+    reshade::log::message(reshade::log::level::warning,line);
+}
+
 void v230_nonmetal_route_trace(
     std::uint32_t stage,
     std::uint32_t receiver,
@@ -5802,6 +5844,12 @@ bool prepare_island_batch(
     prepared_island_batch &prepared) noexcept
 {
     prepared = {};
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    v376_nonmetal_fork_witness(
+        receiver_id,material,decision,fixed_pointlight_bound,
+        clustered_pointlight_bound,hemenvlerp_bound,subsurface_bound,
+        hemdir3_bound,upper_lower_bound);
+#endif
 
     // Passive diagnostic only: prove the equipment SpecRGB producer/cache
     // independently from any downstream consumer. This performs no bind and
