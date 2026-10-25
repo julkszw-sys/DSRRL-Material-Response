@@ -53,9 +53,15 @@ inline constexpr flver_slot_spec_row k_proven_parts_specs[] = {
     { "3f6b4efa282895894f2d333d382f91884519c3b30d41838987ff1589d62e6776", 0u, "P_Leather[DSB].mtd", "WP_A_1201_s" },
     { "e7f121b43b9352db24c28d2d7819cd43a1c81e851c9ee98fce1b02332eb92315", 0u, "P_Leather[DSB].mtd", "WP_A_1700_s" },
     { "e7f121b43b9352db24c28d2d7819cd43a1c81e851c9ee98fce1b02332eb92315", 1u, "P_DullLeather[DSB].mtd", "WP_A_1700_s" },
+    // 2026-10-24 DSR parts/HD_{M,F}_9360 FLVER slot0 source-joined
+    // to matching PTDE g_Specular name+MTD. This is provenance ONLY:
+    // standalone PTDE consumer/stock SRV/receiver/asset readiness remain
+    // mandatory. It is not a C_Metal or Edge family authorization.
+    { "bfbef63e9611bd8b753f8197e5cabeabbf08ec400e098f2191561bdc5ce7396b", 0u, "C_Metal[DSB].mtd", "hd_m_9360_s" },
+    { "59c937ced4aaf41ba3f6db4a351d47b41dabd176224ecca4123b72a11d23baee", 0u, "P_Metal[DSB]_Edge.mtd", "hd_f_9360_s" },
 };
 static_assert(sizeof(k_proven_parts_specs) /
-    sizeof(k_proven_parts_specs[0]) == 36u);
+    sizeof(k_proven_parts_specs[0]) == 38u);
 inline int hex_digit(char c) noexcept {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;

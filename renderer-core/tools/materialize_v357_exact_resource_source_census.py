@@ -45,7 +45,7 @@ void v357_trace_rejected_srv(
           "[DSRRL V357 RESOURCE SOURCE] t=%u rx=%u route=%u slot=%u"
           " srv=UNBOUND source=NO_GPU_VIEW pixel=OPEN",
           binding,receiver,route,material_slot);
-        reshade::log::message(reshade::log::level::info,line);
+        reshade::log::message(reshade::log::level::warning,line);
         return;
     }
 
@@ -114,7 +114,7 @@ void v357_trace_rejected_srv(
         static_cast<unsigned>(td.Usage),
         td.CPUAccessFlags,td.MiscFlags,
         origin,original_name);
-    reshade::log::message(reshade::log::level::info,line);
+    reshade::log::message(reshade::log::level::warning,line);
     if(texture!=nullptr) texture->Release();
     if(device!=nullptr) device->Release();
     if(resource!=nullptr) resource->Release();
@@ -124,12 +124,12 @@ void v357_trace_rejected_srv(
 """
 apply(p,anchor,anchor+helper,"V357 negative trace helper")
 
-needle='''            reshade::log::message(reshade::log::level::info,line);
+needle='''            reshade::log::message(reshade::log::level::warning,line);
         }
 #endif
         if (shader != nullptr)
             shader->Release();'''
-repl='''            reshade::log::message(reshade::log::level::info,line);
+repl='''            reshade::log::message(reshade::log::level::warning,line);
 #if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
             v357_trace_rejected_srv(
                 context,12u,decision.receiver_id,
@@ -147,7 +147,7 @@ repl='''            reshade::log::message(reshade::log::level::info,line);
             shader->Release();'''
 apply(p,needle,repl,"V354 bounded t12 and t14 reject")
 
-needle='''            reshade::log::message(reshade::log::level::info,line);
+needle='''            reshade::log::message(reshade::log::level::warning,line);
         }
 #endif
         log_prepare_stage_once('''
@@ -155,9 +155,9 @@ needle='''            reshade::log::message(reshade::log::level::info,line);
 s=(root/p).read_text("utf8")
 idx=s.index("[DSRRL V354 SPEC REJECT]")
 tail=s[idx:idx+2050]
-if "reshade::log::message(reshade::log::level::info,line);" not in tail:
+if "reshade::log::message(reshade::log::level::warning,line);" not in tail:
     raise SystemExit("V357 spec rejection logging absent")
-log='reshade::log::message(reshade::log::level::info,line);'
+log='reshade::log::message(reshade::log::level::warning,line);'
 pos=s.index(log,idx)
 # locate exact log following V354 SPEC ONLY
 s=s[:pos]+s[pos:].replace(log,log+'''
@@ -179,13 +179,12 @@ apply(p,marker,marker+'''
 std::atomic<std::uint32_t> g_v357_unknown_bc6h_census{0u};
 std::atomic<std::uint32_t> g_v357_missing_bc6h_init{0u};
 #endif''',"counter")
-marker='''        ++g_native_hash_miss;
+marker='''        if (spec) ++g_native_hash_miss;
         return;
     }
-
-    const auto digest =
-        hashing::sha256('''
-repl='''        ++g_native_hash_miss;
+    const auto digest = hashing::sha256(tight.data(),tight.size());'''
+repl='''        if (spec) {
+            ++g_native_hash_miss;
 #if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
         const auto n=g_v357_missing_bc6h_init.fetch_add(
             1u,std::memory_order_relaxed);
@@ -199,21 +198,20 @@ repl='''        ++g_native_hash_miss;
             reshade::log::message(reshade::log::level::info,line);
         }
 #endif
+        }
         return;
     }
-
-    const auto digest =
-        hashing::sha256('''
+    const auto digest = hashing::sha256(tight.data(),tight.size());'''
 apply(p,marker,repl,"producer extraction unknown")
 marker='''    if (!probe.has_value()) {
-        ++g_native_hash_miss;
+        if (spec) ++g_native_hash_miss;
         return;
     }
-
     {
         std::lock_guard<std::mutex> lock('''
 repl='''    if (!probe.has_value()) {
-        ++g_native_hash_miss;
+        if (spec) {
+            ++g_native_hash_miss;
 #if defined(DSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS)
         const auto n=g_v357_unknown_bc6h_census.fetch_add(
             1u,std::memory_order_relaxed);
@@ -235,9 +233,9 @@ repl='''    if (!probe.has_value()) {
             reshade::log::message(reshade::log::level::info,line);
         }
 #endif
+        }
         return;
     }
-
     {
         std::lock_guard<std::mutex> lock('''
 apply(p,marker,repl,"producer SHA not in atlas")

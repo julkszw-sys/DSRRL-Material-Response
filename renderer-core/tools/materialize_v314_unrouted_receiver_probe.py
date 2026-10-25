@@ -62,10 +62,9 @@ replace('''    if (!k_drawtime_islands_runtime_enabled)
 #endif
     auto route_mask =
         observe_integrated_draw_route_bind(''',"bind real PS pipeline")
-replace_twice('''    if (route_mask == 0u) {
-#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)''',
-'''    if (route_mask == 0u) {
-#if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)
+replace_twice('''#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,''',
+'''#if defined(DSRRL_V314_UNROUTED_LIT_MUL_CENSUS)
         // On this route, the stock path already discards the selector
         // identity below. Consume ONLY to record actual original MTD/FLVER
         // provenance against exact DSR runtime PS SHA. No draw replay,
@@ -80,6 +79,7 @@ replace_twice('''    if (route_mask == 0u) {
         dsrrl::runtime::v314::report_stock_unrouted(
             cmd_list,diagnostic,stock_t1);
 #endif
-#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)''',"unrouted read-only stage")
+#if defined(DSRRL_V290_FULL_SIDECAR_DRAW_CENSUS)
+        // Capture sidecar-bound draws *outside* current shader families,''',"unrouted read-only stage")
 p.write_text(s,"utf-8")
 print("V314_ACTUAL_SHADER_SHA_RX_CENSUS_INTEGRATED_STOCK_FAIL_OPEN_PASS")

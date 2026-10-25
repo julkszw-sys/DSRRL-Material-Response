@@ -10,7 +10,7 @@ Once 'v350_rc2_gpu_resident_pointlight_off' 'v230_production'
 Once 'build-v350-gpu-resident-pointlight-off-rc2' 'build-v230-release'
 Once 'out-v350-gpu-resident-pointlight-off-rc2' 'out-v230-release'
 Once 'DSRRL_V350_GPU_RESIDENT_POINTLIGHT_OFF_RC2.addon64' 'DSRRL_Restored_Lighting_v2.3.0.addon64'
-Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V230_PRODUCTION /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS'
+Once '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID' '/DDSRRL_V296_ATOMIC_SIDECAR_NO_HYBRID /DDSRRL_V370_ISOLATED_EXACT_ENVDIFFUSE /DDSRRL_V230_PRODUCTION /DDSRRL_V230_RUNTIME_TELEMETRY /DDSRRL_V351_TYPED_DSR_ONLY_OPERATOR /DDSRRL_V351_EXACT_MATERIAL_ROUTE_RECOVERY /DDSRRL_V354_EXACT_RESOURCE_RESNAPSHOT /DDSRRL_V356_EXACT_BACKING_SRV_ALIAS /DDSRRL_V357_EXACT_RESOURCE_SOURCE_CENSUS /DDSRRL_V358_EXACT_PROBE_ORIGIN /DDSRRL_V359_ATTESTED_GI_NAME_ALIAS'
 Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF'
 Once 'cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated' @'
 python renderer-core/tools/audit_active_islands_hotpath.py --source-dir renderer-core
@@ -62,6 +62,28 @@ python renderer-core/tools/materialize_v359_view_scope_identity.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 exact view source recovery failed' }
 python renderer-core/tools/test_v359_attested_gi_name_alias.py
 if ($LASTEXITCODE -ne 0) { throw 'V359 test failed' }
+python renderer-core/tools/materialize_v372_independent_bound_t11_composite.py
+if ($LASTEXITCODE -ne 0) { throw 'V372 bound t11 materializer failed' }
+python renderer-core/tools/test_v372_bound_t11_composite.py
+if ($LASTEXITCODE -ne 0) { throw 'V372 bound t11 contract failed' }
+python renderer-core/tools/test_v373_operator_probe_witness.py
+if ($LASTEXITCODE -ne 0) { throw 'V373 operator probe witness contract failed' }
+python renderer-core/tools/test_v374_source1_owned_lifetime.py
+if ($LASTEXITCODE -ne 0) { throw 'V374 Source1 selector lifetime contract failed' }
+python renderer-core/tools/test_v375_lerp_exact_shadow_slots.py
+if ($LASTEXITCODE -ne 0) { throw 'V375 Lerp exact t12/t14 shadow contract failed' }
+python renderer-core/tools/test_v376_nonmetal_fork_witness.py
+if ($LASTEXITCODE -ne 0) { throw 'V376 nonmetal fork contract failed' }
+python renderer-core/tools/test_v377_nonmetal_envspec_failure_cut.py
+if ($LASTEXITCODE -ne 0) { throw 'V377 nonmetal EnvSpec failure-stage contract failed' }
+python renderer-core/tools/test_v378_nonmetal_probe_cut.py
+if ($LASTEXITCODE -ne 0) { throw 'V378 exact nonmetal probe contract failed' }
+python renderer-core/tools/test_v379_native_reject_log_visibility.py
+if ($LASTEXITCODE -ne 0) { throw 'V379 exact native rejection visibility failed' }
+python renderer-core/tools/test_v380_cutscene_rx35_envdiffuse_cut.py
+if ($LASTEXITCODE -ne 0) { throw 'V380 cutscene source1 witness contract failed' }
+python renderer-core/tools/test_v381_rx35_all_material_census.py
+if ($LASTEXITCODE -ne 0) { throw 'V381 all material RX35 census source failed' }
 
 '@
 $temp=Join-Path $PSScriptRoot '_v230_generated_build.ps1'

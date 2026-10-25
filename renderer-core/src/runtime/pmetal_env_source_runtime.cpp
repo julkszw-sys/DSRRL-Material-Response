@@ -1099,7 +1099,11 @@ bool capture_hook_selector_identity(
             out.row_id_a))
         return false;
 
-    if (beta_bits == 0u) {
+    // The upstream EnvSpec donor already collapses A==B selectors to one
+    // real endpoint even for nonzero beta. The freshness/cache key must use
+    // the same semantic identity, not demand a separate unused source_b.
+    // Preserve beta_bits: zero-beta and equal-selector paths are distinct.
+    if (beta_bits == 0u || selector_a == selector_b) {
         out.source_b = source_a;
         out.base_b = out.base_a;
         out.selector_b = selector_a;
@@ -1882,6 +1886,7 @@ void publish_hook_source(
     const f4 &b,
     const f4 &envdiffuse_a,
     const f4 &envdiffuse_b,
+    bool envdiffuse_valid,
     float beta,
     std::uint64_t bank_a,
     std::uint64_t bank_b,
@@ -1908,7 +1913,7 @@ void publish_hook_source(
         envdiffuse_b.y,
         envdiffuse_b.z
     };
-    next.envdiffuse_linear_valid = true;
+    next.envdiffuse_linear_valid = envdiffuse_valid;
     next.beta =
         std::clamp(
             beta,
@@ -2187,12 +2192,14 @@ void __fastcall envspec_single_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    // EnvSpec source publication is independent of optional EnvDiffuse.
+    if (donor_ok)
         publish_hook_source(
             donor,
             donor,
             envdiffuse_a,
             envdiffuse_b,
+            envdiffuse_ok,
             0.0f,
             bank,
             bank,
@@ -2224,6 +2231,18 @@ void __fastcall envspec_blend_hook_entry(
                 selector_b),
             beta);
 
+    // select() reduces beta >= 1 to B-only (endpoints.a == endpoints.b).
+    // The native hook still receives the ORIGINAL A and B bank pointers.
+    // Decode the normalized B selector from source_b, never from source_a.
+    // The original host call below remains unchanged.
+    void *const selected_source_a =
+        pmetal_selector_policy::selects_only_b(
+            static_cast<std::int16_t>(selector_a),
+            static_cast<std::int16_t>(selector_b),
+            beta)
+            ? source_b
+            : source_a;
+
     f4 a{};
     f4 b{};
     std::uint64_t bank_a = 0u;
@@ -2235,7 +2254,7 @@ void __fastcall envspec_blend_hook_entry(
     if (endpoints.valid) {
         donor_ok =
             read_exact_source(
-                source_a,
+                selected_source_a,
                 endpoints.a,
                 a,
                 bank_a,
@@ -2271,16 +2290,22 @@ void __fastcall envspec_blend_hook_entry(
     f4 envdiffuse_a{};
     f4 envdiffuse_b{};
 #if defined(DSRRL_PMETAL_FULL_PTDE_HEMENV_DIAG)
-    const bool envdiffuse_ok =
+    // A zero-beta PTDE Lerp has no B contribution. Match the existing
+    // EnvSpec donor A=B rule; never demand an unused second EnvDiffuse
+    // endpoint. Nonzero blends still decode and verify both endpoints.
+    bool envdiffuse_ok =
         donor_ok &&
-        exact_envdiffuse_endpoint(
-            bank_a,
-            row_a,
-            envdiffuse_a) &&
-        exact_envdiffuse_endpoint(
-            bank_b,
-            row_b,
-            envdiffuse_b);
+        exact_envdiffuse_endpoint(bank_a, row_a, envdiffuse_a);
+    if (envdiffuse_ok &&
+        (endpoints.beta == 0.0f || endpoints.a == endpoints.b)) {
+        // The EnvSpec producer already aliases identical logical selectors.
+        // The PTDE EnvDiffuse endpoint must follow the same source identity:
+        // no second lookup for an unused or identical B.
+        envdiffuse_b = envdiffuse_a;
+    } else if (envdiffuse_ok) {
+        envdiffuse_ok =
+            exact_envdiffuse_endpoint(bank_b, row_b, envdiffuse_b);
+    }
 #else
     const bool envdiffuse_ok =
         capture_linear_envdiffuse(
@@ -2289,18 +2314,20 @@ void __fastcall envspec_blend_hook_entry(
             envdiffuse_b);
 #endif
 
-    if (donor_ok && envdiffuse_ok)
+    // EnvSpec source publication is independent of optional EnvDiffuse.
+    if (donor_ok)
         publish_hook_source(
             a,
             b,
             envdiffuse_a,
             envdiffuse_b,
+            envdiffuse_ok,
             endpoints.beta,
             bank_a,
             bank_b,
             row_a,
             row_b,
-            source_a,
+            selected_source_a,
             endpoints.a,
             source_b,
             endpoints.b);
@@ -2536,11 +2563,7 @@ void pmetal_env_source_selector_event(
         g_selector_epoch.load(
             std::memory_order_relaxed);
 
-    // This exact material now owns the next synchronized source publication.
-    // Invalidate any older selector fallback before downstream decode.
-    pmetal_producer_state_begin(
-        material,
-        epoch);
+    // Source1 publication lifetime starts only for an attested selector owner.
 
     if (telemetry::effect_enabled())
         g_selector_exact_seen.store(
@@ -2624,6 +2647,11 @@ void pmetal_env_source_selector_event(
     if (descriptor_owner != owner ||
         character > 1u)
         return;
+
+    // Exact parent and descriptor identity established.
+    pmetal_producer_state_begin(
+        material,
+        epoch);
 
     if (telemetry::effect_enabled())
         g_descriptor_gate_ok.store(
@@ -2922,6 +2950,7 @@ bool pmetal_env_source_runtime::latest(
             material,
             epoch,
             out)) {
+        out.consumer_source_kind = 1u;
         telemetry::hot_count(
             g_consumer_ok);
         return true;
@@ -2936,6 +2965,7 @@ bool pmetal_env_source_runtime::latest(
     // including for an already authenticated nonmetal EnvSpec consumer.
     // The upstream material/receiver admission still gates the draw.
     if (latest_hook_source(out)) {
+        out.consumer_source_kind = 2u;
         telemetry::hot_count(
             g_consumer_ok);
         return true;

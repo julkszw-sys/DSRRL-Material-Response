@@ -44,6 +44,10 @@ normal_bridge_decision evaluate_normal_route(
         route_authorized = true;
         break;
 
+    case normal_route_authority::exact_bound_t2:
+        route_authorized = true;
+        break;
+
     case normal_route_authority::none:
     default:
         break;

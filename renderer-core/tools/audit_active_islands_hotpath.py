@@ -339,17 +339,13 @@ def main():
         "core_.features().enabled(",
         "PMetal exact-route prefilter")
 
-    # Generic resource bridges all require exact owner authority. Receiver-only
-    # draws must not do PSGetShaderResources/COM retains or texture lookups.
+    # t0/t2 texture replacement is resource-authorized by the current stock
+    # SRV, not by FLVER/MTD; reject impossible receiver families before PSGet.
     resource_prepare=function_body(
         resources,
         "prepare_draw_requests(",
         "prepare_fixed_pointlight_material_requests(")
-    require_before(
-        resource_prepare,
-        "if (!exact_material)",
-        "context->PSGetShaderResources(",
-        "resource exact-owner prefilter")
+    require(resource_prepare,"if (!spec_rgb_consumer_ready","resource receiver prefilter")
     require_before(
         resource_prepare,
         "if (!spec_rgb_consumer_ready",
@@ -481,10 +477,18 @@ def main():
         "void on_destroy_resource_view(")
     if "g_snapshot_epoch.fetch_add" in init_view:
         fail("unrelated EnvSpec SRV creation still globally invalidates snapshot TLS")
+    # Before V230 the native-view registry cut was probe_for_native_view.
+    # V230 moved V356 same-backing evidence into a shared, exact tracked
+    # resolver; don't demand an eliminated function as a boundary.
+    probe_resolver_boundary = (
+        "bool resolve_tracked_probe_locked("
+        if "bool resolve_tracked_probe_locked(" in envspec
+        else "bool probe_for_native_view("
+    )
     destroy_view=function_body(
         envspec,
         "void on_destroy_resource_view(",
-        "bool probe_for_native_view(")
+        probe_resolver_boundary)
     require(destroy_view,
         "g_snapshot_epoch.fetch_add(",
         "EnvSpec view-destroy snapshot invalidation")
@@ -740,7 +744,7 @@ def main():
     print("  disabled_islands=no HemDir3/Subsurface routes; no U/L/HemDir3 create materializers")
     print("  motion_blur=compute-stage prefilter before mutex")
     print("  pmetal=exact material/route prefilter before feature reads")
-    print("  resources=exact-owner/impossible-receiver prefilter before PSGetShaderResources")
+    print("  resources=receiver prefilter; exact stock SRV for t0/t2, owner retained for SpecRGB")
     print("  ownerless_draws=stop before batch preparation under current policy")
     print("  draw_replay=Context1 TLS cache; QueryInterface cold-path only")
     print("  material_owner=256-entry TLS caches use optional legacy token or cheap SHA fold; full SHA authority retained")

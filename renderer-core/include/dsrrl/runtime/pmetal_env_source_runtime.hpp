@@ -30,6 +30,10 @@ struct pmetal_envspec_source {
     // producer payload/material identity changes, so upload consumers can
     // skip redundant GPU writes without draw-time reclassification.
     std::uint64_t generation = 0u;
+    // Readout-only provenance assigned by latest(): 1=exact Source1,
+    // 2=protected native LightBank hook fallback, 0=unresolved.
+    // Never participates in producer or shader equality / gating.
+    std::uint8_t consumer_source_kind = 0u;
 };
 
 struct pmetal_env_source_runtime_telemetry {

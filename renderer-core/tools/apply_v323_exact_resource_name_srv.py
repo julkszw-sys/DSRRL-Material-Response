@@ -21,6 +21,106 @@ def once(s: str, old: str, new: str) -> str:
         raise RuntimeError(f"V214 source mismatch for anchor {old[:75]!r}: {s.count(old)}")
     return s.replace(old,new,1)
 
+def patch_v230_view_witness(s: str) -> str:
+    """Expose exact view-init origin for missed RX34 sidecars; no routing grants."""
+    if "enum class v230_view_stage" not in s:
+        return s
+    begin=s.index("void witness_rx34_resource_identity(")
+    end=s.index("void on_init_resource_view(",begin)
+    witness=s[begin:end]
+    witness=once(witness,
+        "        std::uint64_t registry_hash = 0u;",
+        "        std::uint64_t registry_hash = 0u;\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "        v230_view_origin origin{};\n"
+        "        bool origin_found = false;\n"
+        "#endif")
+    witness=once(witness,
+        "            const auto found = g_cache.find(key);",
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "            const auto observed = g_v230_view_origin.find(key);\n"
+        "            if (observed != g_v230_view_origin.end()) {\n"
+        "                origin=observed->second; origin_found=true;\n"
+        "            }\n"
+        "#endif\n"
+        "            const auto found = g_cache.find(key);")
+    # Deduplicate repeated draw calls by exact t0/t1/t2 view handles and
+    # requested slots, otherwise six initial draws hide later equipment.
+    old_sample="""    auto sample = g_rx34_identity_witness_samples.load(
+        std::memory_order_relaxed);
+    if (sample >= 6u ||
+        !g_rx34_identity_witness_samples.compare_exchange_strong(
+            sample, sample + 1u, std::memory_order_relaxed))
+        return;
+"""
+    new_sample="""#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+    static std::mutex witness_guard;
+    static std::array<std::array<std::uint64_t, 4>, 96> seen{};
+    static std::size_t seen_count = 0;
+    const std::array<std::uint64_t,4> signature{
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(views[0])),
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(views[1])),
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(views[2])),
+        static_cast<std::uint64_t>(requested_mask)
+    };
+    std::uint32_t sample = 0u;
+    {
+        std::lock_guard<std::mutex> lock(witness_guard);
+        if (std::find(seen.begin(),seen.begin()+seen_count,signature)
+                != seen.begin()+seen_count || seen_count==seen.size())
+            return;
+        sample = static_cast<std::uint32_t>(seen_count++);
+        seen[sample] = signature;
+    }
+#else
+""" + old_sample + """#endif
+"""
+    witness=once(witness,old_sample,new_sample)
+    # Single exact stock SRV record. This is observation, not authority.
+    witness=once(witness,
+        "sidecar=%u reason=%s\",",
+        "sidecar=%u reason=%s\"\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "            \" view_init=%s backing=%016llx name=%016llx eligible=%u uploaded=%u disk_mask=%u\"\n"
+        "#endif\n            ,")
+    witness=once(witness,
+        "            reason);",
+        "            reason\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "            , origin_found ? v230_stage_name(origin.stage) :\n"
+        "                \"NO_VIEW_INIT_OBSERVATION\",\n"
+        "            static_cast<unsigned long long>(origin.resource_handle),\n"
+        "            static_cast<unsigned long long>(origin.logical_hash),\n"
+        "            static_cast<unsigned>(origin.class_mask),\n"
+        "            static_cast<unsigned>(origin.uploaded_mask),\n"
+        "            static_cast<unsigned>(origin.disk_mask)\n"
+        "#endif\n            );")
+    s=s[:begin]+witness+s[end:]
+    s=once(s,
+        "        if (g_ambiguous_view_device.erase(key) != 0u)",
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "        g_v230_view_origin.erase(key);\n"
+        "#endif\n"
+        "        if (g_ambiguous_view_device.erase(key) != 0u)")
+    s=once(s,
+        "        dead.swap(g_cache);\n"
+        "        g_ambiguous_view_device.clear();",
+        "        dead.swap(g_cache);\n"
+        "        g_ambiguous_view_device.clear();\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "        g_v230_view_origin.clear();\n"
+        "#endif")
+    s=once(s,
+        "        bool changed = false;\n"
+        "        for (auto it = g_cache.begin();",
+        "        bool changed = false;\n"
+        "#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n"
+        "        g_v230_view_origin.clear();\n"
+        "#endif\n"
+        "        for (auto it = g_cache.begin();")
+    return s
+
+
 def patch(source: str) -> str:
     s=source
     s=once(s,
@@ -28,11 +128,21 @@ def patch(source: str) -> str:
         '#include "dsrrl/runtime/texture_identity_transport.hpp"\n'
         '#include "dsrrl/runtime/v214_resource_name_provenance.hpp"')
 
+    # V230 diagnostic source names this argument resource_handle. Adapt
+    # its ABI here, before the original V323 source_resource binding.
+    s=s.replace('    reshade::api::resource resource_handle,\n    reshade::api::resource_usage usage,', '    reshade::api::resource,\n    reshade::api::resource_usage usage,')
+
     # V322 already uses spec_equipment_allowed(): exact Oct10 749 direct names
     # plus the original owner and consumer gates; do not widen its allowlist.
     s=once(s,
         '    reshade::api::resource,\n    reshade::api::resource_usage usage,',
         '    reshade::api::resource source_resource,\n    reshade::api::resource_usage usage,')
+
+    # Keep diagnostic handles bound to the V323-certified source argument.
+    s=s.replace('v230_observe_view(view.handle, resource_handle.handle,',
+                'v230_observe_view(view.handle, source_resource.handle,')
+    s=s.replace('v230_observe_view(view.handle,resource_handle.handle,',
+                'v230_observe_view(view.handle,source_resource.handle,')
 
     anchor='void on_init_resource_view(\n'
     producer="""// Exact native ID3D11Resource is the transport key. This does not infer the
@@ -191,6 +301,27 @@ void on_destroy_resource(
 
     const auto logical_hash =
 """
+    # V230 view-origin evidence must not preempt the exact V214 resource
+    # fallback. Normalize the original callback stanza before V323 routing;
+    # the no-name evidence is added only AFTER both certified sources fail.
+    diagnostic_old=old.replace(
+        '            logical_name_length))\n        return;',
+        '            logical_name_length)) {\n'
+        '#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n'
+        '        v230_observe_view(view.handle, source_resource.handle, 0u,\n'
+        '            v230_view_stage::no_name_scope, 0u, 0u);\n'
+        '#endif\n        return;\n    }')
+    if diagnostic_old in s:
+        s=once(s,diagnostic_old,old)
+        # Only after V214's native resource/SRV equality path failed is the
+        # stock view truly without a certified name. This is diagnostic only.
+        new=new.replace(
+            '            source_len==0u)\n            return;',
+            '            source_len==0u) {\n'
+            '#if defined(DSRRL_V230_RUNTIME_TELEMETRY)\n'
+            '            v230_observe_view(view.handle,source_resource.handle,0u,\n'
+            '                v230_view_stage::no_name_scope,0u,0u);\n'
+            '#endif\n            return;\n        }')
     s=once(s,old,new)
 
     s=once(s,
@@ -224,7 +355,7 @@ void on_destroy_resource(
         '        reshade::addon_event::init_resource>(on_init_resource);\n\n'
         '    release_cache();')
 
-    return s
+    return patch_v230_view_witness(s)
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
@@ -240,3 +371,5 @@ if __name__=="__main__":
     print("V214_FULL_SPEC_1295_ASSET_LOADER=ON")
     print("V214_FLVER_MTD_CONSUMER_GATE_UNCHANGED=ON")
     print("V214_NO_SOURCE_PROVENANCE=FAIL_OPEN")
+
+# V230 diagnostic compatibility: exact original-resource provenance is mandatory.

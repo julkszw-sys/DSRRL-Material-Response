@@ -65,15 +65,24 @@ once("""    const bool material_ready =
         shadow_material_ready""",
 """    bool material_ready =
         shadow_material_ready""","mutable material")
+# Preserve exact negative chr-stock guard before native SpecRGB resnapshot:
+# a verified character resource must never be retried as player equipment.
+character_stock_guard = ""
+marker = "    // Source-censused chr-bound stock t1 is not a missing player equipment"
+if marker in s:
+    start = s.index(marker)
+    end = s.index("    if (!material_ready ||", start)
+    character_stock_guard = s[start:end]
+
 once("""                      true,
                       prepared.material_resources);
 
-    if (!material_ready ||
+""" + character_stock_guard + """    if (!material_ready ||
         !prepared.material_resources.spec_rgb) {""",
 """                      true,
                       prepared.material_resources);
 
-#if defined(DSRRL_V354_EXACT_RESOURCE_RESNAPSHOT)
+""" + character_stock_guard + """#if defined(DSRRL_V354_EXACT_RESOURCE_RESNAPSHOT)
     if (shadow_material_ready &&
         (!material_ready ||
          !prepared.material_resources.spec_rgb)) {
@@ -140,7 +149,7 @@ once("""                      true,
                 actual_spec.companion_ready?1u:0u,
                 material.owner_tuple_exact?1u:0u,
                 material.actual_material_exact?1u:0u);
-            reshade::log::message(reshade::log::level::info,line);
+            reshade::log::message(reshade::log::level::warning,line);
         }
 #endif""","bounded spec reject census")
 # preserve formatting of old source branch: opening new if block continues original code
@@ -188,7 +197,7 @@ once("""    if (!env_resource_ready) {
                 static_cast<unsigned long long>(stats.view_matches),
                 static_cast<unsigned long long>(stats.cube_created),
                 static_cast<unsigned long long>(stats.cube_fail));
-            reshade::log::message(reshade::log::level::info,line);
+            reshade::log::message(reshade::log::level::warning,line);
             for (auto *&view : native_view) {
                 if (view != nullptr) {
                     view->Release();
