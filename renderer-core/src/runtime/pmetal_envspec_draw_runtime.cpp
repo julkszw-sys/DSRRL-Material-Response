@@ -1574,13 +1574,21 @@ bool pmetal_envspec_draw_runtime::prepare(
     const bool probe_b_required = source.beta != 0.0f;
 
     ID3D11ShaderResourceView *shadow_env[3]{};
-    const bool shadow_env_ready =
+    // EnvSpec consumes t12 and (only for nonzero beta) t14. Requiring
+    // contiguous t12-t14 shadow validity also requires unrelated t13.
+    // Query both semantic SRV slots independently; missing either exact
+    // endpoint fails open to the existing native PSGet fallback.
+    const bool shadow_env_a_ready =
         !k_native_dsr_cubemap_feed &&
         pixel_srv_shadow_snapshot(
-            cmd_list,
-            12u,
-            probe_b_required ? 3u : 1u,
-            shadow_env);
+            cmd_list, 12u, 1u, &shadow_env[0]);
+    const bool shadow_env_b_ready =
+        !probe_b_required ||
+        (!k_native_dsr_cubemap_feed &&
+         pixel_srv_shadow_snapshot(
+             cmd_list, 14u, 1u, &shadow_env[2]));
+    const bool shadow_env_ready =
+        shadow_env_a_ready && shadow_env_b_ready;
 
     const bool env_resource_ready =
         k_native_dsr_cubemap_feed
