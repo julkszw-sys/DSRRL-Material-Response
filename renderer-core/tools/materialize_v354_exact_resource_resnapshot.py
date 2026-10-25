@@ -149,7 +149,7 @@ once("""                      true,
                 actual_spec.companion_ready?1u:0u,
                 material.owner_tuple_exact?1u:0u,
                 material.actual_material_exact?1u:0u);
-            reshade::log::message(reshade::log::level::info,line);
+            reshade::log::message(reshade::log::level::warning,line);
         }
 #endif""","bounded spec reject census")
 # preserve formatting of old source branch: opening new if block continues original code
@@ -197,7 +197,7 @@ once("""    if (!env_resource_ready) {
                 static_cast<unsigned long long>(stats.view_matches),
                 static_cast<unsigned long long>(stats.cube_created),
                 static_cast<unsigned long long>(stats.cube_fail));
-            reshade::log::message(reshade::log::level::info,line);
+            reshade::log::message(reshade::log::level::warning,line);
             for (auto *&view : native_view) {
                 if (view != nullptr) {
                     view->Release();
