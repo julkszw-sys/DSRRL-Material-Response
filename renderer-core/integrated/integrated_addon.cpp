@@ -7337,6 +7337,10 @@ bool on_draw(
                 decision.receiver_id,material.route_index,
                 hemenvlerp_bound,&prepared.envspec);
 #endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v381_trace_rx35(3u,"native_armed",false,route_mask,
+            material,decision,&prepared,false);
+#endif
         release_prepared_island_batch(
             prepared);
         // Return false so ReShade continues into its single original
@@ -7973,6 +7977,10 @@ bool on_draw_indexed(
             v230_rt_probe_once(2u,"native_armed",
                 decision.receiver_id,material.route_index,
                 hemenvlerp_bound,&prepared.envspec);
+#endif
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+        v381_trace_rx35(3u,"native_armed",true,route_mask,
+            material,decision,&prepared,false);
 #endif
         release_prepared_island_batch(
             prepared);
