@@ -21,6 +21,7 @@ jobs:
           python3 renderer-core/tools/test_v377_nonmetal_envspec_failure_cut.py
           python3 renderer-core/tools/test_v378_nonmetal_probe_cut.py
           python3 renderer-core/tools/test_v379_native_reject_log_visibility.py
+          python3 renderer-core/tools/test_v380_cutscene_rx35_envdiffuse_cut.py
           python3 renderer-core/tools/test_v230_minimal_resource_gates.py
           python3 renderer-core/tools/verify_v230_runtime_log.py --selftest
           python3 renderer-core/tools/audit_v230_asset_shader_tx_contract.py
