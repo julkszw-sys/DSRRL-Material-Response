@@ -62,6 +62,7 @@ struct prepared_pmetal_envspec_draw {
     std::uint16_t diagnostic_probe_a = 0u, diagnostic_probe_b = 0u;
     std::uint16_t diagnostic_diff_a = 0u, diagnostic_diff_b = 0u;
 #endif
+    std::uint8_t source_kind = 0u; // diagnostic only
     bool ready = false;
 };
 
