@@ -7,6 +7,7 @@
 #include "dsrrl/runtime/material_response_draw_transaction.hpp"
 #include "dsrrl/runtime/material_resource_draw_runtime.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#include "dsrrl/runtime/v381_rx35_material_census.hpp"
 #include "dsrrl/runtime/envspec_resource_runtime.hpp"
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
@@ -5280,6 +5281,34 @@ struct prepared_island_batch {
     bool hemdir3_in_batch = false;
     bool envspec_in_batch = false;
 };
+
+#if defined(DSRRL_V230_RUNTIME_TELEMETRY)
+void v381_trace_rx35(
+    unsigned phase,const char *stage,bool indexed,unsigned route_mask,
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision,
+    const prepared_island_batch *p,bool issued) noexcept
+{
+    unsigned flags=0u;
+    if(p!=nullptr) {
+        if(p->mr_in_batch)flags|=1u;
+        if(p->envspec_in_batch)flags|=2u;
+        if(p->envspec_in_batch && p->envspec.envdiffuse_resources.ready)
+            flags|=4u;
+        if(p->resources.spec_rgb ||
+           (p->envspec_in_batch && p->envspec.material_resources.spec_rgb))
+            flags|=8u;
+        if(p->resources.diffuse)flags|=16u;
+        if(p->resources.normal)flags|=32u;
+        if(p->subsurface_in_batch)flags|=64u;
+    }
+    dsrrl::runtime::v381_rx35_census(
+        phase,stage,indexed,route_mask,material,decision,flags,
+        p?static_cast<unsigned>(p->batch.island_count):0u,
+        p&&p->envspec_in_batch?p->envspec.source_kind:0u,
+        p?static_cast<unsigned>(p->resources.request_count):0u,issued);
+}
+#endif
 
 effect_probe_mask resource_effect_mask(
     const dsrrl::runtime::prepared_material_resource_draw &resources) noexcept
