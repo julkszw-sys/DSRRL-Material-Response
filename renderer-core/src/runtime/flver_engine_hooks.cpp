@@ -940,8 +940,32 @@ void *resolve_actual_material(
 void *__fastcall v384_de_observer(void *model,void *dest) noexcept {
  const auto ret=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
  void *out=g_v384_de_original(model,dest);
+ // V385: independent counter BEFORE the V384 filtered Type180 logger.
+ const auto site=ret>=g_base?ret-g_base:0u;
+ const auto hits=g_v385_de_hit_total.fetch_add(1u,std::memory_order_relaxed)+1u;
+ if(site==k_v384_type180_a_return)
+    g_v385_de_hit_a.fetch_add(1u,std::memory_order_relaxed);
+ else if(site==k_v384_type180_b_return)
+    g_v385_de_hit_b.fetch_add(1u,std::memory_order_relaxed);
+ else {
+    g_v385_de_hit_other.fetch_add(1u,std::memory_order_relaxed);
+    if(g_v385_de_last_other_site.exchange(
+          site,std::memory_order_relaxed)!=site) {
+       const auto n=g_v385_de_other_log_count.fetch_add(
+          1u,std::memory_order_relaxed)+1u;
+       if(n<=32u){
+          char msg[240]{};
+          std::snprintf(msg,sizeof(msg),
+             "[DSRRL V385 DE OTHER CALLER] n=%u caller_rva=%08llx "
+             "total=%llu tid=%lu pixel=OPEN",
+             n,static_cast<unsigned long long>(site),
+             static_cast<unsigned long long>(hits),
+             static_cast<unsigned long>(GetCurrentThreadId()));
+          reshade::log::message(reshade::log::level::warning,msg);
+       }
+    }
+ }
  if(ret<g_base||model==nullptr||dest==nullptr)return out;
- const auto site=ret-g_base;
  if(site!=k_v384_type180_a_return&&site!=k_v384_type180_b_return)return out;
  if(!range_ok(model,0x100u))return out;
  std::uint16_t def=0,pa=0,pb=0,received=0;
