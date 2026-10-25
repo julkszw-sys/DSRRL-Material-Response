@@ -17,7 +17,7 @@ for code in (
     "probe_a = prepared->env_resources.probe_a;",
     "probe_b = prepared->env_resources.probe_b;",
     "diff_probe_a=%u diff_probe_b=%u",
-    "g_v230_rt_probe_seen.fetch_or(",
+    "seen.fetch_or(",
 ):
     assert cut.count(code) == 1, code
 for code in (
