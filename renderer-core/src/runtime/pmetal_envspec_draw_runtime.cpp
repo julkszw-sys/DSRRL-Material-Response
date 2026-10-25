@@ -1701,7 +1701,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                         shadow_env_b_ready?1u:0u,
                         static_cast<void *>(shadow_env[0]),
                         static_cast<void *>(shadow_env[2]),
-                        t.pack_ready?1u:0u,t.sample_ready?1u:0u,
+                        t.pack_ready?1u:0u,t.sampler_ready?1u:0u,
                         static_cast<unsigned long long>(t.native_candidates),
                         static_cast<unsigned long long>(t.native_matches),
                         static_cast<unsigned long long>(t.view_matches));
