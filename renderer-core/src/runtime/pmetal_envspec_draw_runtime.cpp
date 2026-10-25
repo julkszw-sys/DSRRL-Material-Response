@@ -1633,7 +1633,7 @@ bool pmetal_envspec_draw_runtime::prepare(
                     "[DSRRL V230 PROBE FAIL CUT] sample=%u rx=%u "
                     "family=%u env_slot=%u beta=%.9g "
                     "b_required=%u native_feed=%u shadow_ready=%u "
-                    "shadow_a=%p shadow_b=%p "
+                    "a_ready=%u b_ready=%u shadow_a=%p shadow_b=%p "
                     "pack_ready=%u sampler_ready=%u "
                     "native_candidates=%llu native_matches=%llu "
                     "view_matches=%llu pixel_pass=0",
@@ -1645,6 +1645,8 @@ bool pmetal_envspec_draw_runtime::prepare(
                     probe_b_required?1u:0u,
                     k_native_dsr_cubemap_feed?1u:0u,
                     shadow_env_ready?1u:0u,
+                    shadow_env_a_ready?1u:0u,
+                    shadow_env_b_ready?1u:0u,
                     static_cast<void *>(shadow_env[0]),
                     static_cast<void *>(shadow_env[2]),
                     env_t.pack_ready?1u:0u,
