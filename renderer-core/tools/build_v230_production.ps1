@@ -93,7 +93,7 @@ try {
  if ($LASTEXITCODE -ne 0) { throw 'v2.3.0 native build failed' }
  $file='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
  $raw=[Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path $file)))
- foreach($m in @('[DSRRL V350 PTDE LERP RGB]','[DSRRL GPU RESIDENT RC1]','v230_production','2.3.0','[DSRRL V383 REMO MODEL MATERIAL]','[DSRRL V383 NATIVE LIGHTBANK]','[DSRRL V384 REMO TYPE180 DE]','[DSRRL V384 REMO DE INSTALL]')) {
+ foreach($m in @('[DSRRL V350 PTDE LERP RGB]','[DSRRL GPU RESIDENT RC1]','v230_production','2.3.0','[DSRRL V383 REMO MODEL MATERIAL]','[DSRRL V383 NATIVE LIGHTBANK]','[DSRRL V384 REMO TYPE180 DE]','[DSRRL V384 REMO DE INSTALL]','[DSRRL V385 DE HEALTH]','[DSRRL V385 DE OTHER CALLER]')) {
    if (-not $raw.Contains($m)) { throw "Missing binary marker: $m" }
  }
  Write-Host 'v2.3.0 PRE-RELEASE native build PASS; GPU/PIXEL performance A-B OPEN'
