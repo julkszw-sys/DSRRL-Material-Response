@@ -17,8 +17,9 @@ inline void v382_source_owner_witness(
     unsigned consumer_thread) noexcept
 {
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
-    if (!telemetry::effect_enabled() ||
-        !material.valid || !material.owner_tuple_exact ||
+    // V230 production disables effect_enabled() globally. V382 is an
+    // explicitly selected read-only diagnostic and must remain observable.
+    if (!material.valid || !material.owner_tuple_exact ||
         !material.material_slot_valid)
         return;
     // Observation filter only. Row 0/5 is NOT an admission/override rule.
