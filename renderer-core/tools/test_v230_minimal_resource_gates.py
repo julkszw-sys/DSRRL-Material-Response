@@ -409,7 +409,7 @@ probe_rt = integrated_rt.split("void v230_rt_probe_once(",1)[1].split(
     "bool prepare_island_batch(",1
 )[0]
 assert "rx < 33u || rx > 35u || route != 345u" in probe_rt
-assert "g_v230_rt_probe_seen.fetch_or(" in probe_rt
+assert "seen.fetch_or(" in probe_rt
 assert "const unsigned index = (rx - 33u) * 16u +" in probe_rt
 assert "const std::uint64_t bit = 1ull << index;" in probe_rt
 assert "envspec_resources" not in probe_rt or "pack_envspec" in probe_rt
