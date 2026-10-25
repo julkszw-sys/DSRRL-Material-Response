@@ -24,4 +24,12 @@ assert "g_hook_source_global.valid" in src
 assert "slot.valid.store(" in state
 assert "same_material(" in state
 assert "slot.record.epoch != epoch" in state
+draw = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text("utf-8")
+integrated = (root / "integrated/integrated_addon.cpp").read_text("utf-8")
+assert "out.consumer_source_kind = 1u;" in consumer
+assert "out.consumer_source_kind = 2u;" in consumer
+assert "prepared.source_kind=source.consumer_source_kind;" in draw
+assert "prepared.source_kind = source.consumer_source_kind;" in draw
+assert "g_v374_rt_source1_seen" in integrated
+assert "diff_probe_a=%u diff_probe_b=%u source_kind=%u" in integrated
 print("V374_SOURCE1_OWNER_SCOPED_LIFETIME_SOURCE_PASS runtime=OPEN pixel=OPEN")
