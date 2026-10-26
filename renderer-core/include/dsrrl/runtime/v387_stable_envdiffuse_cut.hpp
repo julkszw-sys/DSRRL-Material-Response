@@ -25,15 +25,21 @@ inline void v387_stable_cut(
  const auto now=GetTickCount64();
  if(e.key==key && now>=e.tick && now-e.tick<3000ull)return;
  e={key,now};
- char line[620]{};
+ char flver_sha[65]{};
+ constexpr char hd[]="0123456789abcdef";
+ for(unsigned i=0u;i<32u;i++) {
+  flver_sha[i*2u]=hd[m.flver_sha256[i]>>4u];
+  flver_sha[i*2u+1u]=hd[m.flver_sha256[i]&15u];
+ }
+ char line[800]{};
  std::snprintf(line,sizeof(line),
  "[DSRRL V387 STABLE CUT] rx=%u route=%u slot=%u flver=%016llx "
- "sem=%016llx kind=%u bank=%016llx row=%u serial=%llu "
+ "sem=%016llx flver_sha=%s kind=%u bank=%016llx row=%u serial=%llu "
  "c86=%.8g,%.8g,%.8g probe=%u path=%s shader=%p "
  "b12=%p t11=%p t12=%p request=READY pixel=OPEN",
  d.receiver_id,m.route_index,m.material_slot,
  static_cast<unsigned long long>(m.flver_identity_hash),
- static_cast<unsigned long long>(m.semantic_name_hash),
+ static_cast<unsigned long long>(m.semantic_name_hash),flver_sha,
  static_cast<unsigned>(s.consumer_source_kind),
  static_cast<unsigned long long>(s.bank_signature_a),s.row_id_a,
  static_cast<unsigned long long>(s.serial),
