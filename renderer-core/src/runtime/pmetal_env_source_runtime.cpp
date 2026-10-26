@@ -2528,7 +2528,7 @@ bool pmetal_env_source_runtime::install() noexcept
         "same_tuple=KEEP_ATTESTED changed_tuple=REVOKE "
         "late_publication=REJECT in_flight_read=LOCKED "
         "tracked_actor_unowned_source2=FAIL_OPEN_STOCK "
-        "owner_lifecycle_join=OPEN pixel=OPEN");
+        "owner_lifecycle_join=OPEN pixel=OPEN DSRRL BUILD_ID V398");
 #endif
 
     static std::atomic_bool
