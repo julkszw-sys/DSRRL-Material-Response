@@ -22,7 +22,7 @@ struct producer_record {
 
 thread_local producer_record g_record{};
 
-constexpr std::size_t k_sync_slot_count = 256u;
+constexpr std::size_t k_sync_slot_count = 4096u;
 static_assert(
     (k_sync_slot_count & (k_sync_slot_count - 1u)) == 0u);
 
@@ -130,9 +130,15 @@ std::uint64_t model_key(
     if (!material.valid || !material.owner_tuple_exact ||
         material.model_owner_instance == 0u)
         return 0u;
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    // Exact owner pointer, not a truncated hash. Bucket hash only affects
+    // lookup position and never decides actor identity.
+    return static_cast<std::uint64_t>(material.model_owner_instance);
+#else
     std::uint64_t hash = 0xcbf29ce484222325ULL;
     hash = fnv_scalar(hash, material.model_owner_instance);
     return hash;
+#endif
 }
 
 std::uint64_t source_key(
@@ -163,6 +169,31 @@ synchronized_slot &sync_slot_for(
         static_cast<std::size_t>(
             mixed & (k_sync_slot_count - 1u))];
 }
+
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+// A fixed capacity open-addressed map: collisions NEVER evict another actor.
+// If all slots are exhausted, fail-open without writing a foreign source.
+// The engine-owner lifecycle token itself remains an independent RE gap.
+synchronized_slot *sync_slot_for_actor(std::uint64_t key) noexcept
+{
+    if (key == 0u) return nullptr;
+    const auto mixed = key ^ (key >> 17u) ^ (key >> 37u);
+    const auto start = static_cast<std::size_t>(
+        mixed & (k_sync_slot_count - 1u));
+    for (std::size_t step=0u; step<k_sync_slot_count; ++step) {
+        auto &slot=g_sync_slots[(start+step)&(k_sync_slot_count-1u)];
+        auto observed=slot.instance_key.load(std::memory_order_acquire);
+        if (observed==key) return &slot;
+        if (observed==0u &&
+            slot.instance_key.compare_exchange_strong(
+                observed,key,std::memory_order_acq_rel,
+                std::memory_order_acquire))
+            return &slot;
+        if (observed==key) return &slot;
+    }
+    return nullptr;
+}
+#endif
 
 } // namespace
 
@@ -217,7 +248,9 @@ void pmetal_producer_state_begin(
     next.sb = selector_b;
     std::memcpy(&next.beta_bits, &beta, sizeof(beta));
     next.valid = true;
-    auto &slot = sync_slot_for(key);
+    auto *exact_slot = sync_slot_for_actor(key);
+    if (exact_slot == nullptr) return;
+    auto &slot = *exact_slot;
     std::lock_guard<std::mutex> lock(slot.mutex);
     const bool same = slot.selection.valid &&
         slot.instance_key.load(std::memory_order_relaxed) == key &&
@@ -249,7 +282,12 @@ void pmetal_producer_state_publish(
             g_record.valid = false;
             return;
         }
-        auto &slot = sync_slot_for(key);
+        auto *exact_slot = sync_slot_for_actor(key);
+        if (exact_slot == nullptr) {
+            g_record.valid = false;
+            return;
+        }
+        auto &slot = *exact_slot;
         std::lock_guard<std::mutex> lock(slot.mutex);
         if (!slot.selection.valid || slot.selection_revision != ticket.revision ||
             slot.instance_key.load(std::memory_order_relaxed) != key ||
@@ -366,7 +404,13 @@ bool pmetal_producer_state_latest(
     // still the complete material identity under the slot mutex.
     const auto key = model_key(material);
     if (key == 0u) return false;
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    auto *exact_slot = sync_slot_for_actor(key);
+    if (exact_slot == nullptr) return false;
+    auto &slot = *exact_slot;
+#else
     auto &slot = sync_slot_for(key);
+#endif
 
 #if !defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
     if (!slot.valid.load(
@@ -406,7 +450,13 @@ bool pmetal_producer_state_actor_tracked(
 {
     const auto key = model_key(material);
     if (key == 0u) return false;
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    auto *exact_slot = sync_slot_for_actor(key);
+    if (exact_slot == nullptr) return false;
+    auto &slot = *exact_slot;
+#else
     auto &slot = sync_slot_for(key);
+#endif
     std::lock_guard<std::mutex> lock(slot.mutex);
     return slot.selection.valid &&
         slot.instance_key.load(std::memory_order_relaxed) == key &&
