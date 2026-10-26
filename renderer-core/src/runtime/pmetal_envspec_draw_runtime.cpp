@@ -1162,6 +1162,14 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
     q.samplers[0]={11u,prepared.envdiffuse_resources.sampler};
     q.sampler_count=1u;
     prepared.ready=true;
+    prepared.stable_envdiffuse_trace_valid = true;
+    prepared.stable_envdiffuse_independent = true;
+    prepared.stable_envdiffuse_source_serial = source.serial;
+    prepared.stable_envdiffuse_bank = source.bank_signature_a;
+    prepared.stable_envdiffuse_row = source.row_id_a;
+    prepared.stable_envdiffuse_c86 = source.envdiffuse_a;
+    prepared.stable_envdiffuse_probe =
+        prepared.envdiffuse_resources.probe_a;
     v387_stable_cut(material,decision,source,prepared,true);
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     v380_rx35_cut(32u,"request_ready",source_ok,&source,1);
@@ -2635,8 +2643,18 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     prepared.ready = true;
-    if (family == pmetal_envspec_receiver_family::stable_hemenv)
+    if (family == pmetal_envspec_receiver_family::stable_hemenv &&
+        prepared.envdiffuse_resources.ready) {
+    prepared.stable_envdiffuse_trace_valid = true;
+    prepared.stable_envdiffuse_independent = false;
+    prepared.stable_envdiffuse_source_serial = source.serial;
+    prepared.stable_envdiffuse_bank = source.bank_signature_a;
+    prepared.stable_envdiffuse_row = source.row_id_a;
+    prepared.stable_envdiffuse_c86 = source.envdiffuse_a;
+    prepared.stable_envdiffuse_probe =
+        prepared.envdiffuse_resources.probe_a;
         v387_stable_cut(material,decision,source,prepared,false);
+    }
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
 
