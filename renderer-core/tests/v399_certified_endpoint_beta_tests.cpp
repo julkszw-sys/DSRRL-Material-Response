@@ -17,6 +17,7 @@ int main() {
     endpoints.envdiffuse_b=endpoints.b;
     endpoints.envdiffuse_linear_valid=true;
     endpoints.beta=0.5f;
+    endpoints.native_producer_sequence=123u;
     endpoints.bank_signature_a=6u;
     endpoints.bank_signature_b=6u;
     constexpr auto epoch=77u;
@@ -33,6 +34,9 @@ int main() {
     pmetal_producer_state_begin(actor,epoch,source_a,1311,source_b,1310,0.75f);
     assert(pmetal_producer_state_latest(actor,epoch,out));
     assert(out.beta==0.75f && out.generation>gen);
+    // Scalar-only beta continuity cannot change which native event supplied
+    // the actor-certified endpoint payload.
+    assert(out.native_producer_sequence==123u);
     assert(out.row_id_a==31u && out.row_id_b==30u);
     assert(out.a[0]==0.4f && out.b[0]==1.2f);
     auto other=actor;
