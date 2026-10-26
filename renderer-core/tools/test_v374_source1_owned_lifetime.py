@@ -22,7 +22,17 @@ assert consumer.index("pmetal_producer_state_latest(") < consumer.index("latest_
 assert "g_hook_source_tls.valid" in src
 assert "g_hook_source_global.valid" in src
 assert "slot.valid.store(" in state
-assert "same_material(" in state
+# V394 separates model LightBank transport from material response.
+# Retain the old material-key contract only on pre-V394 builds; exact model
+# instances must be distinguished by native owner pointer + complete FLVER SHA.
+if 'DSRRL_V394_MODEL_SOURCE1' in (root/'tools/build_v230_production.ps1').read_text():
+    assert "same_model(" in state
+    assert "model_owner_instance" in state
+    key=state[state.index("std::uint64_t model_key("):state.index("std::uint64_t source_key(")]
+    for forbidden in ("material_slot", "raw_mtd_sha256", "route_index", "semantic_name_hash"):
+        assert forbidden not in key
+else:
+    assert "same_material(" in state
 assert "slot.record.epoch != epoch" in state
 draw = (root / "src/runtime/pmetal_envspec_draw_runtime.cpp").read_text("utf-8")
 integrated = (root / "integrated/integrated_addon.cpp").read_text("utf-8")
