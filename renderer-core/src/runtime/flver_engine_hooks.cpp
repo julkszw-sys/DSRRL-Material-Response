@@ -1122,6 +1122,11 @@ bool publish_exact_selector_identity(
         material_identity &identity,
     selector_profile_sample *profile) noexcept
 {
+#if defined(DSRRL_V394_MODEL_SOURCE1)
+    // Model producer already consumed the stack in the preceding selector
+    // stage; no per-MTD producer duplication here.
+    (void)selector_stack;
+#endif
     if (!identity.valid ||
         !identity.owner_tuple_exact)
         return false;
