@@ -83,8 +83,7 @@ bool same_model(
     return a.valid && b.valid &&
         a.owner_tuple_exact && b.owner_tuple_exact &&
         a.model_owner_instance != 0u &&
-        a.model_owner_instance == b.model_owner_instance &&
-        a.flver_sha256 == b.flver_sha256;
+        a.model_owner_instance == b.model_owner_instance;
 }
 
 bool same_source_payload(
@@ -114,7 +113,6 @@ std::uint64_t model_key(
         return 0u;
     std::uint64_t hash = 0xcbf29ce484222325ULL;
     hash = fnv_scalar(hash, material.model_owner_instance);
-    hash = fnv_bytes(hash, material.flver_sha256);
     return hash;
 }
 

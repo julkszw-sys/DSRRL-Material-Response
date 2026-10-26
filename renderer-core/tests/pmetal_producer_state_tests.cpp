@@ -160,8 +160,24 @@ int main()
         missing_actor,100u,actor_leak));
     auto swapped_model = other_slot;
     swapped_model.flver_sha256[0] ^= 0x01u;
-    assert(!runtime::pmetal_producer_state_latest(
+    assert(runtime::pmetal_producer_state_latest(
         swapped_model,100u,actor_leak));
+    // V395 pre-parser source has no FLVER or MTD but authenticated owner.
+    // Read it through a different equipped FLVER on a consumer thread.
+    auto pre_parser = material;
+    pre_parser.flver_sha256 = {};
+    pre_parser.raw_mtd_sha256 = {};
+    pre_parser.semantic_name_hash = 0u;
+    pre_parser.material_slot_valid = false;
+    runtime::pmetal_producer_state_begin(pre_parser,100u);
+    runtime::pmetal_producer_state_publish(pre_parser,source,100u);
+    runtime::pmetal_producer_state_clear();
+    assert(runtime::pmetal_producer_state_latest(
+        swapped_model,100u,actor_leak));
+    assert(actor_leak.beta == source.beta);
+    assert(!runtime::pmetal_producer_state_latest(
+        other_actor,100u,actor_leak));
+
     // A new selector for another slot of THIS instance invalidates the
     // common model source until a new authentic producer publishes.
     runtime::pmetal_producer_state_begin(other_slot,100u);

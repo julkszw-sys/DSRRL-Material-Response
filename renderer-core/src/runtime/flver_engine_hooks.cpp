@@ -1094,15 +1094,12 @@ void __fastcall mtd_entry(
 // by pmetal_env_source_selector_event(). Same SHA different owner != same model.
 void observe_model_lightbank_source(
     void *owner, void *ret, void *r14, void *r15,
-    const void *selector_stack,
-    const core::sha256_digest &flver_sha) noexcept
+    const void *selector_stack) noexcept
 {
-    if (owner == nullptr || flver_sha == core::sha256_digest{})
-        return;
+    if (owner == nullptr) return;
     operators::material_response::material_identity model{};
     model.valid = true;
     model.owner_tuple_exact = true;
-    model.flver_sha256 = flver_sha;
     model.model_owner_instance =
         reinterpret_cast<std::uintptr_t>(owner);
     dsrrl::runtime::qpc_bisect::scope qpc_scope(
@@ -1362,6 +1359,13 @@ extern "C" void dsrrl_flver_selector_observer(
   return;
  }
 
+#if defined(DSRRL_V394_MODEL_SOURCE1)
+ // V395: actor LightBank producer before ANY FLVER/MTD/slot lookup.
+ // The source hook revalidates caller ancestry and live descriptor->owner.
+ observe_model_lightbank_source(
+     owner,ret,r14,r15,selector_stack);
+#endif
+
  selector_profile_end_stage(
      profile,
      prefix_begin,
@@ -1396,11 +1400,6 @@ extern "C" void dsrrl_flver_selector_observer(
   telemetry::hot_count(
       g_selector_identity_cache_hits);
 
-#if defined(DSRRL_V394_MODEL_SOURCE1)
-  observe_model_lightbank_source(
-      owner,ret,r14,r15,selector_stack,
-      cached_identity.flver_sha256);
-#endif
   if(publish_exact_selector_identity(
         owner,
         actual_material,
@@ -1486,11 +1485,6 @@ extern "C" void dsrrl_flver_selector_observer(
 
   // Source1 is produced even when a material has no PTDE MTD operator.
   // MTD still gates its own material response and receiver at draw time.
-#if defined(DSRRL_V394_MODEL_SOURCE1)
-  observe_model_lightbank_source(
-      owner,ret,r14,r15,selector_stack,
-      observation.flver_sha256);
-#endif
 
   const auto owner_mtd_begin =
       selector_profile_begin(profile);

@@ -2592,7 +2592,6 @@ void pmetal_env_source_selector_event(
         material.model_owner_instance == 0u ||
         material.model_owner_instance !=
             reinterpret_cast<std::uintptr_t>(owner) ||
-        material.flver_sha256 == core::sha256_digest{} ||
         owner == nullptr || return_address == nullptr)
         return;
 
@@ -2692,6 +2691,8 @@ void pmetal_env_source_selector_event(
             rva,raw_a,raw_b,beta))
         return;
 
+    // V395: native descriptor-owner/caller/source attest actor LightBank;
+    // FLVER/MTD/slot are not LightBank producer conditions.
     // Begin a model INSTANCE source transaction, independent of MTD/slot.
     pmetal_producer_state_begin(
         material,
@@ -2986,8 +2987,7 @@ bool pmetal_env_source_runtime::latest(
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
         !material.valid || !material.owner_tuple_exact ||
-        material.model_owner_instance == 0u ||
-        material.flver_sha256 == core::sha256_digest{}) {
+        material.model_owner_instance == 0u) {
         telemetry::hot_count(
             g_consumer_fail);
         return false;
