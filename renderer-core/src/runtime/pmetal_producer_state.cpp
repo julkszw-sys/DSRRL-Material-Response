@@ -368,6 +368,7 @@ bool pmetal_producer_state_latest(
     if (key == 0u) return false;
     auto &slot = sync_slot_for(key);
 
+#if !defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
     if (!slot.valid.load(
             std::memory_order_acquire) ||
         slot.instance_key.load(
@@ -375,7 +376,10 @@ bool pmetal_producer_state_latest(
         slot.epoch.load(
             std::memory_order_relaxed) != epoch)
         return false;
-
+#endif
+    // V398: an actor publisher may briefly set valid=false while holding
+    // the mutex. Do not observe that transient and flip a single frame to
+    // stock DSR. Serialize the complete snapshot read with the commit.
     std::lock_guard<std::mutex> lock(slot.mutex);
 
     if (!slot.valid.load(
