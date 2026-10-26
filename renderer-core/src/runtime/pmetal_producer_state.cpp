@@ -174,7 +174,7 @@ synchronized_slot &sync_slot_for(
 // A fixed capacity open-addressed map: collisions NEVER evict another actor.
 // If all slots are exhausted, fail-open without writing a foreign source.
 // The engine-owner lifecycle token itself remains an independent RE gap.
-synchronized_slot *sync_slot_for_actor(std::uint64_t key) noexcept
+synchronized_slot *sync_slot_for_actor(std::uint64_t key, bool create) noexcept
 {
     if (key == 0u) return nullptr;
     const auto mixed = key ^ (key >> 17u) ^ (key >> 37u);
@@ -184,6 +184,7 @@ synchronized_slot *sync_slot_for_actor(std::uint64_t key) noexcept
         auto &slot=g_sync_slots[(start+step)&(k_sync_slot_count-1u)];
         auto observed=slot.instance_key.load(std::memory_order_acquire);
         if (observed==key) return &slot;
+        if (observed==0u && !create) return nullptr;
         if (observed==0u &&
             slot.instance_key.compare_exchange_strong(
                 observed,key,std::memory_order_acq_rel,
@@ -248,7 +249,7 @@ void pmetal_producer_state_begin(
     next.sb = selector_b;
     std::memcpy(&next.beta_bits, &beta, sizeof(beta));
     next.valid = true;
-    auto *exact_slot = sync_slot_for_actor(key);
+    auto *exact_slot = sync_slot_for_actor(key,true);
     if (exact_slot == nullptr) return;
     auto &slot = *exact_slot;
     std::lock_guard<std::mutex> lock(slot.mutex);
@@ -282,7 +283,7 @@ void pmetal_producer_state_publish(
             g_record.valid = false;
             return;
         }
-        auto *exact_slot = sync_slot_for_actor(key);
+        auto *exact_slot = sync_slot_for_actor(key,false);
         if (exact_slot == nullptr) {
             g_record.valid = false;
             return;
@@ -405,7 +406,7 @@ bool pmetal_producer_state_latest(
     const auto key = model_key(material);
     if (key == 0u) return false;
 #if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
-    auto *exact_slot = sync_slot_for_actor(key);
+    auto *exact_slot = sync_slot_for_actor(key,false);
     if (exact_slot == nullptr) return false;
     auto &slot = *exact_slot;
 #else
@@ -451,7 +452,7 @@ bool pmetal_producer_state_actor_tracked(
     const auto key = model_key(material);
     if (key == 0u) return false;
 #if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
-    auto *exact_slot = sync_slot_for_actor(key);
+    auto *exact_slot = sync_slot_for_actor(key,false);
     if (exact_slot == nullptr) return false;
     auto &slot = *exact_slot;
 #else
