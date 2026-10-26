@@ -1164,6 +1164,8 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
     prepared.stable_envdiffuse_trace_valid = true;
     prepared.stable_envdiffuse_independent = true;
     prepared.stable_envdiffuse_source_serial = source.serial;
+    prepared.stable_envdiffuse_native_producer_sequence =
+        source.native_producer_sequence;
     prepared.stable_envdiffuse_bank = source.bank_signature_a;
     prepared.stable_envdiffuse_row = source.row_id_a;
     prepared.stable_envdiffuse_c86 = source.envdiffuse_a;
@@ -2650,6 +2652,8 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.stable_envdiffuse_trace_valid = true;
     prepared.stable_envdiffuse_independent = false;
     prepared.stable_envdiffuse_source_serial = source.serial;
+    prepared.stable_envdiffuse_native_producer_sequence =
+        source.native_producer_sequence;
     prepared.stable_envdiffuse_bank = source.bank_signature_a;
     prepared.stable_envdiffuse_row = source.row_id_a;
     prepared.stable_envdiffuse_c86 = source.envdiffuse_a;
