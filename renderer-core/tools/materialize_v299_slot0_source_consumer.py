@@ -80,12 +80,7 @@ s=insert_once(s,
     '#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"',
     '#include "dsrrl/runtime/pmetal_env_source_runtime.hpp"\n#if defined(DSRRL_V299_AUTHORED_SLOT0_OPERATOR)\n#include "dsrrl/runtime/v299_authored_slot0_operator_gate.hpp"\n#endif',
     "selector header")
-# V394 producer is model-wide and therefore subsumes V299's material-specific
-# source gate. V299 receiver/material operator gates above remain unchanged.
-if "void observe_model_lightbank_source(" in s and "model_identity.model_owner_instance" in s:
-    print("V299_SELECTOR_SOURCE_SUBSUMED_BY_V394_MODEL_INSTANCE=PASS")
-else:
-    s=insert_once(s,
+s=insert_once(s,
 '''        || v203_equipment::exact_spx_roughcloth_material(identity)
 #endif
 #endif

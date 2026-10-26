@@ -1217,6 +1217,43 @@ bool publish_exact_selector_identity(
             identity);
 #endif
 
+#if !defined(DSRRL_V394_MODEL_SOURCE1)
+    // Keep historical producer path in non-V394 builds for all original
+    // V299..V314 reproducible materializers. V394 uses the model-instance
+    // producer earlier in the selector and never executes this material path.
+    // Route 345 is necessary but not sufficient. The isolated source runtime
+    // retains exact semantic/raw-MTD validation before donor decode.
+    if (identity.route_index == 345u
+#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
+        || v203_equipment::exact_envspec36_material(identity)
+#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
+        || v203_equipment::exact_spx_roughcloth_material(identity)
+#endif
+#endif
+    ) {
+        const auto pmetal_begin =
+            profile != nullptr
+                ? selector_profile_begin(*profile)
+                : 0u;
+        {
+            dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::pmetal_selector);
+            pmetal_env_source_selector_event(
+                owner,
+                ret,
+                r14,
+                r15,
+                selector_stack,
+                identity);
+        }
+        if (profile != nullptr)
+            selector_profile_end_stage(
+                *profile,
+                pmetal_begin,
+                profile->pmetal_source_ticks);
+    }
+
+#endif
+
     telemetry::hot_count(
         g_exact_owner_ready);
     return true;
@@ -1354,9 +1391,11 @@ extern "C" void dsrrl_flver_selector_observer(
   telemetry::hot_count(
       g_selector_identity_cache_hits);
 
+#if defined(DSRRL_V394_MODEL_SOURCE1)
   observe_model_lightbank_source(
       owner,ret,r14,r15,selector_stack,
       cached_identity.flver_sha256);
+#endif
   if(publish_exact_selector_identity(
         owner,
         actual_material,
@@ -1442,9 +1481,11 @@ extern "C" void dsrrl_flver_selector_observer(
 
   // Source1 is produced even when a material has no PTDE MTD operator.
   // MTD still gates its own material response and receiver at draw time.
+#if defined(DSRRL_V394_MODEL_SOURCE1)
   observe_model_lightbank_source(
       owner,ret,r14,r15,selector_stack,
       observation.flver_sha256);
+#endif
 
   const auto owner_mtd_begin =
       selector_profile_begin(profile);
