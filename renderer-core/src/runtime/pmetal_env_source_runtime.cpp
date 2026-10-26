@@ -1933,6 +1933,9 @@ void publish_hook_source(
             std::memory_order_relaxed) +
         1u;
     next.serial = serial;
+    // Preserve the exact native producer event across Source1's later
+    // serial=selector_epoch remapping. Not an actor ownership claim.
+    next.native_producer_sequence = serial;
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     v383_native_lightbank_producer(source_a,source_b,selector_a,selector_b,
         row_a,row_b,serial,GetCurrentThreadId());
