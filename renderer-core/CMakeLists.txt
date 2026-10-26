@@ -630,6 +630,17 @@ target_link_libraries(dsrrl_v398_actor_selector_tests PRIVATE Threads::Threads)
 target_compile_features(dsrrl_v398_actor_selector_tests PRIVATE cxx_std_17)
 add_test(NAME dsrrl_v398_actor_selector_tests COMMAND dsrrl_v398_actor_selector_tests)
 
+add_executable(dsrrl_v399_certified_beta_tests
+    tests/v399_certified_endpoint_beta_tests.cpp
+    src/runtime/pmetal_producer_state.cpp)
+target_include_directories(dsrrl_v399_certified_beta_tests PRIVATE include)
+target_compile_definitions(dsrrl_v399_certified_beta_tests PRIVATE
+    DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE
+    DSRRL_V399_CERTIFIED_ENDPOINT_BETA_CONTINUITY)
+target_link_libraries(dsrrl_v399_certified_beta_tests PRIVATE Threads::Threads)
+target_compile_features(dsrrl_v399_certified_beta_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_v399_certified_beta_tests COMMAND dsrrl_v399_certified_beta_tests)
+
 add_executable(dsrrl_pointlight_ptde_source_tests tests/pointlight_ptde_source_tests.cpp)
 target_include_directories(dsrrl_pointlight_ptde_source_tests PRIVATE include)
 target_compile_features(dsrrl_pointlight_ptde_source_tests PRIVATE cxx_std_17)
