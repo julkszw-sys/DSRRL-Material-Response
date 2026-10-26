@@ -2839,6 +2839,39 @@ void pmetal_env_source_selector_event(
         return;
     }
 
+#if defined(DSRRL_V396_STRICT_NATIVE_SOURCE1)
+    // V396 operator-local provenance cut: decoding an FLVER selector is not
+    // proof the DSR native EnvSpec producer used it for this receiver.
+    // A Source1 record is authoritative ONLY after the retail packer has
+    // independently emitted the exact source base, selector endpoints and
+    // beta. Without this witness, leave the already-protected R43 Source2
+    // fallback untouched. Never substitute another row or alter intensity.
+    static std::atomic<std::uint64_t> native_miss{0u};
+    const auto misses=native_miss.fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    if (misses<=32u || (misses%4096u)==0u) {
+        char line[420]{};
+        std::snprintf(line,sizeof(line),
+            "[DSRRL V396 SOURCE1 NATIVE AUTH] "
+            "decision=REJECT_SOURCE1 missing_exact_native_packer=1 "
+            "raw_a=%u raw_b=%u selected_a=%d selected_b=%d "
+            "bank_source_a=%p bank_source_b=%p beta=%.8g "
+            "owner=%p owner_authenticated=1 "
+            "action=SOURCE2_UNCHANGED pixel=OPEN n=%llu",
+            static_cast<unsigned>(raw_a),
+            static_cast<unsigned>(raw_b),
+            static_cast<int>(endpoints.a),
+            static_cast<int>(endpoints.b),
+            source_a,source_b,
+            static_cast<double>(endpoints.beta),
+            owner,
+            static_cast<unsigned long long>(misses));
+        reshade::log::message(
+            reshade::log::level::warning,line);
+    }
+    return;
+#else // V396: preserve legacy fallback for older version reproduction.
+
     auto decode =
         [&](void *source,
             std::int16_t selector,
@@ -2956,6 +2989,7 @@ void pmetal_env_source_selector_event(
         endpoints.beta == 0.0f
             ? g_steady_seen
             : g_blend_seen);
+#endif // DSRRL_V396_STRICT_NATIVE_SOURCE1
 }
 
 bool pmetal_env_source_runtime::latest(
