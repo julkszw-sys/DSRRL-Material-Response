@@ -2519,6 +2519,18 @@ bool pmetal_env_source_runtime::install() noexcept
         true,
         std::memory_order_release);
 
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL V398 ACTOR SELECTOR] hook_active=1 "
+        "owner_key=EXACT_NATIVE_POINTER bucket=OPEN_ADDRESS_4096 "
+        "selector_key=NATIVE_SOURCE_A_B_FULL_SELECTOR_BETA "
+        "same_tuple=KEEP_ATTESTED changed_tuple=REVOKE "
+        "late_publication=REJECT in_flight_read=LOCKED "
+        "tracked_actor_unowned_source2=FAIL_OPEN_STOCK "
+        "owner_lifecycle_join=OPEN pixel=OPEN");
+#endif
+
     static std::atomic_bool
         r41_cache_scope_logged{false};
     if (!r41_cache_scope_logged.exchange(
