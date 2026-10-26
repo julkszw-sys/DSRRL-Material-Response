@@ -26,6 +26,10 @@ struct pmetal_envspec_source {
     std::uint32_t row_id_a = 0u;
     std::uint32_t row_id_b = 0u;
     std::uint64_t serial = 0u;
+    // Read-only native EnvSpec packer EVENT sequence, distinct from the
+    // Source1 selector epoch stored in serial. Zero means no native witness.
+    // This is not actor/draw ownership certification and never gates pixels.
+    std::uint64_t native_producer_sequence = 0u;
     // Runtime v2 semantic generation. This increments only when the exact
     // producer payload/material identity changes, so upload consumers can
     // skip redundant GPU writes without draw-time reclassification.
