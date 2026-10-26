@@ -5855,6 +5855,70 @@ void v230_rt_probe_once(
         source_kind,srv_mask,sampler_mask);
     reshade::log::message(reshade::log::level::warning,line);
 }
+
+void v388_envdiffuse_stable_issued(
+    const dsrrl::operators::material_response::material_identity &material,
+    const dsrrl::operators::material_response::decision &decision,
+    const dsrrl::runtime::prepared_pmetal_envspec_draw &prepared) noexcept
+{
+    if (!prepared.ready || !prepared.stable_envdiffuse_trace_valid ||
+        decision.receiver_id < 33u || decision.receiver_id > 35u)
+        return;
+    struct sample {
+        std::uint64_t key=0u;
+        ULONGLONG tick=0u;
+    };
+    static thread_local std::array<sample,256u> recent{};
+    std::uint64_t key=material.flver_identity_hash ^
+        material.semantic_name_hash ^ prepared.stable_envdiffuse_bank ^
+        (static_cast<std::uint64_t>(
+            prepared.stable_envdiffuse_row)<<32u) ^
+        (static_cast<std::uint64_t>(
+            prepared.stable_envdiffuse_probe)<<16u) ^
+        (static_cast<std::uint64_t>(
+            material.material_slot)<<8u) ^
+        static_cast<std::uint64_t>(decision.receiver_id);
+    for (unsigned i=0u;i<8u;++i)
+        key=(key^material.flver_sha256[i])*1099511628211ull;
+    const ULONGLONG now=GetTickCount64();
+    auto &slot=recent[static_cast<std::size_t>(key%recent.size())];
+    if (slot.key==key && now>=slot.tick && now-slot.tick<2000ull)
+        return;
+    slot={key,now};
+    constexpr char hex[]="0123456789abcdef";
+    char flver[65]{},mtd[65]{};
+    for(unsigned i=0;i<32u;++i) {
+        flver[i*2u]=hex[material.flver_sha256[i]>>4u];
+        flver[i*2u+1u]=hex[material.flver_sha256[i]&15u];
+        mtd[i*2u]=hex[material.raw_mtd_sha256[i]>>4u];
+        mtd[i*2u+1u]=hex[material.raw_mtd_sha256[i]&15u];
+    }
+    char line[1050]{};
+    std::snprintf(line,sizeof(line),
+        "[DSRRL V388 STABLE GPU JOIN] stage=indexed_issued "
+        "rx=%u route=%u slot=%u sem=%016llx flver_sha=%s mtd_sha=%s "
+        "path=%s kind=%u bank=%016llx row=%u serial=%llu "
+        "c86=%.9g,%.9g,%.9g diff_probe=%u "
+        "shader=%p b12=%p t11=%p "
+        "request_issued=1 source_to_draw=1 pixel=OPEN",
+        decision.receiver_id,material.route_index,material.material_slot,
+        static_cast<unsigned long long>(material.semantic_name_hash),
+        flver,mtd,
+        prepared.stable_envdiffuse_independent?"INDEPENDENT":"COMBINED",
+        static_cast<unsigned>(prepared.source_kind),
+        static_cast<unsigned long long>(prepared.stable_envdiffuse_bank),
+        prepared.stable_envdiffuse_row,
+        static_cast<unsigned long long>(
+            prepared.stable_envdiffuse_source_serial),
+        static_cast<double>(prepared.stable_envdiffuse_c86[0]),
+        static_cast<double>(prepared.stable_envdiffuse_c86[1]),
+        static_cast<double>(prepared.stable_envdiffuse_c86[2]),
+        prepared.stable_envdiffuse_probe,
+        static_cast<void*>(prepared.shader),
+        static_cast<void*>(prepared.b12),
+        static_cast<void*>(prepared.envdiffuse_resources.ptde_a));
+    reshade::log::message(reshade::log::level::warning,line);
+}
 #endif
 
 bool prepare_island_batch(
@@ -8050,6 +8114,11 @@ bool on_draw_indexed(
             issued ? "indexed_issued" : "indexed_failopen",
             decision.receiver_id,material.route_index,
             hemenvlerp_bound,&prepared.envspec);
+        // V388: join the *same prepared STABLE source* to its successful
+        // indexed transaction; unlike V230, not a one-time stage latch.
+        if(issued && !hemenvlerp_bound)
+            v388_envdiffuse_stable_issued(
+                material,decision,prepared.envspec);
     }
 #endif
 #if defined(DSRRL_V291_LERP_CUBEMAP_CENSUS)
