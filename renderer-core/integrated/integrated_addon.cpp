@@ -6587,6 +6587,71 @@ bool prepare_island_batch(
             "atomic_prepare_ready", material, decision,
             static_cast<std::uint32_t>(envspec_family));
 #endif
+#if defined(DSRRL_V391_QUELAAG_LOCAL_FAILOPEN)
+        // V391 scoped safety mitigation (NOT a PTDE-equivalence claim).
+        // Owner A/B: exact Quelaag second-bell STABLE EnvDiffuse ON makes
+        // armor black; OFF retains acceptable stock DSR pixels.
+        // V389: RX33 PS/b12/t11/s11 binding correct for BOTH row5/row0.
+        // Do not rewrite R43 LightBank, clamp energy or force a row. Refuse
+        // the *entire coupled* PTDE EnvSpec/EnvDiffuse material island for
+        // the attested Quelaag signature, restoring one native DSR draw.
+        // This avoids an EnvSpec-only hybrid and leaves independent systems.
+        // V388/V389 indexed events show these exact equipment FLVER/slot
+        // tuples; full SHA is required, not just semantic/route similarity.
+        const bool v391_exact_flver =
+            ((material.material_slot == 1u ||
+              material.material_slot == 3u) &&
+             dsrrl::operators::legacy_plan::hashing::matches_hex(
+                 material.flver_sha256,
+                 "f5b71ccc7b70cf5e753c35095e58f76ac7af9a214fe34fe59dcc6267c3cef62c")) ||
+            (material.material_slot == 1u &&
+             dsrrl::operators::legacy_plan::hashing::matches_hex(
+                 material.flver_sha256,
+                 "974efb33a88383f7ceda1a7de53cfaa6ad727a74d9bb6472df174eacf59e07e9")) ||
+            (material.material_slot == 0u &&
+             dsrrl::operators::legacy_plan::hashing::matches_hex(
+                 material.flver_sha256,
+                 "83248bb8acd5a0e17e01acfa5bc85d42dee71103f7fb2701ca4c7177587bc830"));
+        const bool v391_exact_quelaag =
+            !hemenvlerp_bound &&
+            prepared.batch.island_count == 0u &&
+            (receiver_id == 33u || receiver_id == 34u) &&
+            decision.receiver_id == receiver_id &&
+            material.route_index == 345u &&
+            material.material_slot_valid &&
+            v391_exact_flver &&
+            prepared.envspec.source_kind == 2u &&
+            prepared.envspec.stable_envdiffuse_trace_valid &&
+            !prepared.envspec.stable_envdiffuse_independent &&
+            prepared.envspec.stable_envdiffuse_bank ==
+                0xc9b879a8c5e624d0ull &&
+            (prepared.envspec.stable_envdiffuse_row == 0u ||
+             prepared.envspec.stable_envdiffuse_row == 5u) &&
+            prepared.envspec.stable_envdiffuse_probe == 188u &&
+            prepared.envspec.env_resources.probe_a == 188u &&
+            prepared.envspec.envdiffuse_resources.probe_a == 188u;
+        if (v391_exact_quelaag) {
+            static std::array<std::atomic_bool,2u> logged{};
+            const unsigned rx_index=receiver_id-33u;
+            if (!logged[rx_index].exchange(true, std::memory_order_relaxed)) {
+                char line[420]{};
+                std::snprintf(line,sizeof(line),
+                    "[DSRRL V391 QUELAAG LOCAL FAILOPEN] "
+                    "rx=%u route=345 slot=%u bank=c9b879a8c5e624d0 "
+                    "probe=188 row=%u action=STOCK_DSR "
+                    "envdiffuse_ptde_bridge=SKIPPED "
+                    "ptde_pixel=OPEN reason=OWNER_AB_BLACK_ARMOR",
+                    receiver_id,material.material_slot,
+                    prepared.envspec.stable_envdiffuse_row);
+                reshade::log::message(reshade::log::level::warning,line);
+            }
+            g_pmetal_envspec.release(prepared.envspec);
+            // No island requests have been appended. Returning false
+            // lets ReShade issue the untouched original DSR draw.
+            return false;
+        }
+#endif
+
         prepared.envspec_in_batch = true;
 
         if (dsrrl::runtime::append_island_draw_request(

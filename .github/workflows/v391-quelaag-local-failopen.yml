@@ -1,0 +1,68 @@
+name: V391 Quelaag Exact Scoped Fail-Open Single Addon
+on:
+  push:
+    branches: [agent/v391-quelaag-exact-envdiffuse-off-island]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Attest operator-local scope and unchanged V388/V389 source
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v388_stable_gpu_join.py
+          python3 - <<'PY'
+          from pathlib import Path
+          a=Path('renderer-core/integrated/integrated_addon.cpp').read_text()
+          b=Path('renderer-core/tools/build_v391_quelaag_local_failopen.ps1').read_text()
+          block=a[a.index('#if defined(DSRRL_V391_QUELAAG_LOCAL_FAILOPEN)'):a.index('        prepared.envspec_in_batch = true;',a.index('#if defined(DSRRL_V391_QUELAAG_LOCAL_FAILOPEN)'))]
+          for required in ['!hemenvlerp_bound','prepared.batch.island_count == 0u',
+                           'exact_pmetal_envspec','prepared.envspec.source_kind == 2u',
+                           '0xc9b879a8c5e624d0ull','stable_envdiffuse_probe == 188u',
+                           'envdiffuse_resources.probe_a == 188u',
+                           'g_pmetal_envspec.release(prepared.envspec);','return false;',
+                           'f5b71ccc7b70cf5e753c35095e58f76ac7af9a214fe34fe59dcc6267c3cef62c']:
+            if required!='exact_pmetal_envspec':assert required in block,required
+            else:assert required in a
+          assert block.count('flver_sha256')==3
+          assert block.count('matches_hex(')==3
+          assert '[DSRRL V391 QUELAAG LOCAL FAILOPEN]' in block
+          assert '/DDSRRL_V391_QUELAAG_LOCAL_FAILOPEN' in b
+          assert 'g_pmetal_env_source' not in block
+          assert 'PSSet' not in block and 'Map(' not in block
+          print('V391 exact scoped stock DSR fail-open static contract PASS')
+          PY
+  native-one-addon:
+    needs: static-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build exact V389-descendant integrated addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v391_quelaag_local_failopen.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify single PE and local failopen marker
+        shell: pwsh
+        run: |
+          $path='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $path)) { throw 'Missing addon' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE' }
+          $raw=[Text.Encoding]::ASCII.GetString($bytes)
+          foreach($marker in @('[DSRRL V391 QUELAAG LOCAL FAILOPEN]','[DSRRL V389 RX33 BOUND STATE]','[DSRRL V388 STABLE GPU JOIN]')) {
+            if (!$raw.Contains($marker)) { throw "Missing marker $marker" }
+          }
+          if ((Get-ChildItem 'out-v230-release' -Filter '*.addon64').Count -ne 1) { throw 'Expected ONE addon' }
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V391-Quelaag-Scoped-Stock-DSR-Only-Addon
+          path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error
