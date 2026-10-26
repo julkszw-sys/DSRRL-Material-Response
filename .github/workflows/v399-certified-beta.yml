@@ -1,0 +1,77 @@
+name: V399 Certified Beta Continuity One Addon
+on:
+  push:
+    branches: [agent/v399-certified-endpoint-beta-continuity]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  model-source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify producer model key and isolated MTD gate
+        run: |
+          python3 renderer-core/tools/test_v395_actor_source1_contract.py
+          python3 renderer-core/tools/test_v397_low_noise_source1.py
+          python3 renderer-core/tools/test_v398_actor_selector_contract.py
+          python3 renderer-core/tools/test_v399_certified_beta_contract.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('renderer-core')
+          s=(p/'src/runtime/pmetal_env_source_runtime.cpp').read_text()
+          b=(p/'tools/build_v230_production.ps1').read_text()
+          assert '/DDSRRL_V396_STRICT_NATIVE_SOURCE1' in b
+          f=s[s.index('void pmetal_env_source_selector_event('):s.index('bool pmetal_env_source_runtime::latest(')]
+          n=f.index('latest_hook_source_exact_selector(')
+          g=f.index('#if defined(DSRRL_V396_STRICT_NATIVE_SOURCE1)')
+          e=f.index('#else // V396:',g)
+          assert n<g<e
+          assert 'return;' in f[g:e] and 'pmetal_producer_state_publish(' not in f[g:e]
+          assert 'REJECT_SOURCE1' in f[g:e]
+          assert 'latest_hook_source(out)' in s
+          print('V396 NATIVE SOURCE1 AUTHORITY PASS')
+          PY
+  native-single-addon:
+    needs: model-source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build integrated V389 descendant
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Build real model and selector policy regression tests with assertions ON
+        shell: pwsh
+        run: |
+          # The addon uses renderer-core/integrated; tests belong to another root.
+          cmake -S renderer-core -B build-v399-tests -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'Configure tests failed' }
+          cmake --build build-v399-tests --config Debug --target dsrrl_pmetal_producer_state_tests dsrrl_pmetal_selector_policy_tests dsrrl_v398_actor_selector_tests dsrrl_v399_certified_beta_tests
+          if ($LASTEXITCODE -ne 0) { throw 'Compile tests failed' }
+          & ./build-v399-tests/Debug/dsrrl_pmetal_producer_state_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Model identity regression failed' }
+          & ./build-v399-tests/Debug/dsrrl_pmetal_selector_policy_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Historical synthetic selector regression failed' }
+          & ./build-v399-tests/Debug/dsrrl_v398_actor_selector_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Actor native selector transaction regression failed' }
+          & ./build-v399-tests/Debug/dsrrl_v399_certified_beta_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V399 certified beta continuity regression failed' }
+      - name: Confirm single native addon
+        shell: pwsh
+        run: |
+          $p='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $p)) { throw 'Addon missing' }
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $p))
+          if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) { throw 'Invalid PE' }
+          if ((Get-ChildItem 'out-v230-release' -Filter '*.addon64').Count -ne 1) { throw 'Expected one addon' }
+          Get-FileHash $p -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V399-Certified-Beta-Source1-One-Addon
+          path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error
