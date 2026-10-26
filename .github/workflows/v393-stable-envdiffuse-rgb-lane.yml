@@ -1,0 +1,55 @@
+name: V393 Exact Stable EnvDiffuse RGB Lane One Addon
+on:
+  push:
+    branches: [agent/v393-stable-envdiffuse-final-rgb-lane]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode actual DXBC token and test operator semantics
+        run: python3 renderer-core/tools/test_v393_stable_envdiffuse_rgb_lane.py
+      - name: Ensure no broad scene remapping or swizzle codegen drift
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('renderer-core/src/operators/env_spec/pmetal_rgba_materializer.cpp').read_text()
+          assert s.count('0x00100f96u,scratch_register') == 1
+          assert s.count('0x00100f96u,12u') == 1
+          assert 'row_id == 0' not in s
+          assert 'QUELAAG_LOCAL_FAILOPEN' not in Path('renderer-core/integrated/integrated_addon.cpp').read_text()
+          PY
+  native-one-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Source semantic test
+        shell: pwsh
+        run: python renderer-core/tools/test_v393_stable_envdiffuse_rgb_lane.py
+      - name: Build existing integrated V389 descendant
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Validate PE binary and single artifact
+        shell: pwsh
+        run: |
+          $path='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $path)) { throw 'Missing addon' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE' }
+          if ((Get-ChildItem 'out-v230-release' -Filter '*.addon64').Count -ne 1) { throw 'Expected ONE addon' }
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V393-STABLE-EnvDiffuse-RGB-Lane-One-Addon
+          path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error

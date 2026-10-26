@@ -1654,11 +1654,16 @@ bool apply_exact_ptde_envdiffuse_consumer(
             0x00100006u,scratch_register
         }};
 
+    // Fixed operand selection: filtered PTDE RGBA stores alpha at x and
+    // RGB at yzw. DIV writes r12.yzw, so the final RGB destination.xyz
+    // must consume swizzle YZWW (0x00100f96), not YYZW (0x00100e56).
+    // The old YYZ produced a channel-shifted EnvDiffuse contribution.
+    // This is a consumer-local 1-DWORD correction, not a scene/row filter.
     const std::array<std::uint32_t,8>
         apply_ptde_endpoint{{
             0x08000038u,
             0x00100072u,2u,
-            0x00100e56u,scratch_register,
+            0x00100f96u,scratch_register,
             0x00208246u,12u,3u
         }};
 
@@ -1872,11 +1877,16 @@ bool apply_exact_ptde_envdiffuse_consumer_isolated(
             0x00100006u,12u
         }};
 
+    // Fixed operand selection: filtered PTDE RGBA stores alpha at x and
+    // RGB at yzw. DIV writes r12.yzw, so the final RGB destination.xyz
+    // must consume swizzle YZWW (0x00100f96), not YYZW (0x00100e56).
+    // The old YYZ produced a channel-shifted EnvDiffuse contribution.
+    // This is a consumer-local 1-DWORD correction, not a scene/row filter.
     const std::array<std::uint32_t,8>
         apply_ptde_endpoint{{
             0x08000038u,
             0x00100072u,2u,
-            0x00100e56u,12u,
+            0x00100f96u,12u,
             0x00208246u,12u,3u
         }};
 
