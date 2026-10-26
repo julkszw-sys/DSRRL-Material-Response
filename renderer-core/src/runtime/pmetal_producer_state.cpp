@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cmath>
 #include <mutex>
 #include <type_traits>
 
@@ -25,9 +26,27 @@ constexpr std::size_t k_sync_slot_count = 256u;
 static_assert(
     (k_sync_slot_count & (k_sync_slot_count - 1u)) == 0u);
 
+struct selector_tuple {
+    void *a = nullptr;
+    void *b = nullptr;
+    std::int16_t sa = -1;
+    std::int16_t sb = -1;
+    std::uint32_t beta_bits = 0u;
+    bool valid = false;
+};
+struct pending_tuple {
+    std::uint64_t key = 0u;
+    std::uint64_t epoch = 0u;
+    std::uint64_t revision = 0u;
+    bool valid = false;
+};
+thread_local pending_tuple g_pending{};
+
 struct synchronized_slot {
     std::mutex mutex;
     producer_record record{};
+    selector_tuple selection{};
+    std::uint64_t selection_revision = 0u;
     std::atomic<std::uint64_t> instance_key{0u};
     std::atomic<std::uint64_t> payload_key{0u};
     std::atomic<std::uint64_t> epoch{0u};
@@ -149,6 +168,7 @@ synchronized_slot &sync_slot_for(
 
 void pmetal_producer_state_clear() noexcept
 {
+    g_pending = {};
     // TLS is selector-local. Cross-thread Source1 remains keyed to the
     // authenticated native model instance, not a per-material slot.
     g_record.valid = false;
@@ -175,11 +195,90 @@ void pmetal_producer_state_begin(
         std::memory_order_relaxed);
 }
 
+// Actor LightBank state is keyed by native owner; material slot and MTD
+// remain downstream receiver attributes. Identical selector opportunities
+// preserve the previous authenticated state; changes revoke it.
+void pmetal_producer_state_begin(
+    const operators::material_response::material_identity &material,
+    std::uint64_t epoch,
+    void *source_a, std::int16_t selector_a,
+    void *source_b, std::int16_t selector_b,
+    float beta) noexcept
+{
+    g_pending = {};
+    const auto key = model_key(material);
+    if (key == 0u || source_a == nullptr || source_b == nullptr ||
+        selector_a < 0 || selector_b < 0 || !std::isfinite(beta))
+        return;
+    selector_tuple next{};
+    next.a = source_a;
+    next.b = source_b;
+    next.sa = selector_a;
+    next.sb = selector_b;
+    std::memcpy(&next.beta_bits, &beta, sizeof(beta));
+    next.valid = true;
+    auto &slot = sync_slot_for(key);
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    const bool same = slot.selection.valid &&
+        slot.instance_key.load(std::memory_order_relaxed) == key &&
+        slot.epoch.load(std::memory_order_relaxed) == epoch &&
+        slot.selection.a == next.a && slot.selection.b == next.b &&
+        slot.selection.sa == next.sa && slot.selection.sb == next.sb &&
+        slot.selection.beta_bits == next.beta_bits;
+    if (!same) {
+        slot.valid.store(false, std::memory_order_release);
+        slot.selection = next;
+        ++slot.selection_revision;
+        slot.instance_key.store(key, std::memory_order_relaxed);
+        slot.epoch.store(epoch, std::memory_order_relaxed);
+    }
+    g_pending = {key, epoch, slot.selection_revision, true};
+}
+
 void pmetal_producer_state_publish(
     const operators::material_response::material_identity &material,
     const pmetal_envspec_source &source,
     std::uint64_t epoch) noexcept
 {
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    if (g_pending.valid) {
+        const auto ticket = g_pending;
+        g_pending = {};
+        const auto key = model_key(material);
+        if (key == 0u || key != ticket.key || epoch != ticket.epoch) {
+            g_record.valid = false;
+            return;
+        }
+        auto &slot = sync_slot_for(key);
+        std::lock_guard<std::mutex> lock(slot.mutex);
+        if (!slot.selection.valid || slot.selection_revision != ticket.revision ||
+            slot.instance_key.load(std::memory_order_relaxed) != key ||
+            slot.epoch.load(std::memory_order_relaxed) != epoch) {
+            g_record.valid = false;
+            return;
+        }
+        const bool unchanged = slot.record.valid &&
+            same_model(slot.record.material, material) &&
+            slot.record.epoch == epoch &&
+            same_source_payload(slot.record.source, source);
+        const auto generation = unchanged
+            ? slot.record.generation : slot.record.generation + 1u;
+        producer_record next{};
+        next.material = material;
+        next.source = source;
+        next.source.serial = epoch;
+        next.source.generation = generation;
+        next.epoch = epoch;
+        next.generation = generation;
+        next.valid = true;
+        slot.valid.store(false, std::memory_order_relaxed);
+        slot.record = next;
+        slot.payload_key.store(source_key(next.source), std::memory_order_relaxed);
+        slot.valid.store(true, std::memory_order_release);
+        g_record = next;
+        return;
+    }
+#endif
     // Preserve the previous TLS payload across clear(). That lets the selector
     // identify the overwhelmingly common unchanged case without a mutex.
     const bool unchanged =
@@ -248,6 +347,7 @@ bool pmetal_producer_state_latest(
 {
     out = {};
 
+#if !defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
     // Fast path: selector and draw share a thread.
     if (g_record.valid &&
         g_record.epoch == epoch &&
@@ -256,6 +356,7 @@ bool pmetal_producer_state_latest(
         return true;
     }
 
+#endif
     // Exact synchronized fallback for deferred/immediate command-list thread
     // handoff. The material key is only an index/filter; positive authority is
     // still the complete material identity under the slot mutex.
