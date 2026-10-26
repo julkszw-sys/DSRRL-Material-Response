@@ -68,6 +68,9 @@ struct prepared_pmetal_envspec_draw {
     bool stable_envdiffuse_trace_valid = false;
     bool stable_envdiffuse_independent = false;
     std::uint64_t stable_envdiffuse_source_serial = 0u;
+    // Native packer sequence, carried read-only to the issued draw.
+    // This does not prove a packer->actor join.
+    std::uint64_t stable_envdiffuse_native_producer_sequence = 0u;
     std::uint64_t stable_envdiffuse_bank = 0u;
     std::uint32_t stable_envdiffuse_row = 0u;
     std::array<float,3> stable_envdiffuse_c86{};
