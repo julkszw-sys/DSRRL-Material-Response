@@ -5864,6 +5864,61 @@ void v388_envdiffuse_stable_issued(
     if (!prepared.ready || !prepared.stable_envdiffuse_trace_valid ||
         decision.receiver_id < 33u || decision.receiver_id > 35u)
         return;
+    // V397: count every issued draw, but format full material/FLVER strings
+    // only for a few diagnostic samples. No effect on source selection,
+    // shader binding, transaction, operator equations or fail-open.
+    static std::atomic<std::uint64_t> issued_total{0u};
+    static std::atomic<std::uint64_t> source1_total{0u};
+    static std::atomic<std::uint64_t> source2_total{0u};
+    static std::atomic<std::uint64_t> source1_zero_c86_total{0u};
+    static std::atomic<std::uint64_t> source2_zero_c86_total{0u};
+    static std::atomic<std::uint64_t> source2_detail_budget{0u};
+    static std::atomic<std::uint64_t> zero_detail_budget{0u};
+    const auto nth=issued_total.fetch_add(
+        1u,std::memory_order_relaxed)+1u;
+    const bool is_source1=prepared.source_kind==1u;
+    const bool is_source2=prepared.source_kind==2u;
+    const bool is_zero_c86=
+        prepared.stable_envdiffuse_c86[0]==0.0f &&
+        prepared.stable_envdiffuse_c86[1]==0.0f &&
+        prepared.stable_envdiffuse_c86[2]==0.0f;
+    if(is_source1)
+        source1_total.fetch_add(1u,std::memory_order_relaxed);
+    if(is_source2)
+        source2_total.fetch_add(1u,std::memory_order_relaxed);
+    if(is_zero_c86 && is_source1)
+        source1_zero_c86_total.fetch_add(1u,std::memory_order_relaxed);
+    if(is_zero_c86 && is_source2)
+        source2_zero_c86_total.fetch_add(1u,std::memory_order_relaxed);
+    if(nth==1u || (nth%8192u)==0u) {
+        char counters[290]{};
+        std::snprintf(counters,sizeof(counters),
+            "[DSRRL V397 SOURCE COUNTERS] issued=%llu "
+            "source1=%llu source2=%llu "
+            "source1_zero_c86=%llu source2_zero_c86=%llu "
+            "zero_is_diagnostic_not_pixel=1 "
+            "selector_owner_join=OPEN",
+            static_cast<unsigned long long>(nth),
+            static_cast<unsigned long long>(
+                source1_total.load(std::memory_order_relaxed)),
+            static_cast<unsigned long long>(
+                source2_total.load(std::memory_order_relaxed)),
+            static_cast<unsigned long long>(
+                source1_zero_c86_total.load(std::memory_order_relaxed)),
+            static_cast<unsigned long long>(
+                source2_zero_c86_total.load(std::memory_order_relaxed)));
+        reshade::log::message(reshade::log::level::info,counters);
+    }
+    const bool initial=nth<=32u;
+    const bool pulse=(nth%8192u)==0u;
+    const bool first_source2=is_source2 &&
+        source2_detail_budget.fetch_add(
+            1u,std::memory_order_relaxed)<8u;
+    const bool first_zero_source1=is_source1 && is_zero_c86 &&
+        zero_detail_budget.fetch_add(
+            1u,std::memory_order_relaxed)<8u;
+    if(!initial && !pulse && !first_source2 && !first_zero_source1)
+        return;
     struct sample {
         std::uint64_t key=0u;
         ULONGLONG tick=0u;

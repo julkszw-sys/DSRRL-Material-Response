@@ -2,6 +2,7 @@
 // Read-only STABLE EnvDiffuse source-to-request witness.
 #include <Windows.h>
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <reshade.hpp>
 namespace dsrrl::runtime {
@@ -16,6 +17,13 @@ inline void v387_stable_cut(
  static thread_local std::array<slot,128> seen{};
  if(!p.ready || !p.envdiffuse_resources.ready || s.beta!=0.0f ||
     d.receiver_id<33u || d.receiver_id>35u)return;
+ // V397: diagnostic-only bounded sampling. Original per-FLVER/time
+ // dedup still churned 64,845 records in a two-minute V396 log.
+ // Preserve first-24 source observations and a logarithmic pulse,
+ // independent of material/receiver activity or rendering decisions.
+ static std::atomic<std::uint64_t> seen_calls{0u};
+ const auto nth=seen_calls.fetch_add(1u,std::memory_order_relaxed)+1u;
+ if(nth>24u && (nth & (nth-1u))!=0u)return;
  std::uint64_t key=m.flver_identity_hash ^ m.semantic_name_hash ^
   s.bank_signature_a ^ (std::uint64_t(s.row_id_a)<<32u) ^
   (std::uint64_t(m.material_slot)<<24u) ^
