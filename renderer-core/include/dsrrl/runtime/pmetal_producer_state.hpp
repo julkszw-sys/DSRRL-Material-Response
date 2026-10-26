@@ -18,6 +18,19 @@ void pmetal_producer_state_begin(
     const operators::material_response::material_identity &material,
     std::uint64_t epoch) noexcept;
 
+// Exact producer transaction (per actor, not per slot or MTD).
+void pmetal_producer_state_begin(
+    const operators::material_response::material_identity &material,
+    std::uint64_t epoch,
+    void *source_a, std::int16_t selector_a,
+    void *source_b, std::int16_t selector_b,
+    float beta) noexcept;
+
+// Distinguish a transient native-witness miss from an unseen actor.
+bool pmetal_producer_state_actor_tracked(
+    const operators::material_response::material_identity &material,
+    std::uint64_t epoch) noexcept;
+
 void pmetal_producer_state_publish(
     const operators::material_response::material_identity &material,
     const pmetal_envspec_source &source,
