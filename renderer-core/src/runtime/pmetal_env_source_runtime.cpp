@@ -3049,17 +3049,6 @@ bool pmetal_env_source_runtime::latest(
         return true;
     }
 
-#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
-    // Source1 claimant is known, but latest native producer tuple may be
-    // temporarily unavailable. Never replace this actor's LightBank with
-    // an unowned TLS/process-global last packer record. Fail-open only the
-    // LightBank-dependent operator; retain protected Source2 for actors
-    // without an authenticated native selector claim.
-    if (pmetal_producer_state_actor_tracked(material, epoch)) {
-        telemetry::hot_count(g_consumer_fail);
-        return false;
-    }
-#endif
     // Narrow fallback carrier recovered from the attested retail LightBank
     // single/blend packers (V13 semantic cut). It is consumed only by an
     // already-authenticated exact P_Metal draw. The retail packer is a state
@@ -3069,6 +3058,19 @@ bool pmetal_env_source_runtime::latest(
     // including for an already authenticated nonmetal EnvSpec consumer.
     // The upstream material/receiver admission still gates the draw.
     if (latest_hook_source(out)) {
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    // Source1 claimant is known, but latest native producer tuple may be
+    // temporarily unavailable. Never replace this actor's LightBank with
+    // an unowned TLS/process-global last packer record. Fail-open only the
+    // LightBank-dependent operator; retain protected Source2 for actors
+    // without an authenticated native selector claim.
+    if (pmetal_producer_state_actor_tracked(material, epoch)) {
+        telemetry::hot_count(g_consumer_fail);
+        out = {};
+        return false;
+    }
+#endif
+
         // V386: only a fresh, same-thread, full-FLVER/MTD/material joined
         // scalar selector mismatch fails open to stock DSR. Neither R43
         // latest_hook_source nor LightBank producers are changed.
