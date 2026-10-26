@@ -620,6 +620,16 @@ target_include_directories(dsrrl_pmetal_producer_state_tests PRIVATE include)
 target_compile_features(dsrrl_pmetal_producer_state_tests PRIVATE cxx_std_17)
 add_test(NAME dsrrl_pmetal_producer_state_tests COMMAND dsrrl_pmetal_producer_state_tests)
 
+add_executable(dsrrl_v398_actor_selector_tests
+    tests/v398_actor_selector_transaction_tests.cpp
+    src/runtime/pmetal_producer_state.cpp)
+target_include_directories(dsrrl_v398_actor_selector_tests PRIVATE include)
+target_compile_definitions(dsrrl_v398_actor_selector_tests PRIVATE
+    DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+target_link_libraries(dsrrl_v398_actor_selector_tests PRIVATE Threads::Threads)
+target_compile_features(dsrrl_v398_actor_selector_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_v398_actor_selector_tests COMMAND dsrrl_v398_actor_selector_tests)
+
 add_executable(dsrrl_pointlight_ptde_source_tests tests/pointlight_ptde_source_tests.cpp)
 target_include_directories(dsrrl_pointlight_ptde_source_tests PRIVATE include)
 target_compile_features(dsrrl_pointlight_ptde_source_tests PRIVATE cxx_std_17)
