@@ -2691,12 +2691,11 @@ void pmetal_env_source_selector_event(
             rva,raw_a,raw_b,beta))
         return;
 
-    // V395: native descriptor-owner/caller/source attest actor LightBank;
-    // FLVER/MTD/slot are not LightBank producer conditions.
-    // Begin a model INSTANCE source transaction, independent of MTD/slot.
-    pmetal_producer_state_begin(
-        material,
-        epoch);
+    // Legacy V397: eager invalidation caused Source1/Source2 flicker
+    // even when repeated native descriptor opportunities were unchanged.
+#if !defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    pmetal_producer_state_begin(material, epoch);
+#endif
 
     if (telemetry::effect_enabled())
         g_descriptor_gate_ok.store(
@@ -2788,6 +2787,14 @@ void pmetal_env_source_selector_event(
         source_b == nullptr)
         return;
 
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    // Authenticate the exact selector before requesting its Source1
+    // producer. Same tuple keeps the prior packer-certified snapshot;
+    // changed tuple invalidates synchronously across worker threads.
+    pmetal_producer_state_begin(
+        material, epoch, source_a, endpoints.a,
+        source_b, endpoints.b, endpoints.beta);
+#endif
     pmetal_envspec_source next{};
 
     // R41 producer-driven shadow join. The native EnvSpec single/blend packer
@@ -3042,6 +3049,17 @@ bool pmetal_env_source_runtime::latest(
         return true;
     }
 
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
+    // Source1 claimant is known, but latest native producer tuple may be
+    // temporarily unavailable. Never replace this actor's LightBank with
+    // an unowned TLS/process-global last packer record. Fail-open only the
+    // LightBank-dependent operator; retain protected Source2 for actors
+    // without an authenticated native selector claim.
+    if (pmetal_producer_state_actor_tracked(material, epoch)) {
+        telemetry::hot_count(g_consumer_fail);
+        return false;
+    }
+#endif
     // Narrow fallback carrier recovered from the attested retail LightBank
     // single/blend packers (V13 semantic cut). It is consumed only by an
     // already-authenticated exact P_Metal draw. The retail packer is a state
