@@ -2530,6 +2530,15 @@ bool pmetal_env_source_runtime::install() noexcept
         "tracked_actor_unowned_source2=FAIL_OPEN_STOCK "
         "owner_lifecycle_join=OPEN pixel=OPEN DSRRL BUILD_ID V398");
 #endif
+#if defined(DSRRL_V399_CERTIFIED_ENDPOINT_BETA_CONTINUITY)
+    reshade::log::message(
+        reshade::log::level::info,
+        "[DSRRL V399 CERTIFIED BETA] same_actor_same_native_A_B="
+        "REUSE_CERTIFIED_ENDPOINTS beta_only=UPDATE_NO_SOURCE2 "
+        "changed_endpoint=REVOKE no_gain=1 no_row_filter=1 "
+        "unowned_R43=UNCHANGED producer_owner_join=OPEN pixel=OPEN "
+        "DSRRL BUILD_ID V399");
+#endif
 
     static std::atomic_bool
         r41_cache_scope_logged{false};
