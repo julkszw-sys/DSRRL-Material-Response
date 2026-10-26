@@ -12,7 +12,14 @@ descriptor = selector.index("if (descriptor_owner != owner ||")
 begin = selector.index("pmetal_producer_state_begin(")
 publish = selector.index("pmetal_producer_state_publish(")
 assert parent < descriptor < begin < publish
-assert selector.count("pmetal_producer_state_begin(") == 1
+if 'DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE' in (root/'tools/build_v230_production.ps1').read_text():
+    assert selector.count("pmetal_producer_state_begin(") == 2
+    assert "#if !defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)" in selector
+    assert "source_a, endpoints.a" in selector
+    assert selector.index("source_a, endpoints.a") < publish
+    assert "pmetal_producer_state_actor_tracked(material, epoch)" in src
+else:
+    assert selector.count("pmetal_producer_state_begin(") == 1
 assert "pmetal_producer_state_clear();" in selector[:parent]
 assert "pmetal_producer_state_begin(" in selector[descriptor:]
 assert "latest_hook_source_exact_selector(" in selector
