@@ -794,91 +794,6 @@ bool draw_state_transaction_runtime::begin(
             &sampler);
     }
 
-    // V389: synchronous D3D11 *binding* readback after apply, before draw.
-    // Not a readback of GPU CB contents or output pixels.
-    if (mutation.v389_exact_rx33 && mutation.v389_probe == 188u) {
-        static thread_local std::array<std::uint64_t,2> counts{};
-        const unsigned ix=mutation.v389_row==0u?0u:1u;
-        const auto n=++counts[ix];
-        if (n<=16u || (n&(n-1u))==0u) {
-            ID3D11PixelShader *ps=nullptr;
-            ID3D11ClassInstance *classes[1]{};
-            UINT class_count=1u;
-            ctx->PSGetShader(&ps,classes,&class_count);
-            if(classes[0])classes[0]->Release();
-            ID3D11Buffer *cb=nullptr;
-            ID3D11ShaderResourceView *srv=nullptr;
-            ID3D11SamplerState *sampler=nullptr;
-            ctx->PSGetConstantBuffers(12u,1u,&cb);
-            ctx->PSGetShaderResources(11u,1u,&srv);
-            ctx->PSGetSamplers(11u,1u,&sampler);
-            ID3D11Buffer *expected_cb=nullptr;
-            ID3D11ShaderResourceView *expected_srv=nullptr;
-            ID3D11SamplerState *expected_sampler=nullptr;
-            for(std::uint32_t i=0u;i<mutation.constant_buffer_count;++i)
-                if(mutation.constant_buffers[i].slot==12u)
-                    expected_cb=mutation.constant_buffers[i].buffer;
-            for(std::uint32_t i=0u;i<mutation.srv_count;++i)
-                if(mutation.srvs[i].slot==11u)
-                    expected_srv=mutation.srvs[i].srv;
-            for(std::uint32_t i=0u;i<mutation.sampler_count;++i)
-                if(mutation.samplers[i].slot==11u)
-                    expected_sampler=mutation.samplers[i].sampler;
-            D3D11_BUFFER_DESC cb_desc{};
-            if(cb)cb->GetDesc(&cb_desc);
-            D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc{};
-            if(srv)srv->GetDesc(&srv_desc);
-            D3D11_SAMPLER_DESC sampler_desc{};
-            if(sampler)sampler->GetDesc(&sampler_desc);
-            std::uint32_t bits[3]{};
-            std::memcpy(bits,mutation.v389_c86.data(),sizeof(bits));
-            const bool cpu_match=mutation.v389_tail_valid &&
-                 mutation.v389_tail_bits[0]==bits[0] &&
-                 mutation.v389_tail_bits[1]==bits[1] &&
-                 mutation.v389_tail_bits[2]==bits[2];
-            char line[1400]{};
-            std::snprintf(line,sizeof(line),
-                "[DSRRL V389 RX33 BOUND STATE] stage=before_indexed "
-                "sample=%llu row=%u serial=%llu probe=%u "
-                "c86=%.9g,%.9g,%.9g "
-                "tail=%08x,%08x,%08x,%08x cpu_match=%u tail_valid=%u "
-                "cb_reused=%u context=%p deferred=%u "
-                "ps=%p expect_ps=%p ps_match=%u "
-                "cb12=%p expect_cb12=%p cb_match=%u cb_bytes=%u "
-                "t11=%p expect_t11=%p t11_match=%u srv_format=%u srv_dimension=%u "
-                "s11=%p expect_s11=%p s11_match=%u sampler_filter=%u "
-                "gpu_cb_bytes=UNREAD pixel=OPEN",
-                static_cast<unsigned long long>(n),
-                mutation.v389_row,
-                static_cast<unsigned long long>(mutation.v389_serial),
-                mutation.v389_probe,
-                static_cast<double>(mutation.v389_c86[0]),
-                static_cast<double>(mutation.v389_c86[1]),
-                static_cast<double>(mutation.v389_c86[2]),
-                mutation.v389_tail_bits[0],mutation.v389_tail_bits[1],
-                mutation.v389_tail_bits[2],mutation.v389_tail_bits[3],
-                cpu_match?1u:0u,mutation.v389_tail_valid?1u:0u,
-                mutation.v389_cb_reused?1u:0u,static_cast<void*>(ctx),
-                ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED?1u:0u,
-                static_cast<void*>(ps),static_cast<void*>(mutation.pixel_shader),
-                ps && ps==mutation.pixel_shader?1u:0u,
-                static_cast<void*>(cb),static_cast<void*>(expected_cb),
-                cb && cb==expected_cb?1u:0u,cb_desc.ByteWidth,
-                static_cast<void*>(srv),static_cast<void*>(expected_srv),
-                srv && srv==expected_srv?1u:0u,
-                static_cast<unsigned>(srv_desc.Format),
-                static_cast<unsigned>(srv_desc.ViewDimension),
-                static_cast<void*>(sampler),static_cast<void*>(expected_sampler),
-                sampler && sampler==expected_sampler?1u:0u,
-                static_cast<unsigned>(sampler_desc.Filter));
-            reshade::log::message(reshade::log::level::warning,line);
-            if(ps)ps->Release();
-            if(cb)cb->Release();
-            if(srv)srv->Release();
-            if(sampler)sampler->Release();
-        }
-    }
-
     bool bound = true;
 
     if (state.verify_native_readback) {
@@ -974,6 +889,91 @@ bool draw_state_transaction_runtime::begin(
             quarantined_.store(true);
         telemetry::hot_count(begin_fail_);
         return false;
+    }
+
+    // V389: binding readback AFTER validation, BEFORE the indexed draw.
+    // Not a readback of GPU CB contents or output pixels.
+    if (mutation.v389_exact_rx33 && mutation.v389_probe == 188u) {
+        static thread_local std::array<std::uint64_t,2> counts{};
+        const unsigned ix=mutation.v389_row==0u?0u:1u;
+        const auto n=++counts[ix];
+        if (n<=16u || (n&(n-1u))==0u) {
+            ID3D11PixelShader *ps=nullptr;
+            ID3D11ClassInstance *classes[1]{};
+            UINT class_count=1u;
+            ctx->PSGetShader(&ps,classes,&class_count);
+            if(classes[0])classes[0]->Release();
+            ID3D11Buffer *cb=nullptr;
+            ID3D11ShaderResourceView *srv=nullptr;
+            ID3D11SamplerState *sampler=nullptr;
+            ctx->PSGetConstantBuffers(12u,1u,&cb);
+            ctx->PSGetShaderResources(11u,1u,&srv);
+            ctx->PSGetSamplers(11u,1u,&sampler);
+            ID3D11Buffer *expected_cb=nullptr;
+            ID3D11ShaderResourceView *expected_srv=nullptr;
+            ID3D11SamplerState *expected_sampler=nullptr;
+            for(std::uint32_t i=0u;i<mutation.constant_buffer_count;++i)
+                if(mutation.constant_buffers[i].slot==12u)
+                    expected_cb=mutation.constant_buffers[i].buffer;
+            for(std::uint32_t i=0u;i<mutation.srv_count;++i)
+                if(mutation.srvs[i].slot==11u)
+                    expected_srv=mutation.srvs[i].srv;
+            for(std::uint32_t i=0u;i<mutation.sampler_count;++i)
+                if(mutation.samplers[i].slot==11u)
+                    expected_sampler=mutation.samplers[i].sampler;
+            D3D11_BUFFER_DESC cb_desc{};
+            if(cb)cb->GetDesc(&cb_desc);
+            D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc{};
+            if(srv)srv->GetDesc(&srv_desc);
+            D3D11_SAMPLER_DESC sampler_desc{};
+            if(sampler)sampler->GetDesc(&sampler_desc);
+            std::uint32_t bits[3]{};
+            std::memcpy(bits,mutation.v389_c86.data(),sizeof(bits));
+            const bool cpu_match=mutation.v389_tail_valid &&
+                 mutation.v389_tail_bits[0]==bits[0] &&
+                 mutation.v389_tail_bits[1]==bits[1] &&
+                 mutation.v389_tail_bits[2]==bits[2];
+            char line[1400]{};
+            std::snprintf(line,sizeof(line),
+                "[DSRRL V389 RX33 BOUND STATE] stage=before_indexed "
+                "sample=%llu row=%u serial=%llu probe=%u "
+                "c86=%.9g,%.9g,%.9g "
+                "tail=%08x,%08x,%08x,%08x cpu_match=%u tail_valid=%u "
+                "cb_reused=%u context=%p deferred=%u "
+                "ps=%p expect_ps=%p ps_match=%u "
+                "cb12=%p expect_cb12=%p cb_match=%u cb_bytes=%u "
+                "t11=%p expect_t11=%p t11_match=%u srv_format=%u srv_dimension=%u "
+                "s11=%p expect_s11=%p s11_match=%u sampler_filter=%u "
+                "gpu_cb_bytes=UNREAD pixel=OPEN",
+                static_cast<unsigned long long>(n),
+                mutation.v389_row,
+                static_cast<unsigned long long>(mutation.v389_serial),
+                mutation.v389_probe,
+                static_cast<double>(mutation.v389_c86[0]),
+                static_cast<double>(mutation.v389_c86[1]),
+                static_cast<double>(mutation.v389_c86[2]),
+                mutation.v389_tail_bits[0],mutation.v389_tail_bits[1],
+                mutation.v389_tail_bits[2],mutation.v389_tail_bits[3],
+                cpu_match?1u:0u,mutation.v389_tail_valid?1u:0u,
+                mutation.v389_cb_reused?1u:0u,static_cast<void*>(ctx),
+                ctx->GetType()==D3D11_DEVICE_CONTEXT_DEFERRED?1u:0u,
+                static_cast<void*>(ps),static_cast<void*>(mutation.pixel_shader),
+                ps && ps==mutation.pixel_shader?1u:0u,
+                static_cast<void*>(cb),static_cast<void*>(expected_cb),
+                cb && cb==expected_cb?1u:0u,cb_desc.ByteWidth,
+                static_cast<void*>(srv),static_cast<void*>(expected_srv),
+                srv && srv==expected_srv?1u:0u,
+                static_cast<unsigned>(srv_desc.Format),
+                static_cast<unsigned>(srv_desc.ViewDimension),
+                static_cast<void*>(sampler),static_cast<void*>(expected_sampler),
+                sampler && sampler==expected_sampler?1u:0u,
+                static_cast<unsigned>(sampler_desc.Filter));
+            reshade::log::message(reshade::log::level::warning,line);
+            if(ps)ps->Release();
+            if(cb)cb->Release();
+            if(srv)srv->Release();
+            if(sampler)sampler->Release();
+        }
     }
 
     telemetry::hot_count(begin_ok_);
