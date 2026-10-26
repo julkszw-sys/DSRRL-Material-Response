@@ -85,6 +85,33 @@ int main() {
     old_writer.join();
     assert(pmetal_producer_state_latest(actor,100u,out));
     assert(out.row_id_a==3u);
+    // Reproduce a real 4096-bucket collision: both aligned owner pointers
+    // index bucket 72, but must keep separate immutable LightBank states.
+    auto collide_a=actor, collide_b=actor;
+    collide_a.model_owner_instance=0x21900080u;
+    collide_b.model_owner_instance=0x21901080u;
+    auto row_a=light,row_b=light;
+    row_a.row_id_a=4u;row_a.row_id_b=4u;
+    row_b.row_id_a=5u;row_b.row_id_b=5u;
+    pmetal_producer_state_begin(collide_a,100u,
+        reinterpret_cast<void*>(0x12340u),1284,
+        reinterpret_cast<void*>(0x12340u),1284,0.0f);
+    pmetal_producer_state_publish(collide_a,row_a,100u);
+    pmetal_producer_state_begin(collide_b,100u,
+        reinterpret_cast<void*>(0x12340u),1285,
+        reinterpret_cast<void*>(0x12340u),1285,0.0f);
+    pmetal_producer_state_publish(collide_b,row_b,100u);
+    pmetal_producer_state_clear();
+    assert(pmetal_producer_state_latest(collide_a,100u,out));
+    assert(out.row_id_a==4u);
+    assert(pmetal_producer_state_latest(collide_b,100u,out));
+    assert(out.row_id_a==5u);
+    // An unobserved consumer must not occupy a cache entry.
+    auto unobserved=actor;
+    unobserved.model_owner_instance=0x21903080u;
+    assert(!pmetal_producer_state_latest(unobserved,100u,out));
+    assert(!pmetal_producer_state_actor_tracked(unobserved,100u));
+
     // New source epoch fails open rather than serving older actor state.
     assert(!pmetal_producer_state_latest(actor,101u,out));
     assert(!pmetal_producer_state_actor_tracked(actor,101u));
