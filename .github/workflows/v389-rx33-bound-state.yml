@@ -1,0 +1,62 @@
+name: V389 RX33 Exact Bound-State One Addon
+on:
+  push:
+    branches:
+      - agent/v389-rx33-exact-bound-state-20261026
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact RX33 witness and V388 contracts
+        shell: bash
+        run: |
+          python3 renderer-core/tools/test_v388_stable_gpu_join.py
+          python3 - <<'PY'
+          from pathlib import Path
+          i=Path("renderer-core/integrated/integrated_addon.cpp").read_text()
+          d=Path("renderer-core/src/runtime/draw_state_transaction.cpp").read_text()
+          s=Path("renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp").read_text()
+          assert i.count("m.v389_exact_rx33=true;")==1
+          assert i.count("const bool direct_current_native =")==2
+          assert "stage=before_indexed" in d
+          assert "gpu_cb_bytes=UNREAD pixel=OPEN" in d
+          assert "created_ps=%p" in s
+          assert "return hex[64]" in i
+          assert "latest_hook_source" not in d
+          print("V389 diagnostic source contract PASS")
+          PY
+  native-one-addon:
+    runs-on: windows-latest
+    needs: static-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build original V388-descendant integrated addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Verify single Windows addon and V389 marker
+        shell: pwsh
+        run: |
+          $path='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $path)) { throw 'Missing addon' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $path))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE' }
+          $raw=[Text.Encoding]::ASCII.GetString($bytes)
+          foreach($marker in @('[DSRRL V389 RX33 BOUND STATE]', 'gpu_cb_bytes=UNREAD pixel=OPEN', 'created_ps=%p')) {
+            if (!$raw.Contains($marker)) { throw "Missing marker $marker" }
+          }
+          if ((Get-ChildItem 'out-v230-release' -Filter '*.addon64').Count -ne 1) { throw 'Not one addon' }
+          Get-FileHash $path -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V389-RX33-BOUND-STATE-ONE-ADDON
+          path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
+          if-no-files-found: error

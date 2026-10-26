@@ -72,6 +72,9 @@ struct prepared_pmetal_envspec_draw {
     std::uint32_t stable_envdiffuse_row = 0u;
     std::array<float,3> stable_envdiffuse_c86{};
     std::uint16_t stable_envdiffuse_probe = 0u;
+    std::array<std::uint32_t,4> v389_tail_bits{};
+    bool v389_tail_valid = false;
+    bool v389_cb_reused = false;
 
     bool ready = false;
 };

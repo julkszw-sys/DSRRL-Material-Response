@@ -8067,6 +8067,48 @@ bool on_draw_indexed(
         return false;
     }
 
+    // V389 indexed STABLE-only exact material witness; no state changes.
+    if (!hemenvlerp_bound && receiver_id == 33u &&
+        decision.receiver_id == 33u &&
+        material.route_index == 345u && material.material_slot == 1u &&
+        material.semantic_name_hash == 0xfd72a0409ae13e45ull &&
+        prepared.envspec_in_batch &&
+        prepared.envspec.stable_envdiffuse_trace_valid &&
+        !prepared.envspec.stable_envdiffuse_independent &&
+        prepared.envspec.stable_envdiffuse_probe == 188u &&
+        (prepared.envspec.stable_envdiffuse_row == 0u ||
+         prepared.envspec.stable_envdiffuse_row == 5u)) {
+        const auto digest_matches=[](const auto &actual,
+                                     const char *hex) noexcept {
+            for (unsigned i=0; i<32u; ++i) {
+                auto nibble=[](char c) noexcept -> int {
+                    if(c>='0' && c<='9')return c-'0';
+                    if(c>='a' && c<='f')return c-'a'+10;
+                    return -1;
+                };
+                const int hi=nibble(hex[i*2u]),lo=nibble(hex[i*2u+1u]);
+                if(hi<0 || lo<0 ||
+                   actual[i]!=static_cast<std::uint8_t>((hi<<4)|lo))
+                    return false;
+            }
+            return hex[64]=='\0';
+        };
+        if (digest_matches(material.flver_sha256,
+                "f5b71ccc7b70cf5e753c35095e58f76ac7af9a214fe34fe59dcc6267c3cef62c") &&
+            digest_matches(material.raw_mtd_sha256,
+                "ece70f36bd2517d28c8495e276cea537f8b519d6bed981788e79a409ffbf763b")) {
+            auto &m=prepared.batch.mutation;
+            m.v389_exact_rx33=true;
+            m.v389_row=prepared.envspec.stable_envdiffuse_row;
+            m.v389_serial=prepared.envspec.stable_envdiffuse_source_serial;
+            m.v389_probe=prepared.envspec.stable_envdiffuse_probe;
+            m.v389_c86=prepared.envspec.stable_envdiffuse_c86;
+            m.v389_tail_bits=prepared.envspec.v389_tail_bits;
+            m.v389_tail_valid=prepared.envspec.v389_tail_valid;
+            m.v389_cb_reused=prepared.envspec.v389_cb_reused;
+        }
+    }
+
     const bool direct_current_native =
         k_pmetal_direct_current_native_dispatch &&
         (prepared.envspec_in_batch ||

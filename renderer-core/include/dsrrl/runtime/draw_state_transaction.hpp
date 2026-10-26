@@ -77,6 +77,15 @@ struct draw_tx_mutation {
     // R30: exact clustered PointLight transactions are synchronous inside
     // one add-on draw callback and may use the lock-free local core path.
     bool synchronous_core_transaction = false;
+    // V389: non-authoritative RX33 exact-draw witness, never modifies routing.
+    bool v389_exact_rx33 = false;
+    std::uint32_t v389_row = 0;
+    std::uint64_t v389_serial = 0;
+    std::uint16_t v389_probe = 0;
+    std::array<float,3> v389_c86{};
+    std::array<std::uint32_t,4> v389_tail_bits{};
+    bool v389_tail_valid = false;
+    bool v389_cb_reused = false;
 };
 
 enum class draw_tx_result : std::uint8_t {

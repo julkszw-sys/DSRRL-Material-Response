@@ -47,7 +47,8 @@ void log_final_pmetal_shader_digest(
     const char *family,
     std::uint32_t receiver,
     const hashing::sha256_digest &digest,
-    std::size_t byte_count) noexcept
+    std::size_t byte_count,
+    ID3D11PixelShader *created_shader) noexcept
 {
     constexpr char alphabet[] = "0123456789abcdef";
     char hex[65]{};
@@ -55,14 +56,12 @@ void log_final_pmetal_shader_digest(
         hex[i * 2u] = alphabet[digest[i] >> 4u];
         hex[i * 2u + 1u] = alphabet[digest[i] & 0x0fu];
     }
-    char line[256]{};
+    char line[320]{};
     std::snprintf(
         line, sizeof(line),
-        "[DSRRL PS PAYLOAD AUTHORITY] family=%s rx=%u bytes=%zu final_dxbc_sha256=%s created=1 pixel_pass=0",
-        family,
-        static_cast<unsigned>(receiver),
-        byte_count,
-        hex);
+        "[DSRRL PS PAYLOAD AUTHORITY] family=%s rx=%u bytes=%zu final_dxbc_sha256=%s created_ps=%p created=1 pixel_pass=0",
+        family, static_cast<unsigned>(receiver),
+        byte_count, hex, static_cast<void *>(created_shader));
     reshade::log::message(
         reshade::log::level::warning, line);
 }
@@ -731,7 +730,7 @@ register_replacement(
         dxbc_size;
     log_final_pmetal_shader_digest(
         "StableHemEnv", outcome.receiver_id,
-        payload_sha256, dxbc_size);
+        payload_sha256, dxbc_size, shader);
 
     ++replacement_register_ok_;
     return true;
@@ -885,7 +884,7 @@ register_lerp_replacement(
         dxbc_size;
     log_final_pmetal_shader_digest(
         "HemEnvLerp", outcome.semantic_receiver_id,
-        payload_sha256, dxbc_size);
+        payload_sha256, dxbc_size, shader);
 #if defined(DSRRL_V345_UNIFIED_HEMENVLERP)
     char log[256]{};
     std::snprintf(log,sizeof(log),
@@ -2645,6 +2644,9 @@ bool pmetal_envspec_draw_runtime::prepare(
     prepared.ready = true;
     if (family == pmetal_envspec_receiver_family::stable_hemenv &&
         prepared.envdiffuse_resources.ready) {
+    std::memcpy(prepared.v389_tail_bits.data(), &payload[3], 16u);
+    prepared.v389_tail_valid = true;
+    prepared.v389_cb_reused = !upload_required;
     prepared.stable_envdiffuse_trace_valid = true;
     prepared.stable_envdiffuse_independent = false;
     prepared.stable_envdiffuse_source_serial = source.serial;
