@@ -5897,7 +5897,7 @@ void v388_envdiffuse_stable_issued(
             "source1=%llu source2=%llu "
             "source1_zero_c86=%llu source2_zero_c86=%llu "
             "zero_is_diagnostic_not_pixel=1 "
-            "selector_owner_join=OPEN",
+            "selector_owner_join=OPEN source1_serial_is_epoch=1",
             static_cast<unsigned long long>(nth),
             static_cast<unsigned long long>(
                 source1_total.load(std::memory_order_relaxed)),
@@ -5953,6 +5953,7 @@ void v388_envdiffuse_stable_issued(
         "[DSRRL V388 STABLE GPU JOIN] stage=indexed_issued "
         "rx=%u route=%u slot=%u sem=%016llx flver_sha=%s mtd_sha=%s "
         "path=%s kind=%u bank=%016llx row=%u serial=%llu "
+        "actor_owner=%p owner_tuple_exact=%u "
         "c86=%.9g,%.9g,%.9g diff_probe=%u "
         "shader=%p b12=%p t11=%p "
         "request_issued=1 source_to_draw=1 pixel=OPEN",
@@ -5965,6 +5966,8 @@ void v388_envdiffuse_stable_issued(
         prepared.stable_envdiffuse_row,
         static_cast<unsigned long long>(
             prepared.stable_envdiffuse_source_serial),
+        reinterpret_cast<void*>(material.model_owner_instance),
+        material.owner_tuple_exact ? 1u : 0u,
         static_cast<double>(prepared.stable_envdiffuse_c86[0]),
         static_cast<double>(prepared.stable_envdiffuse_c86[1]),
         static_cast<double>(prepared.stable_envdiffuse_c86[2]),
