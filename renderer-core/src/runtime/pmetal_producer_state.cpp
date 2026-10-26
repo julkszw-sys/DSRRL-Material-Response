@@ -254,13 +254,41 @@ void pmetal_producer_state_begin(
     if (exact_slot == nullptr) return;
     auto &slot = *exact_slot;
     std::lock_guard<std::mutex> lock(slot.mutex);
-    const bool same = slot.selection.valid &&
+    const bool endpoints_same = slot.selection.valid &&
         slot.instance_key.load(std::memory_order_relaxed) == key &&
         slot.epoch.load(std::memory_order_relaxed) == epoch &&
         slot.selection.a == next.a && slot.selection.b == next.b &&
-        slot.selection.sa == next.sa && slot.selection.sb == next.sb &&
+        slot.selection.sa == next.sa && slot.selection.sb == next.sb;
+    const bool same = endpoints_same &&
         slot.selection.beta_bits == next.beta_bits;
     if (!same) {
+#if defined(DSRRL_V399_CERTIFIED_ENDPOINT_BETA_CONTINUITY)
+        // PTDE LightBank carries independently selected A and B endpoints,
+        // while beta is a separate semantic input for their consumer.
+        // Once BOTH endpoints were witnessed for THIS ACTOR, changing beta
+        // alone cannot invalidate their identity. Rebind only this scalar;
+        // never re-decode an unowned R43 donor or keep a changed endpoint.
+        // Zero RGB and genuine row0 remain legal. No temporal smoothing.
+        const bool reuse_certified_endpoints =
+            endpoints_same && slot.record.valid &&
+            slot.record.epoch == epoch &&
+            same_model(slot.record.material, material) &&
+            slot.valid.load(std::memory_order_relaxed) &&
+            slot.record.source.row_id_a ==
+                static_cast<std::uint32_t>(selector_a & 0xff) &&
+            slot.record.source.row_id_b ==
+                static_cast<std::uint32_t>(selector_b & 0xff);
+        if (reuse_certified_endpoints) {
+            slot.record.source.beta = beta;
+            slot.record.source.generation = ++slot.record.generation;
+            slot.payload_key.store(source_key(slot.record.source),
+                std::memory_order_relaxed);
+            slot.selection = next;
+            ++slot.selection_revision;
+            g_pending = {key,epoch,slot.selection_revision,true};
+            return;
+        }
+#endif
         slot.valid.store(false, std::memory_order_release);
         slot.selection = next;
         ++slot.selection_revision;
