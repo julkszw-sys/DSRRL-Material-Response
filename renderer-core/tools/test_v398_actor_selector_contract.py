@@ -13,7 +13,7 @@ assert 'pmetal_producer_state_actor_tracked' in s
 assert '#if !defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)' in s
 assert 'pmetal_producer_state_begin(\n        material, epoch, source_a' in r
 assert 'pmetal_producer_state_actor_tracked(material, epoch)' in r
-assert r.index('pmetal_producer_state_actor_tracked(material, epoch)') < r.index('if (latest_hook_source(out))')
+assert r.index('pmetal_producer_state_actor_tracked(material, epoch)') > r.index('if (latest_hook_source(out))')
 assert 'latest_hook_source(out)' in r
 assert 'is_synthetic_zero_descriptor(' in r
 assert 'return false;' in r[r.index('pmetal_producer_state_actor_tracked(material, epoch)'):r.index('if (latest_hook_source(out))')]
