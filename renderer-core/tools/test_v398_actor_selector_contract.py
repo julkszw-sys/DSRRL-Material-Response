@@ -16,7 +16,7 @@ assert 'pmetal_producer_state_actor_tracked(material, epoch)' in r
 assert r.index('pmetal_producer_state_actor_tracked(material, epoch)') > r.index('if (latest_hook_source(out))')
 assert 'latest_hook_source(out)' in r
 assert 'is_synthetic_zero_descriptor(' in r
-assert 'return false;' in r[r.index('pmetal_producer_state_actor_tracked(material, epoch)'):r.index('if (latest_hook_source(out))')]
+assert 'return false;' in r[r.index('pmetal_producer_state_actor_tracked(material, epoch)'):r.index('out.consumer_source_kind = 2u')]
 for x in ('std::thread old_writer','row_id_a=0u','swapped','1311','1283'):
     if x=='swapped': continue
     assert x in tests, x
