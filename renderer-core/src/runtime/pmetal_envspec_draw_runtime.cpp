@@ -6,6 +6,7 @@
 #endif
 
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#include "dsrrl/runtime/v387_stable_envdiffuse_cut.hpp"
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
@@ -1161,6 +1162,7 @@ bool pmetal_envspec_draw_runtime::prepare_independent_envdiffuse(
     q.samplers[0]={11u,prepared.envdiffuse_resources.sampler};
     q.sampler_count=1u;
     prepared.ready=true;
+    v387_stable_cut(material,decision,source,prepared,true);
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     v380_rx35_cut(32u,"request_ready",source_ok,&source,1);
 #endif
@@ -2633,6 +2635,8 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
 #endif
     prepared.ready = true;
+    if (family == pmetal_envspec_receiver_family::stable_hemenv)
+        v387_stable_cut(material,decision,source,prepared,false);
     effect_latch(effect_request_ready_);
     telemetry::hot_count(requests_);
 
