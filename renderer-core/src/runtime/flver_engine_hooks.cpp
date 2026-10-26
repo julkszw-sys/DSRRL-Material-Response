@@ -1087,6 +1087,30 @@ void __fastcall mtd_entry(
  if(g_mo)g_mo(material,raw,len,semantic_key);
 }
 
+// V394 LightBank producer FRONTIER: independent of FLVER material slot,
+// MTD parser readiness, route and per-material operator authorization.
+// The live parser/cached exact FLVER SHA is only a consistency certificate.
+// Native descriptor-owner, return-parent, bank source and row are rechecked
+// by pmetal_env_source_selector_event(). Same SHA different owner != same model.
+void observe_model_lightbank_source(
+    void *owner, void *ret, void *r14, void *r15,
+    const void *selector_stack,
+    const core::sha256_digest &flver_sha) noexcept
+{
+    if (owner == nullptr || flver_sha == core::sha256_digest{})
+        return;
+    operators::material_response::material_identity model{};
+    model.valid = true;
+    model.owner_tuple_exact = true;
+    model.flver_sha256 = flver_sha;
+    model.model_owner_instance =
+        reinterpret_cast<std::uintptr_t>(owner);
+    dsrrl::runtime::qpc_bisect::scope qpc_scope(
+        dsrrl::runtime::qpc_bisect::stage::pmetal_selector);
+    pmetal_env_source_selector_event(
+        owner,ret,r14,r15,selector_stack,model);
+}
+
 bool publish_exact_selector_identity(
     void *owner,
     const void *actual_material,
@@ -1106,9 +1130,15 @@ bool publish_exact_selector_identity(
         profile != nullptr
             ? selector_profile_begin(*profile)
             : 0u;
+    // V394: native LightBank is model-instance state, not FLVER material
+    // slot or raw MTD state. Transport the authenticated selector owner to
+    // the existing draw identity; never infer it from a shared FLVER SHA.
+    auto model_identity = identity;
+    model_identity.model_owner_instance =
+        reinterpret_cast<std::uintptr_t>(owner);
     const bool selection_ok =
         material_owner_selection_publish(
-            identity);
+            model_identity);
     if (profile != nullptr)
         selector_profile_end_stage(
             *profile,
@@ -1186,37 +1216,6 @@ bool publish_exact_selector_identity(
             owner,
             identity);
 #endif
-
-    // Route 345 is necessary but not sufficient. The isolated source runtime
-    // retains exact semantic/raw-MTD validation before donor decode.
-    if (identity.route_index == 345u
-#if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
-        || v203_equipment::exact_envspec36_material(identity)
-#if defined(DSRRL_V293_PARSER_EXACT_FLVER_ALIAS)
-        || v203_equipment::exact_spx_roughcloth_material(identity)
-#endif
-#endif
-    ) {
-        const auto pmetal_begin =
-            profile != nullptr
-                ? selector_profile_begin(*profile)
-                : 0u;
-        {
-            dsrrl::runtime::qpc_bisect::scope qpc_scope(dsrrl::runtime::qpc_bisect::stage::pmetal_selector);
-            pmetal_env_source_selector_event(
-                owner,
-                ret,
-                r14,
-                r15,
-                selector_stack,
-                identity);
-        }
-        if (profile != nullptr)
-            selector_profile_end_stage(
-                *profile,
-                pmetal_begin,
-                profile->pmetal_source_ticks);
-    }
 
     telemetry::hot_count(
         g_exact_owner_ready);
@@ -1355,6 +1354,9 @@ extern "C" void dsrrl_flver_selector_observer(
   telemetry::hot_count(
       g_selector_identity_cache_hits);
 
+  observe_model_lightbank_source(
+      owner,ret,r14,r15,selector_stack,
+      cached_identity.flver_sha256);
   if(publish_exact_selector_identity(
         owner,
         actual_material,
@@ -1437,6 +1439,12 @@ extern "C" void dsrrl_flver_selector_observer(
 
  if(owner_lookup_ok){
   telemetry::hot_count(g_owner_sha_hits);
+
+  // Source1 is produced even when a material has no PTDE MTD operator.
+  // MTD still gates its own material response and receiver at draw time.
+  observe_model_lightbank_source(
+      owner,ret,r14,r15,selector_stack,
+      observation.flver_sha256);
 
   const auto owner_mtd_begin =
       selector_profile_begin(profile);

@@ -2584,12 +2584,16 @@ void pmetal_env_source_selector_event(
 {
     pmetal_producer_state_clear();
 
+    // V394: LightBank producer is native model-owned, not MTD/slot-owned.
+    // Operator eligibility is evaluated later by exact shader/material gates.
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_v285_or_pmetal_source(
-            material) ||
-        owner == nullptr ||
-        return_address == nullptr)
+        !material.valid || !material.owner_tuple_exact ||
+        material.model_owner_instance == 0u ||
+        material.model_owner_instance !=
+            reinterpret_cast<std::uintptr_t>(owner) ||
+        material.flver_sha256 == core::sha256_digest{} ||
+        owner == nullptr || return_address == nullptr)
         return;
 
     const auto epoch =
@@ -2681,7 +2685,14 @@ void pmetal_env_source_selector_event(
         character > 1u)
         return;
 
-    // Exact parent and descriptor identity established.
+    // Reject ONLY the attested synthetic alternate-builder descriptor.
+    // Genuine authored area0/row0 from full builder remains valid. This
+    // restores the original m10 cross-map provenance rule, NOT a row0 ban.
+    if (pmetal_selector_policy::is_synthetic_zero_descriptor(
+            rva,raw_a,raw_b,beta))
+        return;
+
+    // Begin a model INSTANCE source transaction, independent of MTD/slot.
     pmetal_producer_state_begin(
         material,
         epoch);
@@ -2970,10 +2981,13 @@ bool pmetal_env_source_runtime::latest(
         g_selector_epoch.load(
             std::memory_order_relaxed);
 
+    // Source1 is a model LightBank source; material authorization happens
+    // separately in the RX/MTD/resource operator admission.
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
-        !exact_v285_or_pmetal_source(
-            material)) {
+        !material.valid || !material.owner_tuple_exact ||
+        material.model_owner_instance == 0u ||
+        material.flver_sha256 == core::sha256_digest{}) {
         telemetry::hot_count(
             g_consumer_fail);
         return false;

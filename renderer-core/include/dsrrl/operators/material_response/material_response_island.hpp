@@ -49,6 +49,11 @@ struct material_identity {
     // for positive Material Response activation.
     core::sha256_digest flver_sha256{};
     std::uint64_t flver_identity_hash = 0;
+    // V394: runtime model INSTANCE handle from authenticated native FLVER
+    // selector owner. Never infer an instance from a file digest, MTD,
+    // material slot, shader or resource. LightBank producer ownership only:
+    // material/receiver authorization remains independently unchanged.
+    std::uintptr_t model_owner_instance = 0u;
     std::uint32_t material_slot = 0;
     bool material_slot_valid = false;
     bool owner_tuple_exact = false;

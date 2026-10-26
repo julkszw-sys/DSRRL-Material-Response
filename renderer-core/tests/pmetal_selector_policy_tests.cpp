@@ -9,6 +9,13 @@ using namespace dsrrl::runtime::pmetal_selector_policy;
 static void check(bool ok) { if (!ok) std::abort(); }
 int main()
 {
+    // Cross-map m10 row0 old regression: alternate builder synthesizes 0;
+    // genuine full-builder area0/row0 remains an authored LightBank.
+    check(is_synthetic_zero_descriptor(0x20EB7Fu,0u,0u,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20E019u,0u,0u,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,0x400u,0x400u,0.0f));
+    check(!is_synthetic_zero_descriptor(0x20EB7Fu,0u,0u,0.5f));
+
     int a = 1, common = 2;
     std::array<std::array<int *,7>,12> banks{};
     std::vector<std::pair<unsigned,unsigned>> calls;

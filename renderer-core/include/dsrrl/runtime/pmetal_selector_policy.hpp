@@ -27,6 +27,18 @@ inline bool selects_only_b(std::int16_t a, std::int16_t b,
     return a != b && std::isfinite(beta) && beta >= 1.0f;
 }
 
+// Historical DSR alternate FLVER builder RVA20EB7F fabricates
+// A=B=beta=0 even without an authored LightBank. Do not publish a
+// model-wide source from that fake descriptor; legitimate full-builder
+// area0/row0 at RVA20E019 remains legal.
+inline bool is_synthetic_zero_descriptor(
+    std::uintptr_t ret_rva, std::uint16_t a,
+    std::uint16_t b, float beta) noexcept
+{
+    return ret_rva == 0x20EB7Fu &&
+        a == 0u && b == 0u && beta == 0.0f;
+}
+
 struct endpoints { std::int16_t a, b; float beta; bool valid; };
 inline endpoints select(std::int16_t a, std::int16_t b, float beta) noexcept
 {

@@ -28,7 +28,7 @@ static_assert(
 struct synchronized_slot {
     std::mutex mutex;
     producer_record record{};
-    std::atomic<std::uint64_t> material_key{0u};
+    std::atomic<std::uint64_t> instance_key{0u};
     std::atomic<std::uint64_t> payload_key{0u};
     std::atomic<std::uint64_t> epoch{0u};
     std::atomic_bool valid{false};
@@ -73,24 +73,18 @@ std::uint64_t fnv_bytes(
     return hash;
 }
 
-bool same_material(
+// LightBank is an instance-level producer, independent of the material's
+// MTD, route, FLVER slot, spec class or receiver. Full FLVER content hash is
+// only an INSTANCE consistency certificate, not the instance identifier.
+bool same_model(
     const operators::material_response::material_identity &a,
     const operators::material_response::material_identity &b) noexcept
 {
-    return
-        a.valid == b.valid &&
-        a.owner_tuple_exact == b.owner_tuple_exact &&
-        a.material_slot_valid == b.material_slot_valid &&
-        a.actual_material_exact == b.actual_material_exact &&
-        a.flver_sha256 == b.flver_sha256 &&
-        a.raw_mtd_sha256 == b.raw_mtd_sha256 &&
-        a.material_slot == b.material_slot &&
-        // flver_identity_hash is an optional legacy/cache token, not
-        // authority. The complete FLVER SHA-256 + slot + semantic identity
-        // above remain the exact cross-thread producer key.
-        a.route_index == b.route_index &&
-        a.semantic_name_hash == b.semantic_name_hash &&
-        a.material_family_hash == b.material_family_hash;
+    return a.valid && b.valid &&
+        a.owner_tuple_exact && b.owner_tuple_exact &&
+        a.model_owner_instance != 0u &&
+        a.model_owner_instance == b.model_owner_instance &&
+        a.flver_sha256 == b.flver_sha256;
 }
 
 bool same_source_payload(
@@ -104,26 +98,23 @@ bool same_source_payload(
         a.bank_signature_a == b.bank_signature_a &&
         a.bank_signature_b == b.bank_signature_b &&
         a.row_id_a == b.row_id_a &&
-        a.row_id_b == b.row_id_b;
+        a.row_id_b == b.row_id_b &&
+        a.envdiffuse_linear_valid == b.envdiffuse_linear_valid &&
+        a.envdiffuse_a == b.envdiffuse_a &&
+        a.envdiffuse_b == b.envdiffuse_b;
 }
 
-std::uint64_t material_key(
+std::uint64_t model_key(
     const operators::material_response::material_identity &material) noexcept
 {
+    // An authenticated native owner instance is indispensable. Never match
+    // two different game objects merely because their FLVER bytes match.
+    if (!material.valid || !material.owner_tuple_exact ||
+        material.model_owner_instance == 0u)
+        return 0u;
     std::uint64_t hash = 0xcbf29ce484222325ULL;
-    hash = fnv_scalar(hash, material.valid);
-    hash = fnv_scalar(hash, material.owner_tuple_exact);
-    hash = fnv_scalar(hash, material.material_slot_valid);
-    hash = fnv_scalar(hash, material.actual_material_exact);
+    hash = fnv_scalar(hash, material.model_owner_instance);
     hash = fnv_bytes(hash, material.flver_sha256);
-    hash = fnv_bytes(hash, material.raw_mtd_sha256);
-    hash = fnv_scalar(hash, material.material_slot);
-    // Do not hash flver_identity_hash here. It is optional and may be absent
-    // on a later draw thread even when the authoritative FLVER SHA/slot tuple
-    // is identical.
-    hash = fnv_scalar(hash, material.route_index);
-    hash = fnv_scalar(hash, material.semantic_name_hash);
-    hash = fnv_scalar(hash, material.material_family_hash);
     return hash;
 }
 
@@ -140,6 +131,9 @@ std::uint64_t source_key(
     hash = fnv_scalar(hash, source.bank_signature_b);
     hash = fnv_scalar(hash, source.row_id_a);
     hash = fnv_scalar(hash, source.row_id_b);
+    hash = fnv_scalar(hash, source.envdiffuse_linear_valid);
+    for (auto v : source.envdiffuse_a) hash = fnv_scalar(hash,v);
+    for (auto v : source.envdiffuse_b) hash = fnv_scalar(hash,v);
     return hash;
 }
 
@@ -157,10 +151,8 @@ synchronized_slot &sync_slot_for(
 
 void pmetal_producer_state_clear() noexcept
 {
-    // TLS is draw-local. The synchronized fallback is not cleared here:
-    // exact P_Metal begin() invalidates only the matching material slot before
-    // a new selector attempt, so unrelated FLVER selectors cannot destroy a
-    // producer value needed by another command-list thread.
+    // TLS is selector-local. Cross-thread Source1 remains keyed to the
+    // authenticated native model instance, not a per-material slot.
     g_record.valid = false;
 }
 
@@ -168,7 +160,8 @@ void pmetal_producer_state_begin(
     const operators::material_response::material_identity &material,
     std::uint64_t epoch) noexcept
 {
-    const auto key = material_key(material);
+    const auto key = model_key(material);
+    if (key == 0u) return;
     auto &slot = sync_slot_for(key);
 
     // Invalidate before source resolution. If this exact selector fails later,
@@ -176,7 +169,7 @@ void pmetal_producer_state_begin(
     slot.valid.store(
         false,
         std::memory_order_release);
-    slot.material_key.store(
+    slot.instance_key.store(
         key,
         std::memory_order_relaxed);
     slot.epoch.store(
@@ -193,7 +186,7 @@ void pmetal_producer_state_publish(
     // identify the overwhelmingly common unchanged case without a mutex.
     const bool unchanged =
         g_record.epoch == epoch &&
-        same_material(g_record.material, material) &&
+        same_model(g_record.material, material) &&
         same_source_payload(g_record.source, source);
 
     const std::uint64_t next_generation =
@@ -209,13 +202,17 @@ void pmetal_producer_state_publish(
     g_record.generation = next_generation;
     g_record.valid = true;
 
-    const auto key = material_key(material);
+    const auto key = model_key(material);
+    if (key == 0u) {
+        g_record.valid = false;
+        return;
+    }
     const auto payload = source_key(g_record.source);
     auto &slot = sync_slot_for(key);
 
-    // Same exact material/source/epoch: begin() only flipped valid=false.
+    // Same exact model/source/epoch: begin() only flipped valid=false.
     // Re-arm atomically without entering the synchronized payload path.
-    if (slot.material_key.load(
+    if (slot.instance_key.load(
             std::memory_order_acquire) == key &&
         slot.epoch.load(
             std::memory_order_acquire) == epoch &&
@@ -238,7 +235,7 @@ void pmetal_producer_state_publish(
     slot.epoch.store(
         epoch,
         std::memory_order_relaxed);
-    slot.material_key.store(
+    slot.instance_key.store(
         key,
         std::memory_order_relaxed);
     slot.valid.store(
@@ -256,7 +253,7 @@ bool pmetal_producer_state_latest(
     // Fast path: selector and draw share a thread.
     if (g_record.valid &&
         g_record.epoch == epoch &&
-        same_material(g_record.material, material)) {
+        same_model(g_record.material, material)) {
         out = g_record.source;
         return true;
     }
@@ -264,12 +261,13 @@ bool pmetal_producer_state_latest(
     // Exact synchronized fallback for deferred/immediate command-list thread
     // handoff. The material key is only an index/filter; positive authority is
     // still the complete material identity under the slot mutex.
-    const auto key = material_key(material);
+    const auto key = model_key(material);
+    if (key == 0u) return false;
     auto &slot = sync_slot_for(key);
 
     if (!slot.valid.load(
             std::memory_order_acquire) ||
-        slot.material_key.load(
+        slot.instance_key.load(
             std::memory_order_relaxed) != key ||
         slot.epoch.load(
             std::memory_order_relaxed) != epoch)
@@ -279,13 +277,13 @@ bool pmetal_producer_state_latest(
 
     if (!slot.valid.load(
             std::memory_order_relaxed) ||
-        slot.material_key.load(
+        slot.instance_key.load(
             std::memory_order_relaxed) != key ||
         slot.epoch.load(
             std::memory_order_relaxed) != epoch ||
         !slot.record.valid ||
         slot.record.epoch != epoch ||
-        !same_material(
+        !same_model(
             slot.record.material,
             material))
         return false;
