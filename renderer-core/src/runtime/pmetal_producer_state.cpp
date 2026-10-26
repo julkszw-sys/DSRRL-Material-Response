@@ -278,6 +278,10 @@ void pmetal_producer_state_publish(
         g_record = next;
         return;
     }
+    // A native selector transaction is obligatory in V398. No legacy
+    // publication may bypass actor/selector revision certification.
+    g_record.valid = false;
+    return;
 #endif
     // Preserve the previous TLS payload across clear(). That lets the selector
     // identify the overwhelmingly common unchanged case without a mutex.
@@ -389,6 +393,20 @@ bool pmetal_producer_state_latest(
 
     out = slot.record.source;
     return true;
+}
+
+
+bool pmetal_producer_state_actor_tracked(
+    const operators::material_response::material_identity &material,
+    std::uint64_t epoch) noexcept
+{
+    const auto key = model_key(material);
+    if (key == 0u) return false;
+    auto &slot = sync_slot_for(key);
+    std::lock_guard<std::mutex> lock(slot.mutex);
+    return slot.selection.valid &&
+        slot.instance_key.load(std::memory_order_relaxed) == key &&
+        slot.epoch.load(std::memory_order_relaxed) == epoch;
 }
 
 bool pmetal_producer_state_valid() noexcept
