@@ -6631,6 +6631,109 @@ bool prepare_island_batch(
             prepared.envspec.env_resources.probe_a == 188u &&
             prepared.envspec.envdiffuse_resources.probe_a == 188u;
         if (v391_exact_quelaag) {
+#if defined(DSRRL_V392_QUELAAG_STOCK_STATE_WITNESS)
+            // Read-only pre-indexed native DSR witness. The V391 scoped
+            // fail-open remains unchanged: this never binds, patches, maps,
+            // modifies GPU resources or replays draws. No pixel assertions.
+            // Sample per receiver/row/thread before executing the stock draw.
+            {
+                static thread_local std::array<std::uint64_t,4u> samples{};
+                const unsigned index =
+                    (receiver_id-33u)*2u +
+                    (prepared.envspec.stable_envdiffuse_row==0u?0u:1u);
+                const auto ordinal=++samples[index];
+                if (ordinal<=12u || ((ordinal&(ordinal-1u))==0u)) {
+                    auto *stock_ctx = reinterpret_cast<ID3D11DeviceContext *>(
+                        cmd_list->get_native());
+                    if (stock_ctx!=nullptr) {
+                        ID3D11PixelShader *stock_ps=nullptr;
+                        // Passing nullptr for class instance outputs is legal.
+                        stock_ctx->PSGetShader(&stock_ps,nullptr,nullptr);
+                        ID3D11Buffer *native_cb0=nullptr;
+                        ID3D11Buffer *native_cb12=nullptr;
+                        stock_ctx->PSGetConstantBuffers(0u,1u,&native_cb0);
+                        stock_ctx->PSGetConstantBuffers(12u,1u,&native_cb12);
+                        ID3D11ShaderResourceView *views[5]{};
+                        stock_ctx->PSGetShaderResources(10u,5u,views);
+                        ID3D11SamplerState *native_s11=nullptr;
+                        stock_ctx->PSGetSamplers(11u,1u,&native_s11);
+                        D3D11_BUFFER_DESC cb0_desc{}, cb12_desc{};
+                        if(native_cb0)native_cb0->GetDesc(&cb0_desc);
+                        if(native_cb12)native_cb12->GetDesc(&cb12_desc);
+                        D3D11_SHADER_RESOURCE_VIEW_DESC v11{},v12{};
+                        if(views[1])views[1]->GetDesc(&v11);
+                        if(views[2])views[2]->GetDesc(&v12);
+                        D3D11_SAMPLER_DESC s11_desc{};
+                        if(native_s11)native_s11->GetDesc(&s11_desc);
+                        ID3D11Resource *t11_resource=nullptr;
+                        ID3D11Texture2D *t11_texture=nullptr;
+                        D3D11_TEXTURE2D_DESC tex11_desc{};
+                        if(views[1]) {
+                            views[1]->GetResource(&t11_resource);
+                            if(t11_resource) {
+                                (void)t11_resource->QueryInterface(
+                                    __uuidof(ID3D11Texture2D),
+                                    reinterpret_cast<void **>(&t11_texture));
+                                if(t11_texture)t11_texture->GetDesc(&tex11_desc);
+                            }
+                        }
+                        const auto &source=prepared.envspec;
+                        char line[1250]{};
+                        std::snprintf(line,sizeof(line),
+                            "[DSRRL V392 QUELAAG STOCK STATE] "
+                            "stage=before_native_indexed sample=%llu "
+                            "rx=%u slot=%u row=%u serial=%llu "
+                            "bank=%016llx probe=%u source_kind=%u "
+                            "context=%p ps=%p cb0=%p cb0_bytes=%u "
+                            "cb12=%p cb12_bytes=%u "
+                            "t10=%p t11=%p t12=%p t13=%p t14=%p "
+                            "t11_view_fmt=%u t11_dim=%u t11_resource=%p "
+                            "tex11_fmt=%u tex11_wh=%ux%u tex11_array=%u "
+                            "tex11_mips=%u t12_view_fmt=%u "
+                            "s11=%p s11_filter=%u "
+                            "bridge=SKIPPED native_draw=RETURN_FALSE "
+                            "gpu_cb_bytes=UNREAD pixel=OPEN",
+                            static_cast<unsigned long long>(ordinal),
+                            receiver_id,material.material_slot,
+                            source.stable_envdiffuse_row,
+                            static_cast<unsigned long long>(
+                                source.stable_envdiffuse_source_serial),
+                            static_cast<unsigned long long>(
+                                source.stable_envdiffuse_bank),
+                            source.stable_envdiffuse_probe,
+                            source.source_kind,
+                            static_cast<void *>(stock_ctx),
+                            static_cast<void *>(stock_ps),
+                            static_cast<void *>(native_cb0),
+                            cb0_desc.ByteWidth,
+                            static_cast<void *>(native_cb12),
+                            cb12_desc.ByteWidth,
+                            static_cast<void *>(views[0]),
+                            static_cast<void *>(views[1]),
+                            static_cast<void *>(views[2]),
+                            static_cast<void *>(views[3]),
+                            static_cast<void *>(views[4]),
+                            static_cast<unsigned>(v11.Format),
+                            static_cast<unsigned>(v11.ViewDimension),
+                            static_cast<void *>(t11_resource),
+                            static_cast<unsigned>(tex11_desc.Format),
+                            tex11_desc.Width,tex11_desc.Height,
+                            tex11_desc.ArraySize,tex11_desc.MipLevels,
+                            static_cast<unsigned>(v12.Format),
+                            static_cast<void *>(native_s11),
+                            static_cast<unsigned>(s11_desc.Filter));
+                        reshade::log::message(reshade::log::level::warning,line);
+                        if(t11_texture)t11_texture->Release();
+                        if(t11_resource)t11_resource->Release();
+                        if(native_s11)native_s11->Release();
+                        for(auto *v:views)if(v)v->Release();
+                        if(native_cb12)native_cb12->Release();
+                        if(native_cb0)native_cb0->Release();
+                        if(stock_ps)stock_ps->Release();
+                    }
+                }
+            }
+#endif
             static std::array<std::atomic_bool,2u> logged{};
             const unsigned rx_index=receiver_id-33u;
             if (!logged[rx_index].exchange(true, std::memory_order_relaxed)) {
