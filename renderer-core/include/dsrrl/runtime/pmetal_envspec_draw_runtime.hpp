@@ -63,6 +63,16 @@ struct prepared_pmetal_envspec_draw {
     std::uint16_t diagnostic_diff_a = 0u, diagnostic_diff_b = 0u;
 #endif
     std::uint8_t source_kind = 0u; // diagnostic only
+    // V388 STABLE diagnostic: read-only source identity propagated from
+    // request_ready to indexed_issued. Never used for eligibility/patching.
+    bool stable_envdiffuse_trace_valid = false;
+    bool stable_envdiffuse_independent = false;
+    std::uint64_t stable_envdiffuse_source_serial = 0u;
+    std::uint64_t stable_envdiffuse_bank = 0u;
+    std::uint32_t stable_envdiffuse_row = 0u;
+    std::array<float,3> stable_envdiffuse_c86{};
+    std::uint16_t stable_envdiffuse_probe = 0u;
+
     bool ready = false;
 };
 
