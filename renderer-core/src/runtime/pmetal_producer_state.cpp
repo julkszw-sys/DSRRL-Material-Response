@@ -227,6 +227,7 @@ void pmetal_producer_state_begin(
         std::memory_order_relaxed);
 }
 
+#if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
 // Actor LightBank state is keyed by native owner; material slot and MTD
 // remain downstream receiver attributes. Identical selector opportunities
 // preserve the previous authenticated state; changes revoke it.
@@ -268,6 +269,8 @@ void pmetal_producer_state_begin(
     }
     g_pending = {key, epoch, slot.selection_revision, true};
 }
+
+#endif // DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE
 
 void pmetal_producer_state_publish(
     const operators::material_response::material_identity &material,
