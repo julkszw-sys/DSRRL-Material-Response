@@ -24,6 +24,6 @@ int main() {
      if(t.observe(key,v).kind==observation_kind::transition)++count;
    }
  });
- for(auto &w:threads)w.join();
+ for(auto &w:threads) { w.join(); }
  assert(count==8*999);
 }
