@@ -44,13 +44,17 @@ inline void issued(
     mtd[i*2u]=hex[key.mtd[i]>>4u];
     mtd[i*2u+1u]=hex[key.mtd[i]&15u];
  }
- char msg[1150]{};
+ float prior_rgb[3]{};
+ for(std::size_t i=0;i<3u;++i)
+    std::memcpy(&prior_rgb[i],&o.previous.rgb_bits[i],sizeof(float));
+ char msg[1350]{};
  std::snprintf(msg,sizeof(msg),
   "[DSRRL V409 RX34 GPU TRANSITION] event=%s n=%llu "
   "owner=%p rx=34 route=%u slot=%u sem=%016llx shader=%p "
   "flver_sha=%s mtd_sha=%s "
   "kind_before=%u row_before=%u bank_before=%016llx "
-  "native_seq_before=%llu kind=%u row=%u bank=%016llx "
+  "native_seq_before=%llu prior_c86=%.9g,%.9g,%.9g "
+  "prior_probe=%u prior_path=%s kind=%u row=%u bank=%016llx "
   "c86=%.9g,%.9g,%.9g probe=%u path=%s "
   "serial=%llu native_producer_seq=%llu tid=%lu "
   "issued=1 draw_order=OPEN pixel=OPEN",
@@ -62,6 +66,10 @@ inline void issued(
   static_cast<unsigned>(o.previous.kind),o.previous.row,
   static_cast<unsigned long long>(o.previous.bank),
   static_cast<unsigned long long>(o.previous.native_sequence),
+  static_cast<double>(prior_rgb[0]),static_cast<double>(prior_rgb[1]),
+  static_cast<double>(prior_rgb[2]),
+  static_cast<unsigned>(o.previous.probe),
+  o.previous.independent?"INDEPENDENT":"COMBINED",
   static_cast<unsigned>(s.kind),s.row,
   static_cast<unsigned long long>(s.bank),
   static_cast<double>(p.stable_envdiffuse_c86[0]),
