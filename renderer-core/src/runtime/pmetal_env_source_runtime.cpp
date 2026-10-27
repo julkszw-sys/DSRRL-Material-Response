@@ -2899,6 +2899,53 @@ void pmetal_env_source_selector_event(
             next,
             epoch);
 
+#if defined(DSRRL_V408_CONTEXT_IDENTITY_DIAG)
+        // This event was packer-witnessed, but a concurrent actor selector
+        // may still supersede its publish. Report actual actor cache readback;
+        // never infer Source1 commit from reaching this line alone.
+        if (telemetry::effect_enabled()) {
+            static std::atomic<std::uint64_t> verified_publish_samples{0u};
+            const auto n = verified_publish_samples.fetch_add(
+                1u, std::memory_order_relaxed) + 1u;
+            if (n <= 64u || (n % 8192u) == 0u) {
+                pmetal_envspec_source committed{};
+                const bool published =
+                    pmetal_producer_state_latest(
+                        material, epoch, committed);
+                const bool same_producer =
+                    published &&
+                    committed.native_producer_sequence ==
+                        next.native_producer_sequence &&
+                    committed.bank_signature_a ==
+                        next.bank_signature_a &&
+                    committed.row_id_a == next.row_id_a;
+                char line[580]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "[DSRRL V408 SOURCE1 PACKER JOIN] "
+                    "n=%llu owner=%p source_a=%p source_b=%p "
+                    "selected_a=%d selected_b=%d beta=%.9g "
+                    "native_producer_seq=%llu selector_epoch=%llu "
+                    "cache_readback=%u same_producer=%u "
+                    "row_a=%u row_b=%u tid=%lu gpu_join=OPEN pixel=OPEN",
+                    static_cast<unsigned long long>(n),
+                    owner, source_a, source_b,
+                    static_cast<int>(endpoints.a),
+                    static_cast<int>(endpoints.b),
+                    static_cast<double>(endpoints.beta),
+                    static_cast<unsigned long long>(
+                        next.native_producer_sequence),
+                    static_cast<unsigned long long>(epoch),
+                    published ? 1u : 0u,
+                    same_producer ? 1u : 0u,
+                    next.row_id_a, next.row_id_b,
+                    static_cast<unsigned long>(GetCurrentThreadId()));
+                reshade::log::message(
+                    reshade::log::level::info, line);
+            }
+        }
+#endif
+
         static std::atomic_bool
             selector_shadow_hit_logged{false};
         if (!selector_shadow_hit_logged.exchange(
