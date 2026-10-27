@@ -12,6 +12,9 @@
 #include "dsrrl/runtime/bloom_scene_sidecar_runtime.hpp"
 #include "dsrrl/runtime/bloom_fx_draw_transport.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
+#if defined(DSRRL_V409_RX34_TRANSITION_DIAG)
+#include "dsrrl/runtime/v409_rx34_issued_trace.hpp"
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
