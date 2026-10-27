@@ -2912,13 +2912,28 @@ void pmetal_env_source_selector_event(
                 const bool published =
                     pmetal_producer_state_latest(
                         material, epoch, committed);
+                // V410: a matching serial/row A alone cannot attest
+                // the materialized A/B payload. Match both endpoint
+                // identities and beta bits, with no effect on selection.
                 const bool same_producer =
                     published &&
+                    next.native_producer_sequence != 0u &&
                     committed.native_producer_sequence ==
                         next.native_producer_sequence &&
                     committed.bank_signature_a ==
                         next.bank_signature_a &&
-                    committed.row_id_a == next.row_id_a;
+                    committed.bank_signature_b ==
+                        next.bank_signature_b &&
+                    committed.row_id_a == next.row_id_a &&
+                    committed.row_id_b == next.row_id_b &&
+                    std::memcmp(&committed.beta,&next.beta,
+                        sizeof(float)) == 0 &&
+                    committed.a == next.a &&
+                    committed.b == next.b &&
+                    committed.envdiffuse_linear_valid ==
+                        next.envdiffuse_linear_valid &&
+                    committed.envdiffuse_a == next.envdiffuse_a &&
+                    committed.envdiffuse_b == next.envdiffuse_b;
                 char line[580]{};
                 std::snprintf(
                     line, sizeof(line),
