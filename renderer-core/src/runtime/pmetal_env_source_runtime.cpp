@@ -2811,6 +2811,50 @@ void pmetal_env_source_selector_event(
         source_b == nullptr)
         return;
 
+#if defined(DSRRL_V408_CONTEXT_IDENTITY_DIAG)
+    // V408: read-only, bounded identity census AFTER native descriptor,
+    // parent, manager and source-pointer authorization. Do not promote
+    // this vtable observation into a Source1/Source2 admission rule.
+    // The native engine can derive the context class, so an unequal
+    // vtable is diagnostic, not a reason to reject a valid selector.
+    if (telemetry::effect_enabled()) {
+        static std::atomic<std::uint64_t> context_samples{0u};
+        const auto n = context_samples.fetch_add(
+            1u, std::memory_order_relaxed) + 1u;
+        if (n <= 64u || (n % 8192u) == 0u) {
+            std::uintptr_t owner_vtable = 0u;
+            const bool vtable_readable =
+                safe_read(owner, owner_vtable);
+            const std::uintptr_t expected =
+                g_source_base + 0x12E6B60u;
+            char line[680]{};
+            std::snprintf(
+                line, sizeof(line),
+                "[DSRRL V408 CONTEXT SELECTOR CENSUS] "
+                "n=%llu owner=%p owner_vtable=%p vtable_readable=%u "
+                "frpg_draw_context_exact_vtable=%u "
+                "wrapper=%p manager=%p ret_rva=%llx "
+                "native_a=%p native_b=%p selected_a=%d selected_b=%d "
+                "beta=%.9g epoch=%llu tid=%lu "
+                "receiver_join=OPEN pixel=OPEN",
+                static_cast<unsigned long long>(n),
+                owner, reinterpret_cast<void *>(owner_vtable),
+                vtable_readable ? 1u : 0u,
+                vtable_readable && owner_vtable == expected ? 1u : 0u,
+                wrapper, manager,
+                static_cast<unsigned long long>(rva),
+                source_a, source_b,
+                static_cast<int>(endpoints.a),
+                static_cast<int>(endpoints.b),
+                static_cast<double>(endpoints.beta),
+                static_cast<unsigned long long>(epoch),
+                static_cast<unsigned long>(GetCurrentThreadId()));
+            reshade::log::message(
+                reshade::log::level::info, line);
+        }
+    }
+#endif
+
 #if defined(DSRRL_V398_ACTOR_TRANSACTIONAL_SOURCE)
     // Authenticate the exact selector before requesting its Source1
     // producer. Same tuple keeps the prior packer-certified snapshot;
