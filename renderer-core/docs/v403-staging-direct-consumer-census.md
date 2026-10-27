@@ -9,3 +9,7 @@ Independent writer RVA 0x4FFF10 takes destination from RDX into RSI. At 0x4FFFAC
 The lone non-stack LEA at 0x120BB24 passes [RDX+0x1260] to an apparent generic thunk at 0x54EB00; actor identity and CB consumer OPEN. Reverified direct native callsites: wrapper 0x1C0BE0 at 0x2167BA/0x220639; 0x1C0C10 at 0x220632; native single 0x563B80 four callsites, blend 0x563C30 two callsites.
 
 RE result: cannot equate last packer output, mutable actor staging and actual GPU CB. Next isolate indirect writer dispatch and trace exact actor-state serialization/CB upload. No source gate, row veto, heuristic, or EXE modification; protected latest_hook_source remains unchanged.
+
+## V403 RTTI correction / attribution
+
+The `.rdata` entry containing RVA 0x4FFF10 at vftable slot 21 and 0x5000E0 at slot 22 belongs to MSVC RTTI type `.?AVShaderContext_FrpgFxNormalEntity@NS_FRPG@@`, i.e. `NS_FRPG::ShaderContext_FrpgFxNormalEntity`, **not** to the neighboring `FX4HG::FXHGShaderContextEntity` vftable. Exact Complete Object Locator RVA 0x165FF70, virtual table start RVA 0x136C520; RTTI locator signature=1, self pointer matches. Source class of RCX is thus shader context; RDX destination type, current receiver and uploaded CB consumer remain OPEN. The earlier hypothetical identification as an actor updater must not be asserted.
