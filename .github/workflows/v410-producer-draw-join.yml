@@ -21,6 +21,7 @@ jobs:
           python3 renderer-core/tools/test_v408_context_identity_census.py
           g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -pthread -I renderer-core/include renderer-core/tests/v409_rx34_transition_tests.cpp -o /tmp/v409_rx34_transition_tests
           python3 renderer-core/tools/test_v410_native_draw_join.py
+          python3 renderer-core/tools/test_v410_source_consistency.py
           /tmp/v409_rx34_transition_tests
           python3 - <<'PY'
           from pathlib import Path
