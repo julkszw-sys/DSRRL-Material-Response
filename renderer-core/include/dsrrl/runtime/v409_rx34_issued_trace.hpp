@@ -36,10 +36,19 @@ inline void issued(
  const bool full=o.kind==observation_kind::capacity_miss &&
    (o.sequence<=16u || o.sequence%4096u==0u);
  if(!first && !changed && !full)return;
- char msg[800]{};
+ constexpr char hex[]="0123456789abcdef";
+ char flver[65]{},mtd[65]{};
+ for(std::size_t i=0;i<32u;++i) {
+    flver[i*2u]=hex[key.flver[i]>>4u];
+    flver[i*2u+1u]=hex[key.flver[i]&15u];
+    mtd[i*2u]=hex[key.mtd[i]>>4u];
+    mtd[i*2u+1u]=hex[key.mtd[i]&15u];
+ }
+ char msg[1150]{};
  std::snprintf(msg,sizeof(msg),
   "[DSRRL V409 RX34 GPU TRANSITION] event=%s n=%llu "
   "owner=%p rx=34 route=%u slot=%u sem=%016llx shader=%p "
+  "flver_sha=%s mtd_sha=%s "
   "kind_before=%u row_before=%u bank_before=%016llx "
   "native_seq_before=%llu kind=%u row=%u bank=%016llx "
   "c86=%.9g,%.9g,%.9g probe=%u path=%s "
@@ -49,7 +58,7 @@ inline void issued(
   static_cast<unsigned long long>(o.sequence),
   reinterpret_cast<void*>(key.owner),key.route,key.material_slot,
   static_cast<unsigned long long>(key.semantic),
-  reinterpret_cast<void*>(key.shader),
+  reinterpret_cast<void*>(key.shader),flver,mtd,
   static_cast<unsigned>(o.previous.kind),o.previous.row,
   static_cast<unsigned long long>(o.previous.bank),
   static_cast<unsigned long long>(o.previous.native_sequence),
