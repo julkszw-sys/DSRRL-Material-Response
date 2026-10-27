@@ -44,7 +44,7 @@ class source_transition_tracker {
     struct entry { bool occupied=false; identity key{}; source_snapshot source{}; };
     std::array<std::array<entry,per_shard>,shards> entries_{};
     std::array<std::mutex,shards> locks_{};
-    std::atomic<std::uint64_t> events_{0}, misses_{0};
+    std::atomic<std::uint64_t> first_seen_{0}, transitions_{0}, misses_{0};
     static std::uint64_t hash_identity(const identity &v) noexcept {
         std::uint64_t h=14695981039346656037ULL;
         const auto add=[&h](const auto &x) noexcept {
@@ -69,7 +69,7 @@ public:
             if(!e.occupied) {
                 e.key=key;e.source=current;e.occupied=true;
                 return {observation_kind::first,{},
-                    events_.fetch_add(1,std::memory_order_relaxed)+1};
+                    first_seen_.fetch_add(1,std::memory_order_relaxed)+1};
             }
             if(e.key==key) {
                 if(e.source.same_visual_source(current)) {
