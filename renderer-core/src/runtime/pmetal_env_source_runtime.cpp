@@ -2825,15 +2825,26 @@ void pmetal_env_source_selector_event(
             std::uintptr_t owner_vtable = 0u;
             const bool vtable_readable =
                 safe_read(owner, owner_vtable);
+            const auto *owner_bytes =
+                static_cast<const std::uint8_t *>(owner);
+            const std::uint8_t *context_manager = nullptr;
+            std::uint32_t context_type5_fallback = 0u;
+            const bool context_manager_readable =
+                safe_read(owner_bytes + 0x2320u, context_manager);
+            const bool fallback_readable =
+                safe_read(owner_bytes + 0x2338u,
+                    context_type5_fallback);
             const std::uintptr_t expected =
                 g_source_base + 0x12E6B60u;
-            char line[680]{};
+            char line[820]{};
             std::snprintf(
                 line, sizeof(line),
                 "[DSRRL V408 CONTEXT SELECTOR CENSUS] "
                 "n=%llu owner=%p owner_vtable=%p vtable_readable=%u "
                 "frpg_draw_context_exact_vtable=%u "
-                "wrapper=%p manager=%p ret_rva=%llx "
+                "wrapper=%p manager=%p context_manager=%p "
+                "context_manager_readable=%u manager_matches=%u "
+                "fallback_type5_id=%u fallback_readable=%u ret_rva=%llx "
                 "native_a=%p native_b=%p selected_a=%d selected_b=%d "
                 "beta=%.9g epoch=%llu tid=%lu "
                 "receiver_join=OPEN pixel=OPEN",
@@ -2841,7 +2852,12 @@ void pmetal_env_source_selector_event(
                 owner, reinterpret_cast<void *>(owner_vtable),
                 vtable_readable ? 1u : 0u,
                 vtable_readable && owner_vtable == expected ? 1u : 0u,
-                wrapper, manager,
+                wrapper, manager, context_manager,
+                context_manager_readable ? 1u : 0u,
+                context_manager_readable &&
+                    context_manager == manager ? 1u : 0u,
+                static_cast<unsigned>(context_type5_fallback),
+                fallback_readable ? 1u : 0u,
                 static_cast<unsigned long long>(rva),
                 source_a, source_b,
                 static_cast<int>(endpoints.a),
