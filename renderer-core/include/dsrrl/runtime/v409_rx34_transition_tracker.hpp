@@ -79,7 +79,7 @@ public:
                 const auto prior=e.source;
                 e.source=current;
                 return {observation_kind::transition,prior,
-                    events_.fetch_add(1,std::memory_order_relaxed)+1};
+                    transitions_.fetch_add(1,std::memory_order_relaxed)+1};
             }
         }
         return {observation_kind::capacity_miss,{},
