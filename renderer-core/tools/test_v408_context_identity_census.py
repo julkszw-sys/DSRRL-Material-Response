@@ -27,7 +27,6 @@ assert "source_a =" not in block and "source_b =" not in block
 assert "latest_hook_source(out)" in src
 assert "/DDSRRL_V408_CONTEXT_IDENTITY_DIAG" in build
 assert "'[DSRRL V408 CONTEXT SELECTOR CENSUS]'" in build
-print("V408 STATIC SOURCE CONTRACT PASS: owner identity diagnostic-only, Source2 protected")
 
 shadow=p[p.index("if (latest_hook_source_exact_selector("):p.index("#if defined(DSRRL_V396_STRICT_NATIVE_SOURCE1)")]
 assert "[DSRRL V408 SOURCE1 PACKER JOIN]" in shadow
@@ -35,3 +34,5 @@ assert "pmetal_producer_state_latest(" in shadow
 assert "committed.native_producer_sequence ==" in shadow
 assert "native_producer_seq=%llu selector_epoch=%llu" in shadow
 assert "gpu_join=OPEN pixel=OPEN" in shadow
+
+print("V408 STATIC SOURCE CONTRACT PASS: owner identity diagnostic-only, Source2 protected")
