@@ -5867,6 +5867,9 @@ void v388_envdiffuse_stable_issued(
     if (!prepared.ready || !prepared.stable_envdiffuse_trace_valid ||
         decision.receiver_id < 33u || decision.receiver_id > 35u)
         return;
+#if defined(DSRRL_V409_RX34_TRANSITION_DIAG)
+    dsrrl::runtime::v409::issued(material,decision,prepared);
+#endif
     // V397: count every issued draw, but format full material/FLVER strings
     // only for a few diagnostic samples. No effect on source selection,
     // shader binding, transaction, operator equations or fail-open.
