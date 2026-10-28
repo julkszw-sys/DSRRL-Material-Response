@@ -23,6 +23,7 @@ jobs:
           python3 renderer-core/tools/test_v410_native_draw_join.py
           python3 renderer-core/tools/test_v410_source_consistency.py
           python3 renderer-core/tools/test_v411_owner_sequence_contract.py
+          python3 renderer-core/tools/test_v411_owner_draw_log.py
           g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -pthread -I renderer-core/include renderer-core/tests/v411_owner_sequence_journal_tests.cpp -o /tmp/v411_owner_sequence_tests
           /tmp/v411_owner_sequence_tests
           /tmp/v409_rx34_transition_tests
