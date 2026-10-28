@@ -15,6 +15,9 @@
 #if defined(DSRRL_V409_RX34_TRANSITION_DIAG)
 #include "dsrrl/runtime/v409_rx34_issued_trace.hpp"
 #endif
+#if defined(DSRRL_V411_OWNER_SEQUENCE_DIAG)
+#include "dsrrl/runtime/v411_rx34_owner_draw_trace.hpp"
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
@@ -5869,6 +5872,9 @@ void v388_envdiffuse_stable_issued(
         return;
 #if defined(DSRRL_V409_RX34_TRANSITION_DIAG)
     dsrrl::runtime::v409::issued(material,decision,prepared);
+#endif
+#if defined(DSRRL_V411_OWNER_SEQUENCE_DIAG)
+    dsrrl::runtime::v411::indexed_rx34(material,decision,prepared);
 #endif
     // V397: count every issued draw, but format full material/FLVER strings
     // only for a few diagnostic samples. No effect on source selection,
