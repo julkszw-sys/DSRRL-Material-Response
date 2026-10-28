@@ -2941,6 +2941,18 @@ void pmetal_env_source_selector_event(
                 std::memcpy(&w.beta_bits,&next.beta,sizeof(float));
                 w.thread_id=static_cast<std::uint32_t>(
                     GetCurrentThreadId());
+                const auto *owner_bytes_v411=
+                    static_cast<const std::uint8_t *>(owner);
+                w.vtable_readable=safe_read(owner,
+                    w.context_vtable);
+                const std::uint8_t *manager_field_v411=nullptr;
+                w.manager_field_readable=safe_read(
+                    owner_bytes_v411+0x2320u,manager_field_v411);
+                w.context_manager=reinterpret_cast<std::uintptr_t>(
+                    manager_field_v411);
+                w.context_manager_matches_wrapper=
+                    w.manager_field_readable &&
+                    manager_field_v411==manager;
                 const bool journaled=v411::observations().observe(w);
                 static std::atomic<std::uint64_t> stamp_total{0u};
                 const auto n=stamp_total.fetch_add(1u,
