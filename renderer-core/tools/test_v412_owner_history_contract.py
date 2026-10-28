@@ -7,12 +7,13 @@ integrated=(p/'integrated/integrated_addon.cpp').read_text()
 for term in ('history_depth=8','std::unique_ptr<entry[]>',
     'new (std::nothrow)','s.value.native_sequence',
     'status::ambiguous_context_identity','status::history_evicted',
-    'r.superseded_by_newer','same_source_tuple',
+    'r.superseded_by_newer','same_source_tuple','same_witness_semantics',
     'history_overwrites_.fetch_add'):
     if term=='s.value.native_sequence':
         assert term not in s
     else:assert term in s,term
 assert 'superseded_by_newer?1u:0u' in draw
+assert 'if(same_witness_semantics(latest,w))return true;' in s
 assert 'history_has_evictions?1u:0u' in draw
 assert 'history_overwrites()' in draw
 assert 'd.receiver_id!=34u' in draw
