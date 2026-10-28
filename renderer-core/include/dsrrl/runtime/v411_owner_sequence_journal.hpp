@@ -60,6 +60,12 @@ class journal {
             a.context_vtable==b.context_vtable &&
             a.context_manager==b.context_manager;
     }
+    static bool same_source_tuple(const witness &a,const witness &b) noexcept {
+        return a.source_a==b.source_a && a.source_b==b.source_b &&
+            a.selector_a==b.selector_a && a.selector_b==b.selector_b &&
+            a.row_a==b.row_a && a.row_b==b.row_b &&
+            a.beta_bits==b.beta_bits;
+    }
     static lookup_result resolve(const entry &e,std::uint64_t seq,
         std::uint64_t epoch,std::uintptr_t wrapper,
         std::uintptr_t manager) noexcept {
@@ -81,7 +87,10 @@ class journal {
             if(w.selector_epoch!=epoch)continue;
             if(!matching) {
                 matching=&w;matching_version=version;
-            } else if(!same_context_tuple(*matching,w)) {
+            } else if(!same_context_tuple(*matching,w) ||
+                      !same_source_tuple(*matching,w)) {
+                // A repeated native sequence+epoch cannot certify two
+                // different endpoint payloads; fail observationally.
                 conflicting_tuple=true;
             }
             if(r.candidates<255)++r.candidates;
