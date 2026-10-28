@@ -13,6 +13,9 @@
 #include "dsrrl/runtime/v383_remo_source_witness.hpp"
 #include "dsrrl/runtime/v386_source_match.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
+#if defined(DSRRL_V411_OWNER_SEQUENCE_DIAG)
+#include "dsrrl/runtime/v411_owner_sequence_journal.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -2898,6 +2901,73 @@ void pmetal_env_source_selector_event(
             material,
             next,
             epoch);
+
+#if defined(DSRRL_V411_OWNER_SEQUENCE_DIAG)
+        // V411: after actual actor-scoped publication, independently
+        // sample its full cached A/B payload and record a non-authoritative
+        // owner/wrapper/manager/packer witness. Never gate the operator.
+        if (telemetry::effect_enabled()) {
+            pmetal_envspec_source committed_v411{};
+            const bool found_v411=pmetal_producer_state_latest(
+                material,epoch,committed_v411);
+            const bool complete_v411 =
+                found_v411 &&
+                next.native_producer_sequence != 0u &&
+                committed_v411.native_producer_sequence ==
+                    next.native_producer_sequence &&
+                committed_v411.bank_signature_a == next.bank_signature_a &&
+                committed_v411.bank_signature_b == next.bank_signature_b &&
+                committed_v411.row_id_a == next.row_id_a &&
+                committed_v411.row_id_b == next.row_id_b &&
+                std::memcmp(&committed_v411.beta,&next.beta,
+                    sizeof(float)) == 0 &&
+                committed_v411.a == next.a &&
+                committed_v411.b == next.b &&
+                committed_v411.envdiffuse_linear_valid ==
+                    next.envdiffuse_linear_valid &&
+                committed_v411.envdiffuse_a == next.envdiffuse_a &&
+                committed_v411.envdiffuse_b == next.envdiffuse_b;
+            if (complete_v411) {
+                v411::witness w{};
+                w.owner=reinterpret_cast<std::uintptr_t>(owner);
+                w.wrapper=reinterpret_cast<std::uintptr_t>(wrapper);
+                w.manager=reinterpret_cast<std::uintptr_t>(manager);
+                w.source_a=reinterpret_cast<std::uintptr_t>(source_a);
+                w.source_b=reinterpret_cast<std::uintptr_t>(source_b);
+                w.native_sequence=next.native_producer_sequence;
+                w.selector_epoch=epoch;
+                w.row_a=next.row_id_a;w.row_b=next.row_id_b;
+                w.selector_a=endpoints.a;w.selector_b=endpoints.b;
+                std::memcpy(&w.beta_bits,&next.beta,sizeof(float));
+                w.thread_id=static_cast<std::uint32_t>(
+                    GetCurrentThreadId());
+                const bool journaled=v411::observations().observe(w);
+                static std::atomic<std::uint64_t> stamp_total{0u};
+                const auto n=stamp_total.fetch_add(1u,
+                    std::memory_order_relaxed)+1u;
+                if (n<=32u || (n%8192u)==0u || !journaled) {
+                    char line[490]{};
+                    std::snprintf(line,sizeof(line),
+                        "[DSRRL V411 OWNER SEQ STAMP] "
+                        "n=%llu owner=%p wrapper=%p manager=%p "
+                        "source_a=%p source_b=%p seq=%llu epoch=%llu "
+                        "row_a=%u row_b=%u selector_a=%d selector_b=%d "
+                        "beta_bits=%08x journaled=%u "
+                        "owner_native_call=OPEN pixel=OPEN",
+                        static_cast<unsigned long long>(n),
+                        owner,wrapper,manager,source_a,source_b,
+                        static_cast<unsigned long long>(w.native_sequence),
+                        static_cast<unsigned long long>(epoch),
+                        w.row_a,w.row_b,
+                        static_cast<int>(w.selector_a),
+                        static_cast<int>(w.selector_b),
+                        w.beta_bits,journaled?1u:0u);
+                    reshade::log::message(
+                        reshade::log::level::info,line);
+                }
+            }
+        }
+#endif
 
 #if defined(DSRRL_V408_CONTEXT_IDENTITY_DIAG)
         // This event was packer-witnessed, but a concurrent actor selector
