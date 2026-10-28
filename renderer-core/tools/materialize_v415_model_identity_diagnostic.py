@@ -5,7 +5,7 @@ Do not disable telemetry or use release's LOG_FREE instrumentation removal.
 """
 from pathlib import Path
 r=Path(__file__).resolve().parents[1]
-p=r.parent/"build-v415-selector-diagnostic/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp"
+p=r.parent/"build-v415-model-identity-diagnostic/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp"
 s=p.read_text("utf-8")
 gate_start="    bool v296_partial_material = false;"
 gate_end="    const bool diffuse_mr_active =\n        decision.active &&\n        !v296_partial_material &&"
