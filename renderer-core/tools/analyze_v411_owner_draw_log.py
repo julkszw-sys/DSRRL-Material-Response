@@ -8,7 +8,8 @@ DRAW='[DSRRL V411 RX34 OWNER SEQ DRAW]'
 STATUS={0:'no_record',1:'matched_snapshot',2:'producer_changed',
         3:'epoch_changed',4:'context_tuple_changed',
         5:'capacity_miss',6:'history_evicted',
-        7:'ambiguous_context_identity',255:'source2_not_applicable'}
+        7:'ambiguous_context_identity',8:'context_unreadable',
+        9:'native_manager_disagreement',255:'source2_not_applicable'}
 def events(text):
     for n,line in enumerate(text.splitlines(),1):
         kind='stamp' if STAMP in line else 'draw' if DRAW in line else None
