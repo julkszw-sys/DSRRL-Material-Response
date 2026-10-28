@@ -90,6 +90,8 @@ inline void indexed_rx34(
         "stamp_vtable=%p stamp_vtable_readable=%u "
         "stamp_context_manager=%p manager_field_readable=%u "
         "manager_matches=%u pointer_reassignment_seen=%u "
+        "historical_snapshot=%u history_evicted=%u "
+        "stamp_candidates=%u history_overwrites=%llu "
         "cache_readback=%u cache_seq_matches=%u "
         "previous_kind=%u previous_row=%u previous_seq=%llu "
         "tick_ms=%llu tid=%lu issued=1 "
@@ -123,6 +125,11 @@ inline void indexed_rx34(
         joined.prior.manager_field_readable?1u:0u,
         joined.prior.context_manager_matches_wrapper?1u:0u,
         joined.had_pointer_reassignment?1u:0u,
+        joined.superseded_by_newer?1u:0u,
+        joined.history_has_evictions?1u:0u,
+        static_cast<unsigned>(joined.candidates),
+        static_cast<unsigned long long>(
+            observations().history_overwrites()),
         cache_available?1u:0u,cache_seq_matches?1u:0u,
         static_cast<unsigned>(change.previous.kind),
         change.previous.row,
