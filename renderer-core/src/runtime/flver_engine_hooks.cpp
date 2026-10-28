@@ -6,6 +6,9 @@
 #endif
 #include "dsrrl/runtime/flver_identity_transport.hpp"
 #include "dsrrl/runtime/flver_identity_registry.hpp"
+#if defined(DSRRL_V415_FLVER_MODEL_ID_DIAG)
+#include "dsrrl/runtime/v415_model_draw_identity.hpp"
+#endif
 #include "dsrrl/runtime/qpc_causality_bisect.hpp"
 #include "dsrrl/runtime/exact_material_cache.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
@@ -1296,6 +1299,11 @@ extern "C" void dsrrl_flver_selector_observer(
  const auto prefix_begin =
      selector_profile_begin(profile);
 
+#if defined(DSRRL_V415_FLVER_MODEL_ID_DIAG)
+ // Clear even on negative/other-caller selector opportunities: never reuse
+ // a stale model stamp from a different renderable on the same thread.
+ v415::reset_selector();
+#endif
  telemetry::hot_count(g_selector_events);
  material_owner_selection_clear();
  pmetal_env_source_selector_clear();
@@ -1358,6 +1366,51 @@ extern "C" void dsrrl_flver_selector_observer(
       selector_profile_path::early_reject);
   return;
  }
+
+#if defined(DSRRL_V415_FLVER_MODEL_ID_DIAG)
+ // Exact original native callsite 0x20E014:
+ //   0x20DF00 lea rsi,[rdi+0x88] ; 0x20E011 mov rcx,rsi
+ //   0x20E014 call selector(0x22BA20), return 0x20E019.
+ // Thus container is [FlverModel this + 0x88] ONLY at this caller.
+ // Validate model vtable before recording, never use as a policy gate.
+ if (rva==k_ret_sel_1 && container!=nullptr &&
+     reinterpret_cast<std::uintptr_t>(container)>=0x88u) {
+     const auto model_addr=
+         reinterpret_cast<std::uintptr_t>(container)-0x88u;
+     const auto *model_ptr=reinterpret_cast<const void *>(model_addr);
+     std::uintptr_t model_vtable=0u;
+     if (range_ok(model_ptr,sizeof(model_vtable))) {
+         std::memcpy(&model_vtable,model_ptr,sizeof(model_vtable));
+         const std::uint32_t class_kind=
+             model_vtable==g_base+0x12EB130u ? 1u :
+             model_vtable==g_base+0x12EB760u ? 2u : 0u;
+         if (class_kind!=0u) {
+             v415::record_selector(
+                 model_addr,
+                 reinterpret_cast<std::uintptr_t>(container),
+                 reinterpret_cast<std::uintptr_t>(owner),
+                 model_vtable,material_index,class_kind);
+             static std::atomic<std::uint64_t> model_samples{0u};
+             const auto n=model_samples.fetch_add(1u,
+                 std::memory_order_relaxed)+1u;
+             if (n<=256u || n%8192u==0u) {
+                 char line[365]{};
+                 std::snprintf(line,sizeof(line),
+                     "[DSRRL V415 MODEL SELECTOR] "
+                     "n=%llu model=%p class=%u container=%p "
+                     "context=%p vtable=%p material_index=%d "
+                     "caller=20e019 native_actor=OPEN pixel=OPEN",
+                     static_cast<unsigned long long>(n),
+                     model_ptr,class_kind,container,owner,
+                     reinterpret_cast<void *>(model_vtable),
+                     static_cast<int>(material_index));
+                 reshade::log::message(
+                     reshade::log::level::info,line);
+             }
+         }
+     }
+ }
+#endif
 
 #if defined(DSRRL_V394_MODEL_SOURCE1)
  // V395: actor LightBank producer before ANY FLVER/MTD/slot lookup.
