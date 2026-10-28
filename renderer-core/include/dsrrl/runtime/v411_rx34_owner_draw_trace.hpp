@@ -1,6 +1,7 @@
 #pragma once
 // V411: actual RX34 indexed_issued receiver observation, never gates pixels.
 #include "dsrrl/runtime/v411_owner_sequence_journal.hpp"
+#include "dsrrl/runtime/v413_live_owner_probe.hpp"
 #include "dsrrl/runtime/v409_rx34_transition_tracker.hpp"
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
 #include "dsrrl/runtime/pmetal_envspec_draw_runtime.hpp"
@@ -54,10 +55,22 @@ inline void indexed_rx34(
     // Source2 has no actor-qualified native sequence. Keep its routing
     // independent and protected; report it without a positive journal join.
     const bool source1=p.source_kind==1u;
-    const auto joined=source1 ? observations().lookup(
-        m.model_owner_instance,
-        p.stable_envdiffuse_native_producer_sequence,
-        p.stable_envdiffuse_source_serial) : lookup_result{};
+    const auto live=source1 ? v413::inspect_owner(m.model_owner_instance) :
+        v413::native_context_tuple{};
+    lookup_result joined{};
+    if(source1) {
+        if(!live.readable) joined.state=status::context_unreadable;
+        else if(!live.manager_agrees) joined.state=status::native_manager_disagreement;
+        else {
+            joined=observations().lookup(m.model_owner_instance,
+                p.stable_envdiffuse_native_producer_sequence,
+                p.stable_envdiffuse_source_serial,live.wrapper,live.manager);
+            if(joined.state==status::matched_snapshot &&
+               joined.prior.vtable_readable &&
+               joined.prior.context_vtable!=live.vtable)
+                joined.state=status::context_tuple_changed;
+        }
+    }
     pmetal_envspec_source currently{};
     const bool cache_available=source1 &&
         pmetal_producer_state_latest(
