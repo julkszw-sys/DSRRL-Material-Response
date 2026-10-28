@@ -7,7 +7,8 @@ STAMP='[DSRRL V411 OWNER SEQ STAMP]'
 DRAW='[DSRRL V411 RX34 OWNER SEQ DRAW]'
 STATUS={0:'no_record',1:'matched_snapshot',2:'producer_changed',
         3:'epoch_changed',4:'context_tuple_changed',
-        5:'capacity_miss',255:'source2_not_applicable'}
+        5:'capacity_miss',6:'history_evicted',
+        7:'ambiguous_context_identity',255:'source2_not_applicable'}
 def events(text):
     for n,line in enumerate(text.splitlines(),1):
         kind='stamp' if STAMP in line else 'draw' if DRAW in line else None
@@ -19,9 +20,17 @@ def classify_draw(d):
         return 'source1_missing_native_sequence'
     status=int(d.get('stamp_state','0'))
     if status!=1:return 'source1_'+STATUS.get(status,'unknown_stamp')
+    if d.get('manager_matches')!='1':
+        return 'source1_context_manager_not_confirmed'
+    if d.get('historical_snapshot')=='1':
+        # A newer native producer can legitimately update the *current*
+        # cache before a previously prepared RX34 draw is issued.
+        # Neither state proves native actor lifetime or GPU command order.
+        if d.get('cache_seq_matches')!='1':
+            return 'source1_historical_stamp_cache_advanced_actor_open'
+        return 'source1_historical_stamp_consistent_actor_open'
     if d.get('cache_readback')!='1':return 'source1_cache_readback_missing'
     if d.get('cache_seq_matches')!='1':return 'source1_cache_sequence_mismatch'
-    if d.get('manager_matches')!='1':return 'source1_context_manager_not_confirmed'
     return 'source1_snapshot_consistent_native_actor_open'
 def analyze(text):
     stamps=[];draws=[]
