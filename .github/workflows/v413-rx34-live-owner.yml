@@ -63,7 +63,7 @@ jobs:
           path: _reshade
       - name: Build integrated V389 descendant
         shell: pwsh
-        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+        run: ./renderer-core/tools/build_v413_selector_diagnostic.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
       - name: Build real model and selector policy regression tests with assertions ON
         shell: pwsh
         run: |
@@ -93,7 +93,7 @@ jobs:
       - name: Confirm single native addon
         shell: pwsh
         run: |
-          $p='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          $p='out-v413-selector-diagnostic/DSRRL_V413_Selector_Diagnostic.addon64'
           if (!(Test-Path $p)) { throw 'Addon missing' }
           $b=[IO.File]::ReadAllBytes((Resolve-Path $p))
           if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) { throw 'Invalid PE' }
@@ -101,6 +101,6 @@ jobs:
           Get-FileHash $p -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
-          name: DSRRL-V413-LiveOwner-Verified-One-Addon
+          name: DSRRL-V413-Selector-Diagnostic-One-Addon
           path: out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64
           if-no-files-found: error
