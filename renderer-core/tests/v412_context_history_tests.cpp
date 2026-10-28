@@ -17,6 +17,10 @@ int main() {
     journal j;
     const auto first=make(0x219A4D80,25);
     assert(j.observe(first));
+    // Multiple FLVERs can repeat the same native producer; no eviction.
+    for(int n=0;n<1000;++n)assert(j.observe(first));
+    assert(j.history_overwrites()==0);
+    assert(j.lookup(first.owner,25,3).observed_version==1);
     auto r=j.lookup(first.owner,25,3);
     assert(r.state==status::matched_snapshot && r.prior.row_a==25);
     assert(j.lookup(first.owner,3,3).state==status::producer_changed);
