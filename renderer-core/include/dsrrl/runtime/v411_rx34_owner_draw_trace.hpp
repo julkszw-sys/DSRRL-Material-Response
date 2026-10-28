@@ -76,7 +76,9 @@ inline void indexed_rx34(
         "serial=%llu native_producer_seq=%llu "
         "stamp_state=%u stamp_version=%llu stamp_wrapper=%p "
         "stamp_manager=%p stamp_row_a=%u stamp_row_b=%u "
-        "pointer_reassignment_seen=%u "
+        "stamp_vtable=%p stamp_vtable_readable=%u "
+        "stamp_context_manager=%p manager_field_readable=%u "
+        "manager_matches=%u pointer_reassignment_seen=%u "
         "cache_readback=%u cache_seq_matches=%u "
         "previous_kind=%u previous_row=%u previous_seq=%llu "
         "tick_ms=%llu tid=%lu issued=1 "
@@ -98,6 +100,11 @@ inline void indexed_rx34(
         reinterpret_cast<void*>(joined.prior.wrapper),
         reinterpret_cast<void*>(joined.prior.manager),
         joined.prior.row_a,joined.prior.row_b,
+        reinterpret_cast<void*>(joined.prior.context_vtable),
+        joined.prior.vtable_readable?1u:0u,
+        reinterpret_cast<void*>(joined.prior.context_manager),
+        joined.prior.manager_field_readable?1u:0u,
+        joined.prior.context_manager_matches_wrapper?1u:0u,
         joined.had_pointer_reassignment?1u:0u,
         cache_available?1u:0u,cache_seq_matches?1u:0u,
         static_cast<unsigned>(change.previous.kind),
