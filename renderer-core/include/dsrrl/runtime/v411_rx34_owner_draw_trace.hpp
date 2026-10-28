@@ -68,14 +68,25 @@ inline void indexed_rx34(
             p.stable_envdiffuse_native_producer_sequence;
     // Cached snapshot may have been superseded after draw preparation.
     // No proof of native actor lifetime or GPU command order is claimed.
-    char line[900]{};
+    constexpr char hex[]="0123456789abcdef";
+    char flver[65]{},mtd[65]{};
+    for(std::size_t i=0;i<32u;++i) {
+        flver[i*2u]=hex[key.flver[i]>>4u];
+        flver[i*2u+1u]=hex[key.flver[i]&15u];
+        mtd[i*2u]=hex[key.mtd[i]>>4u];
+        mtd[i*2u+1u]=hex[key.mtd[i]&15u];
+    }
+    char line[1650]{};
     std::snprintf(line,sizeof(line),
         "[DSRRL V411 RX34 OWNER SEQ DRAW] "
         "event=%s n=%llu owner=%p route=%u slot=%u "
-        "shader=%p kind=%u row=%u bank=%016llx "
+        "shader=%p flver_sha=%s mtd_sha=%s "
+        "owner_tuple_exact=%u kind=%u row=%u bank=%016llx "
         "serial=%llu native_producer_seq=%llu "
         "stamp_state=%u stamp_version=%llu stamp_wrapper=%p "
-        "stamp_manager=%p stamp_row_a=%u stamp_row_b=%u "
+        "stamp_manager=%p stamp_source_a=%p stamp_source_b=%p "
+        "stamp_selector_a=%d stamp_selector_b=%d "
+        "stamp_beta_bits=%08x stamp_row_a=%u stamp_row_b=%u "
         "stamp_vtable=%p stamp_vtable_readable=%u "
         "stamp_context_manager=%p manager_field_readable=%u "
         "manager_matches=%u pointer_reassignment_seen=%u "
@@ -87,7 +98,8 @@ inline void indexed_rx34(
         static_cast<unsigned long long>(change.sequence),
         reinterpret_cast<void*>(m.model_owner_instance),
         m.route_index,m.material_slot,
-        reinterpret_cast<void*>(p.shader),
+        reinterpret_cast<void*>(p.shader),flver,mtd,
+        m.owner_tuple_exact?1u:0u,
         static_cast<unsigned>(p.source_kind),
         p.stable_envdiffuse_row,
         static_cast<unsigned long long>(p.stable_envdiffuse_bank),
@@ -99,6 +111,11 @@ inline void indexed_rx34(
         static_cast<unsigned long long>(joined.observed_version),
         reinterpret_cast<void*>(joined.prior.wrapper),
         reinterpret_cast<void*>(joined.prior.manager),
+        reinterpret_cast<void*>(joined.prior.source_a),
+        reinterpret_cast<void*>(joined.prior.source_b),
+        static_cast<int>(joined.prior.selector_a),
+        static_cast<int>(joined.prior.selector_b),
+        joined.prior.beta_bits,
         joined.prior.row_a,joined.prior.row_b,
         reinterpret_cast<void*>(joined.prior.context_vtable),
         joined.prior.vtable_readable?1u:0u,
