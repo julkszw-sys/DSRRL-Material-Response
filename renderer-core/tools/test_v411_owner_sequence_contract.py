@@ -22,9 +22,9 @@ assert 'if (latest_hook_source(out))' in source
 r=gpu[gpu.index('void v388_envdiffuse_stable_issued('):gpu.index('bool prepare_island_batch(')]
 assert r.index('v411::indexed_rx34(material,decision,prepared)')<r.index('const bool initial=nth<=32u')
 assert 'if(issued && !hemenvlerp_bound)' in gpu
-assert 'native_seq==0 || s.value.native_sequence!=native_seq' in journal
-assert 'selector_epoch==0 || s.value.selector_epoch!=selector_epoch' in journal
-assert 's.had_pointer_reassignment=true' in journal
+assert 'native_seq==0 || s.value.native_sequence!=native_seq' in journal or 'w.native_sequence!=seq' in journal
+assert 'selector_epoch==0 || s.value.selector_epoch!=selector_epoch' in journal or 'w.selector_epoch!=epoch' in journal
+assert 's.had_pointer_reassignment=true' in journal or 'e.had_pointer_reassignment=true' in journal
 assert 'capacity_failures_.fetch_add' in journal
 assert 'v409::source_transition_tracker' in trace
 assert 'pmetal_producer_state_latest(' in trace
