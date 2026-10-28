@@ -16,6 +16,9 @@
 #if defined(DSRRL_V411_OWNER_SEQUENCE_DIAG)
 #include "dsrrl/runtime/v411_owner_sequence_journal.hpp"
 #endif
+#if defined(DSRRL_V415_FLVER_MODEL_ID_DIAG)
+#include "dsrrl/runtime/v415_model_draw_identity.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -2953,6 +2956,40 @@ void pmetal_env_source_selector_event(
                 w.context_manager_matches_wrapper=
                     w.manager_field_readable &&
                     manager_field_v411==manager;
+#if defined(DSRRL_V415_FLVER_MODEL_ID_DIAG)
+                // Observational model-to-Source1 join on this selector thread.
+                // The source cache key and GPU output are NOT modified.
+                const auto model_v415=v415::current_for(
+                    reinterpret_cast<std::uintptr_t>(owner));
+                if (model_v415.valid) {
+                    static std::atomic<std::uint64_t> joins{0u};
+                    const auto number=joins.fetch_add(
+                        1u,std::memory_order_relaxed)+1u;
+                    if (number<=512u || number%8192u==0u) {
+                        char line_v415[440]{};
+                        std::snprintf(line_v415,sizeof(line_v415),
+                            "[DSRRL V415 MODEL SOURCE JOIN] "
+                            "n=%llu model=%p class=%u container=%p "
+                            "context=%p material_index=%d "
+                            "native_producer_seq=%llu selector_epoch=%llu "
+                            "source_a=%p source_b=%p row_a=%u row_b=%u "
+                            "selector_a=%d selector_b=%d "
+                            "actor_lifetime=OPEN gpu_join=OPEN pixel=OPEN",
+                            static_cast<unsigned long long>(number),
+                            reinterpret_cast<void *>(model_v415.model_this),
+                            model_v415.class_kind,
+                            reinterpret_cast<void *>(model_v415.container),
+                            owner,static_cast<int>(model_v415.material_index),
+                            static_cast<unsigned long long>(w.native_sequence),
+                            static_cast<unsigned long long>(w.selector_epoch),
+                            source_a,source_b,w.row_a,w.row_b,
+                            static_cast<int>(w.selector_a),
+                            static_cast<int>(w.selector_b));
+                        reshade::log::message(
+                            reshade::log::level::info,line_v415);
+                    }
+                }
+#endif
                 const bool journaled=v411::observations().observe(w);
                 static std::atomic<std::uint64_t> stamp_total{0u};
                 const auto n=stamp_total.fetch_add(1u,
