@@ -97,7 +97,7 @@ jobs:
           if (!(Test-Path $p)) { throw 'Addon missing' }
           $b=[IO.File]::ReadAllBytes((Resolve-Path $p))
           if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) { throw 'Invalid PE' }
-          if ((Get-ChildItem 'out-v230-release' -Filter '*.addon64').Count -ne 1) { throw 'Expected one addon' }
+          if ((Get-ChildItem 'out-v413-selector-diagnostic' -Filter '*.addon64').Count -ne 1) { throw 'Expected one addon' }
           Get-FileHash $p -Algorithm SHA256 | Format-List
       - uses: actions/upload-artifact@v4
         with:
