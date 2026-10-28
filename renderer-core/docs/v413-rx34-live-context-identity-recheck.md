@@ -22,3 +22,12 @@ V411/V412 `indexed_rx34` called `journal.lookup(owner, native_seq, selector_epoc
 Even a matched live wrapper+manager/vtable+producer snapshot cannot certify the engine's **actual constructor/destructor lifetime**, because an allocator may reuse a context address with matching field values. It also does not certify async GPU command-list ordering or the final PTDE-visible pixel. The exact native ctor callsite RVA `0x1EC9CD` and deleting destructor `0x1EC480` remain possible independently validated observer boundaries; they are NOT hooked in V413. The old 14-byte copying trampoline is NOT used here.
 
 **PROTECT:** R43 `latest_hook_source()` preserved, row25 and zero C86 are never rejected, unrelated receiver families stock DSR. Construction PASS. Windows addon build, runtime liveness, bridge activation and pixel behavior must each be assessed independently.
+
+
+## Diagnostic build correction (V413 CI)
+
+First CI: Linux source contracts PASS; Windows native compiler and linker **produced the addon**, but `build_v230_production.ps1` rejected it with `Missing binary marker: [DSRRL V408 CONTEXT SELECTOR CENSUS]`. Root cause is the existing **release-only** `materialize_v230_release_cleanup.py`: it forces effect telemetry disabled and suppresses INFO observers in `pmetal_env_source_runtime.cpp`. This is normal for shipping V230 but incompatible with V408/V411/V413 diagnostics. The compiler output is not evidence that the required observer was actually present.
+
+The dedicated `build_v413_selector_diagnostic.ps1` generates a build without editing the frozen V359-RC1 or main production script. It uses separate `build-v413-selector-diagnostic` / `out-v413-selector-diagnostic` directories, an individually named `DSRRL_V413_Selector_Diagnostic.addon64`, and enables the existing CMake `DSRRL_EFFECT_TELEMETRY_DEFAULT_ON_ONLY=ON` option. `materialize_v413_selector_diagnostic.py` applies **only** the existing V296 nonhomologous cross-operator veto correction; it intentionally leaves V408–V413 read-only INFO observers intact instead of running the V230 log removal. `test_v413_diagnostic_build_contract.py` checks that native logs and the protected Source2 fallback survive.
+
+Windows one-addon workflow is `.github/workflows/v413-rx34-live-owner.yml`; its diagnostic build must pass before any binary should be called testable. This diagnostic variant is **not a production release** and logging overhead must be benchmarked with the effect-enabled trace.
