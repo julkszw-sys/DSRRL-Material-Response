@@ -66,6 +66,14 @@ class journal {
             a.row_a==b.row_a && a.row_b==b.row_b &&
             a.beta_bits==b.beta_bits;
     }
+    static bool same_witness_semantics(const witness &a,const witness &b) noexcept {
+        return a.owner==b.owner && a.native_sequence==b.native_sequence &&
+            a.selector_epoch==b.selector_epoch &&
+            same_context_tuple(a,b) && same_source_tuple(a,b) &&
+            a.vtable_readable==b.vtable_readable &&
+            a.manager_field_readable==b.manager_field_readable &&
+            a.context_manager_matches_wrapper==b.context_manager_matches_wrapper;
+    }
     static lookup_result resolve(const entry &e,std::uint64_t seq,
         std::uint64_t epoch,std::uintptr_t wrapper,
         std::uintptr_t manager) noexcept {
@@ -142,6 +150,8 @@ public:
             }
             if(e.owner!=w.owner)continue;
             const auto &latest=e.history[(e.version-1)%history_depth];
+            // Repeated identical native producer stamps do not evict real history.
+            if(same_witness_semantics(latest,w))return true;
             if(!same_context_tuple(latest,w))
                 e.had_pointer_reassignment=true;
             if(e.version>=history_depth) {
