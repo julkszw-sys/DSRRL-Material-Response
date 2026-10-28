@@ -13,6 +13,9 @@ struct witness {
     std::uint32_t row_a=0, row_b=0, beta_bits=0;
     std::int16_t selector_a=-1, selector_b=-1;
     std::uint32_t thread_id=0;
+    std::uintptr_t context_vtable=0, context_manager=0;
+    bool vtable_readable=false, manager_field_readable=false;
+    bool context_manager_matches_wrapper=false;
 };
 enum class status:std::uint8_t {
     no_record, matched_snapshot, producer_changed, epoch_changed,
