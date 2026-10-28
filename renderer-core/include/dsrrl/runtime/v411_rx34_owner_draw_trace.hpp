@@ -89,7 +89,7 @@ inline void indexed_rx34(
         mtd[i*2u]=hex[key.mtd[i]>>4u];
         mtd[i*2u+1u]=hex[key.mtd[i]&15u];
     }
-    char line[1650]{};
+    char line[1900]{};
     std::snprintf(line,sizeof(line),
         "[DSRRL V411 RX34 OWNER SEQ DRAW] "
         "event=%s n=%llu owner=%p route=%u slot=%u "
@@ -105,6 +105,9 @@ inline void indexed_rx34(
         "manager_matches=%u pointer_reassignment_seen=%u "
         "historical_snapshot=%u history_evicted=%u "
         "stamp_candidates=%u history_overwrites=%llu "
+        "matched_run=%llu latest_run=%llu "
+        "live_readable=%u live_manager_agrees=%u "
+        "live_wrapper=%p live_manager=%p live_vtable=%p "
         "cache_readback=%u cache_seq_matches=%u "
         "previous_kind=%u previous_row=%u previous_seq=%llu "
         "tick_ms=%llu tid=%lu issued=1 "
@@ -143,6 +146,12 @@ inline void indexed_rx34(
         static_cast<unsigned>(joined.candidates),
         static_cast<unsigned long long>(
             observations().history_overwrites()),
+        static_cast<unsigned long long>(joined.matched_context_run),
+        static_cast<unsigned long long>(joined.latest_context_run),
+        live.readable?1u:0u,live.manager_agrees?1u:0u,
+        reinterpret_cast<void*>(live.wrapper),
+        reinterpret_cast<void*>(live.manager),
+        reinterpret_cast<void*>(live.vtable),
         cache_available?1u:0u,cache_seq_matches?1u:0u,
         static_cast<unsigned>(change.previous.kind),
         change.previous.row,
