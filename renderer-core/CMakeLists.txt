@@ -641,6 +641,20 @@ target_link_libraries(dsrrl_v399_certified_beta_tests PRIVATE Threads::Threads)
 target_compile_features(dsrrl_v399_certified_beta_tests PRIVATE cxx_std_17)
 add_test(NAME dsrrl_v399_certified_beta_tests COMMAND dsrrl_v399_certified_beta_tests)
 
+add_executable(dsrrl_v413_context_run_tests tests/v413_context_run_tests.cpp)
+target_include_directories(dsrrl_v413_context_run_tests PRIVATE include)
+target_link_libraries(dsrrl_v413_context_run_tests PRIVATE Threads::Threads)
+target_compile_features(dsrrl_v413_context_run_tests PRIVATE cxx_std_17)
+add_test(NAME dsrrl_v413_context_run_tests COMMAND dsrrl_v413_context_run_tests)
+if(WIN32)
+    add_executable(dsrrl_v413_live_owner_probe_windows_tests
+        tests/v413_live_owner_probe_windows_tests.cpp)
+    target_include_directories(dsrrl_v413_live_owner_probe_windows_tests PRIVATE include)
+    target_compile_features(dsrrl_v413_live_owner_probe_windows_tests PRIVATE cxx_std_17)
+    add_test(NAME dsrrl_v413_live_owner_probe_windows_tests
+        COMMAND dsrrl_v413_live_owner_probe_windows_tests)
+endif()
+
 add_executable(dsrrl_v412_context_history_tests tests/v412_context_history_tests.cpp)
 target_include_directories(dsrrl_v412_context_history_tests PRIVATE include)
 target_link_libraries(dsrrl_v412_context_history_tests PRIVATE Threads::Threads)
