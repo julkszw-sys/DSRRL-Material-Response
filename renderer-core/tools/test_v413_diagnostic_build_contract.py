@@ -4,7 +4,7 @@ core=(r.parent/'build-v413-selector-diagnostic/generated/dsrrl/runtime/integrate
 source=(r/'src/runtime/pmetal_env_source_runtime.cpp').read_text()
 tele=(r/'include/dsrrl/runtime/runtime_hot_telemetry.hpp').read_text()
 assert 'v296_partial_material' not in core
-assert '[DSRRL V411 RX34 OWNER SEQ DRAW]' in core
+assert '[DSRRL V411 RX34 OWNER SEQ DRAW]' in (r/'include/dsrrl/runtime/v411_rx34_owner_draw_trace.hpp').read_text()
 assert '[DSRRL V408 CONTEXT SELECTOR CENSUS]' in source
 assert '[DSRRL V411 OWNER SEQ STAMP]' in source
 assert 'if (latest_hook_source(out))' in source
