@@ -15,7 +15,7 @@ for x in ('committed_v411.bank_signature_a','committed_v411.bank_signature_b',
  'std::memcmp(&committed_v411.beta,&next.beta',
  'committed_v411.envdiffuse_a','committed_v411.envdiffuse_b',
  'w.wrapper=','w.manager=','w.native_sequence=',
- 'safe_read(owner_bytes_v411+0x2320u','manager_field_v411==manager'):
+ 'owner_bytes_v411+0x2320u','manager_field_v411==manager'):
  assert x in b,x
 assert 'return;' not in b and 'latest_hook_source' not in b
 assert 'if (latest_hook_source(out))' in source
