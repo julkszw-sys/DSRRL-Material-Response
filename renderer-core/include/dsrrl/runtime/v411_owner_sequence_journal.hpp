@@ -21,7 +21,8 @@ struct witness {
 };
 enum class status:std::uint8_t {
     no_record, matched_snapshot, producer_changed, epoch_changed,
-    context_tuple_changed, capacity_miss, history_evicted, ambiguous_context_identity
+    context_tuple_changed, capacity_miss, history_evicted, ambiguous_context_identity,
+    context_unreadable, native_manager_disagreement
 };
 struct lookup_result {
     status state=status::no_record;
@@ -31,6 +32,8 @@ struct lookup_result {
     bool superseded_by_newer=false;
     bool history_has_evictions=false;
     std::uint8_t candidates=0;
+    std::uint64_t matched_context_run=0;
+    std::uint64_t latest_context_run=0;
 };
 class journal {
     static constexpr std::size_t shard_count=64, slots_per_shard=64;
@@ -39,6 +42,8 @@ class journal {
         bool used=false;
         std::uintptr_t owner=0;
         std::array<witness,history_depth> history{};
+        std::array<std::uint64_t,history_depth> context_runs{};
+        std::uint64_t current_context_run=0;
         std::uint64_t version=0;
         bool had_pointer_reassignment=false;
         bool history_evicted=false;
@@ -79,12 +84,14 @@ class journal {
         std::uintptr_t manager) noexcept {
         lookup_result r{};
         r.observed_version=e.version;
+        r.latest_context_run=e.current_context_run;
         r.had_pointer_reassignment=e.had_pointer_reassignment;
         r.history_has_evictions=e.history_evicted;
         const auto length=static_cast<std::size_t>(
             e.version<history_depth ? e.version : history_depth);
         const witness *matching=nullptr;
         std::uint64_t matching_version=0;
+        std::uint64_t matching_run=0;
         bool matching_seq=false;
         bool conflicting_tuple=false;
         for(std::size_t index=0;index<length;++index) {
@@ -95,6 +102,7 @@ class journal {
             if(w.selector_epoch!=epoch)continue;
             if(!matching) {
                 matching=&w;matching_version=version;
+                matching_run=e.context_runs[(version-1)%history_depth];
             } else if(!same_context_tuple(*matching,w) ||
                       !same_source_tuple(*matching,w)) {
                 // A repeated native sequence+epoch cannot certify two
@@ -107,10 +115,10 @@ class journal {
             r.state=status::producer_changed;
         } else if(matching) {
             r.prior=*matching;
+            r.matched_context_run=matching_run;
             r.superseded_by_newer=(matching_version!=e.version);
             if(conflicting_tuple ||
-                (r.superseded_by_newer && e.had_pointer_reassignment &&
-                 !wrapper && !manager)) {
+                matching_run!=e.current_context_run) {
                 // A reused owner address is not a native actor lifetime ID.
                 r.state=status::ambiguous_context_identity;
             } else if((wrapper && matching->wrapper!=wrapper) ||
@@ -145,21 +153,25 @@ public:
             auto &e=slots[(h+n)&(slots_per_shard-1)];
             if(!e.used) {
                 e.used=true;e.owner=w.owner;e.version=1;
-                e.history[0]=w;
+                e.current_context_run=1;
+                e.history[0]=w;e.context_runs[0]=1;
                 return true;
             }
             if(e.owner!=w.owner)continue;
             const auto &latest=e.history[(e.version-1)%history_depth];
             // Repeated identical native producer stamps do not evict real history.
             if(same_witness_semantics(latest,w))return true;
-            if(!same_context_tuple(latest,w))
+            if(!same_context_tuple(latest,w)) {
                 e.had_pointer_reassignment=true;
+                ++e.current_context_run;
+            }
             if(e.version>=history_depth) {
                 e.history_evicted=true;
                 history_overwrites_.fetch_add(1,std::memory_order_relaxed);
             }
             ++e.version;
             e.history[(e.version-1)%history_depth]=w;
+            e.context_runs[(e.version-1)%history_depth]=e.current_context_run;
             return true;
         }
         capacity_failures_.fetch_add(1,std::memory_order_relaxed);
