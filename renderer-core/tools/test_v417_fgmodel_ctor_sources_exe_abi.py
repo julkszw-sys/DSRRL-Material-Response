@@ -36,6 +36,15 @@ PRE={
   0x76e29a:"c7 41 40 01 00 00 00", # reference count initial 1
   0x76e550:"ff 41 40", # reference count ++
   0x76e564:"ff 49 40", # reference count --
+  0x11ba1b0:"81 e3 ff ff ff 00", # 24-bit registry slot index
+  0x11ba1b6:"81 e2 00 00 00 ff", # high-byte native generation
+  0x11ba1be:"0f ba eb 1f", # bit31 allocated marker
+  0x11ba1d2:"8b c3", # returns registered slot+generation handle
+  0x11ba0fb:"81 e7 ff ff ff 00", # recycled low24 slot
+  0x11ba10c:"8d 82 00 00 00 01", # generation increment
+  0x11ba115:"25 00 00 00 7f", # generation low 7 bits modulo128
+  0x11ba11a:"48 83 c8 01", # free state marker
+
 }
 CALLERS=(0x27c54f,0x28267b,0x6a632b,0x72f2c2)
 def verify(path):
@@ -60,7 +69,7 @@ def verify(path):
   target=rva+5+struct.unpack_from("<i",b,o+1)[0]
   assert target==0x76e260,f"unexpected FgModel ctor target {rva:x}"
  print(f"V417 PASS: {len(PRE)} opcode preimages, {len(CALLERS)} instruction-aligned constructor calls")
- print("V417 registered ID +0x38 and refcount +0x40 have DIFFERENT semantics; actor lifetime OPEN")
+ print("V417 exact pool registration: low24 slot, high7 generation, bit31 allocated; actor identity OPEN")
 if __name__=="__main__":
  if len(sys.argv)!=2:raise SystemExit("Usage: python test_v417_fgmodel_ctor_sources_exe_abi.py DarkSoulsRemastered.exe")
  verify(sys.argv[1])
