@@ -1,6 +1,9 @@
 #include "dsrrl/runtime/draw_state_transaction.hpp"
 #include "dsrrl/runtime/d3d11_cb_window.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#if defined(DSRRL_V419_RX34_PREDRAW_NATIVE_STATE)
+#include "dsrrl/runtime/v419_rx34_predraw_state.hpp"
+#endif
 #include "dsrrl/core/draw_transaction_policy.hpp"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -1381,6 +1384,11 @@ draw_state_transaction_runtime::replay_draw_indexed(
 #endif
 
     auto *ctx = state.context;
+#if defined(DSRRL_V419_RX34_PREDRAW_NATIVE_STATE)
+    // Actual state cut: after begin() installs transaction bindings,
+    // before DrawIndexed and before restore(). Diagnostic-only.
+    v419::before_native_draw(ctx);
+#endif
 
     if (instance_count == 1u &&
         first_instance == 0u) {
