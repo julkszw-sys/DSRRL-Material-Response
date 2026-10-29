@@ -8229,6 +8229,8 @@ bool on_draw_indexed(
                 req.fg_parent=w.fg_parent;
                 req.registry=w.fg_registry_id;
                 req.material_slot=material.material_slot;
+                req.flver_sha=material.flver_sha256;
+                req.mtd_sha=material.raw_mtd_sha256;
                 req.row=prepared.envspec.stable_envdiffuse_row;
                 req.native_producer_seq=w.native_sequence;
                 req.source_epoch=w.selector_epoch;
