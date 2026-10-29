@@ -4,6 +4,7 @@
 // No shader, CB, resource, render target or draw state is modified here.
 #include <Windows.h>
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <reshade.hpp>
 #include <atomic>
 #include <array>
@@ -28,7 +29,9 @@ struct snapshot {
     std::uintptr_t rtv0=0,rtv1=0,rtv2=0,rtv3=0,dsv=0;
     std::uintptr_t index_buffer=0;
     std::uint32_t index_format=0,index_offset=0;
-    std::uint32_t cb12_bytes=0,rtv0_format=0,rtv0_dimension=0;
+    std::uint32_t cb12_bytes=0,cb12_first_constant=0,cb12_num_constants=0;
+    bool cb12_context1_available=false,cb12_window_buffer_matches=false;
+    std::uint32_t rtv0_format=0,rtv0_dimension=0;
     std::uint32_t rtv0_width=0,rtv0_height=0,rtv0_samples=0;
     std::uint32_t dsv_format=0,viewport_count=0;
     float viewport_width=0.0f,viewport_height=0.0f;
@@ -73,6 +76,24 @@ inline void before_native_draw(ID3D11DeviceContext *ctx) noexcept {
         cb12->GetDesc(&desc);
         observed.cb12_bytes=desc.ByteWidth;
         cb12->Release();
+    }
+    // D3D11.1 can bind a *window* of the same CB. Matching PSGetCB12
+    // pointers alone does not establish identical semantic constant bytes.
+    ID3D11DeviceContext1 *ctx1=nullptr;
+    if(SUCCEEDED(ctx->QueryInterface(__uuidof(ID3D11DeviceContext1),
+            reinterpret_cast<void **>(&ctx1))) && ctx1){
+        observed.cb12_context1_available=true;
+        ID3D11Buffer *cb12_window=nullptr;
+        UINT first_constant=0u,num_constants=0u;
+        ctx1->PSGetConstantBuffers1(12u,1u,
+            &cb12_window,&first_constant,&num_constants);
+        observed.cb12_first_constant=first_constant;
+        observed.cb12_num_constants=num_constants;
+        observed.cb12_window_buffer_matches=
+            cb12_window!=nullptr &&
+            observed.cb12==reinterpret_cast<std::uintptr_t>(cb12_window);
+        if(cb12_window)cb12_window->Release();
+        ctx1->Release();
     }
     ID3D11RenderTargetView *rtvs[4]{};
     ID3D11DepthStencilView *dsv=nullptr;
@@ -155,6 +176,8 @@ inline void finish(bool issued,
         "native_ctx=%p captured=%u mismatch=%u issued=%u deferred=%u "
         "expected_ps=%p bound_ps=%p ps_match=%u "
         "expected_cb12=%p bound_cb12=%p cb12_match=%u cb12_bytes=%u "
+        "cb12_ctx1=%u cb12_first_constant=%u cb12_num_constants=%u "
+        "cb12_window_buffer_matches=%u "
         "rtv0=%p rtv1=%p rtv2=%p rtv3=%p dsv=%p "
         "rtv0_fmt=%u rtv0_dim=%u size=%ux%u samples=%u dsv_fmt=%u "
         "ib=%p index_format=%u index_offset=%u "
@@ -177,7 +200,10 @@ inline void finish(bool issued,
         p.expected_cb12,reinterpret_cast<void*>(s.cb12),
         s.captured && p.expected_cb12!=nullptr &&
             s.cb12==reinterpret_cast<std::uintptr_t>(p.expected_cb12)?1u:0u,
-        s.cb12_bytes,reinterpret_cast<void*>(s.rtv0),
+        s.cb12_bytes,s.cb12_context1_available?1u:0u,
+        s.cb12_first_constant,s.cb12_num_constants,
+        s.cb12_window_buffer_matches?1u:0u,
+        reinterpret_cast<void*>(s.rtv0),
         reinterpret_cast<void*>(s.rtv1),
         reinterpret_cast<void*>(s.rtv2),
         reinterpret_cast<void*>(s.rtv3),
