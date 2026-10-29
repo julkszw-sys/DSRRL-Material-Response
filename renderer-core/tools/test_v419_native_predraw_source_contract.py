@@ -39,6 +39,12 @@ for op in ('PSGetShader(','PSGetConstantBuffers(','OMGetRenderTargets(',
            'IAGetIndexBuffer(','RSGetViewports('):
  assert op in header,op
 assert 'rtv0_format' in header and 'cb12_bytes' in header
+assert 'PSGetConstantBuffers1(12u,1u,' in header
+assert 'cb12_first_constant' in header and 'cb12_num_constants' in header
+assert 'cb12_window_buffer_matches' in header
+assert 'if(cb12_window)cb12_window->Release();' in header
+assert 'ctx1->Release();' in header
+assert 'reinterpret_cast<void *>' in integrated
 assert 'native_draw_call=CAPTURED gpu_execution=OPEN pixel=OPEN' in header
 assert 'samples' in header or 'requests' in header
 # Strictly read-only calls and bounded sampling.
