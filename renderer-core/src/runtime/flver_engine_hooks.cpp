@@ -1390,6 +1390,76 @@ extern "C" void dsrrl_flver_selector_observer(
                  reinterpret_cast<std::uintptr_t>(container),
                  reinterpret_cast<std::uintptr_t>(owner),
                  model_vtable,material_index,class_kind);
+#if defined(DSRRL_V416_FGMODEL_PARENT_DIAG)
+             // RTTI: class 1 = NS_FRPG::FgFlverModel. Its parent field
+             // +0x140 comes from ctor RVA 20C6E0 (R9), where FgModel ctor
+             // RVA 76E260 installs vtable RVA 13DF6D0 and stores child
+             // in parent+0x28. Require both directions, NEVER guess actors.
+             std::uint32_t fg_reason=0u; // 0=non-Fg,1=no pointer,
+             // 2=unreadable,3=wrong parent class,4=wrong backlink,5=match.
+             std::uintptr_t fg_parent_addr=0u;
+             std::uintptr_t fg_parent_vtable=0u;
+             std::uintptr_t fg_upstream=0u;
+             if (class_kind==1u &&
+                 model_addr<=UINTPTR_MAX-0x148u &&
+                 range_ok(reinterpret_cast<const void *>(
+                     model_addr+0x140u),sizeof(std::uintptr_t))) {
+                 std::memcpy(&fg_parent_addr,
+                     reinterpret_cast<const void *>(model_addr+0x140u),
+                     sizeof(fg_parent_addr));
+                 if (fg_parent_addr==0u) {
+                     fg_reason=1u;
+                 } else if (fg_parent_addr>UINTPTR_MAX-0x38u ||
+                            !range_ok(reinterpret_cast<const void *>(
+                                fg_parent_addr),0x38u)) {
+                     fg_reason=2u;
+                 } else {
+                     std::uintptr_t backlink=0u;
+                     std::memcpy(&fg_parent_vtable,
+                         reinterpret_cast<const void *>(fg_parent_addr),
+                         sizeof(fg_parent_vtable));
+                     std::memcpy(&backlink,
+                         reinterpret_cast<const void *>(fg_parent_addr+0x28u),
+                         sizeof(backlink));
+                     std::memcpy(&fg_upstream,
+                         reinterpret_cast<const void *>(fg_parent_addr+0x30u),
+                         sizeof(fg_upstream));
+                     if (fg_parent_vtable!=g_base+0x13DF6D0u) {
+                         fg_reason=3u;
+                     } else if (backlink!=model_addr) {
+                         fg_reason=4u;
+                     } else {
+                         fg_reason=5u;
+                         v415::record_verified_fgparent(
+                             model_addr,fg_parent_addr,
+                             fg_parent_vtable,fg_upstream);
+                     }
+                 }
+             } else if (class_kind==1u) {
+                 fg_reason=2u;
+             }
+             static std::atomic<std::uint64_t> fg_samples{0u};
+             const auto fg_number=fg_samples.fetch_add(
+                 1u,std::memory_order_relaxed)+1u;
+             if (fg_number<=256u || fg_number%8192u==0u) {
+                 char fg_line[420]{};
+                 std::snprintf(fg_line,sizeof(fg_line),
+                     "[DSRRL V416 FGMODEL PARENT] "
+                     "n=%llu model=%p class=%u fg_parent=%p "
+                     "fg_parent_vtable=%p upstream_hint=%p "
+                     "backlink_verified=%u reason=%u context=%p "
+                     "material_index=%d actor_lifetime=OPEN pixel=OPEN",
+                     static_cast<unsigned long long>(fg_number),
+                     model_ptr,class_kind,
+                     reinterpret_cast<void *>(fg_parent_addr),
+                     reinterpret_cast<void *>(fg_parent_vtable),
+                     reinterpret_cast<void *>(fg_upstream),
+                     fg_reason==5u?1u:0u,fg_reason,owner,
+                     static_cast<int>(material_index));
+                 reshade::log::message(
+                     reshade::log::level::info,fg_line);
+             }
+#endif
              static std::atomic<std::uint64_t> model_samples{0u};
              const auto n=model_samples.fetch_add(1u,
                  std::memory_order_relaxed)+1u;
