@@ -61,9 +61,22 @@ def analyze(path:Path):
         if "30" not in byrow or "31" not in byrow:continue
         row30=byrow["30"];row31=byrow["31"]
         def present(c):
-            return [{"model":v[0],"fg_parent":v[1],"registry_id":v[2],
-                     "upstream":v[3],"upstream_word0":v[4],
-                     "upstream_word0_readable":v[5]} for v in sorted(c)]
+            def decoded(v):
+                try:
+                    raw=int(v[2],10)
+                    # Exact retail DSR 0x11BA160 and 0x11BA0E0:
+                    # bits0..23: allocator slot, bits24..30: generation
+                    # bit31: native allocated/valid marker.
+                    registry={"raw":raw,"slot":raw&0xFFFFFF,
+                        "generation":(raw>>24)&0x7F,
+                        "allocated_flag":bool(raw&0x80000000)}
+                except (TypeError,ValueError):
+                    registry={"raw":v[2],"decoded":"UNKNOWN"}
+                return {"model":v[0],"fg_parent":v[1],
+                    "registry":registry,
+                    "upstream":v[3],"upstream_word0":v[4],
+                    "upstream_word0_readable":v[5]}
+            return [decoded(v) for v in sorted(c)]
         modelparent=lambda v:(v[0],v[1])
         parents_a={modelparent(x) for x in row30}
         parents_b={modelparent(x) for x in row31}
@@ -81,7 +94,8 @@ def analyze(path:Path):
             "gpu_pass_and_visible_pixel":"OPEN"})
     return {"counts":dict(counts),"row30_row31":pairs,"anomalies":anomalies,
             "evidence_limits":[
-                "The FgModel registry number is not a proven unique actor/lifetime generation.",
+                "FgModel native handle carries a 24-bit slot and 7-bit generation plus valid flag. Reuse can wrap after 128 generations.",
+                "Even a valid generational FgModel handle is not a proven gameplay actor ID.",
                 "One source first qword need not be a vtable; upstream class remains unverified.",
                 "Different model+parent observations can be separate actors or separate renderables.",
                 "Same parent in separate observations does not certify same GPU pass or visible pixels.",
