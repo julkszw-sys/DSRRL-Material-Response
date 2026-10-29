@@ -184,7 +184,7 @@ inline void finish(bool issued,
         "viewport=%.0fx%.0f viewport_count=%u "
         "index_count=%u instances=%u first_index=%u "
         "vertex_offset=%d first_instance=%u "
-        "native_draw_call=CAPTURED gpu_execution=OPEN pixel=OPEN",
+        "native_draw_call=INSTRUMENTED gpu_execution=OPEN pixel=OPEN",
         reinterpret_cast<void*>(p.context_owner),
         reinterpret_cast<void*>(p.model),
         reinterpret_cast<void*>(p.fg_parent),p.registry,p.row,p.material_slot,
