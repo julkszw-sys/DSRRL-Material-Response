@@ -24,6 +24,16 @@ struct model_draw_stamp {
     std::uintptr_t upstream_word0=0u; // opaque first 8 bytes if readable
     bool upstream_word0_readable=false;
     bool valid=false;
+#if defined(DSRRL_V420_NATIVE_DRAW_PACKET_RE)
+    // V420: RDX of native FgFlverModel draw, NOT gameplay actor identity.
+    // Draw packet may be reused; only this selector invocation certifies it.
+    std::uintptr_t draw_packet=0u;
+    std::uint16_t packet_raw_a=0u,packet_raw_b=0u;
+    std::uint32_t packet_beta_bits=0u,packet_draw_flags=0u;
+    std::uint32_t packet_material_flags=0u;
+    std::uint8_t packet_character=0u;
+    bool packet_verified=false;
+#endif
 };
 
 // Only the selector's current thread may consume this diagnostic stamp.
@@ -82,6 +92,28 @@ inline void record_registry_observation(
     g_selector_model.upstream_word0=word0;
     g_selector_model.upstream_word0_readable=word0_readable;
 }
+#if defined(DSRRL_V420_NATIVE_DRAW_PACKET_RE)
+// Called only at original FlverModel::draw selector return 0x20E019,
+// after exact packet[0]==FrpgDrawContext and finite-beta verification.
+inline void record_packet(std::uintptr_t model_this,
+    std::uintptr_t packet,std::uint16_t raw_a,std::uint16_t raw_b,
+    std::uint32_t beta_bits,std::uint32_t draw_flags,
+    std::uint32_t material_flags,std::uint8_t character) noexcept
+{
+    if(!g_selector_model.valid ||
+       g_selector_model.model_this!=model_this || !packet ||
+       character>1u || (beta_bits&0x7F800000u)==0x7F800000u)
+        return;
+    auto &s=g_selector_model;
+    s.draw_packet=packet;
+    s.packet_raw_a=raw_a;s.packet_raw_b=raw_b;
+    s.packet_beta_bits=beta_bits;
+    s.packet_draw_flags=draw_flags;
+    s.packet_material_flags=material_flags;
+    s.packet_character=character;
+    s.packet_verified=true;
+}
+#endif
 inline model_draw_stamp current_for(
     std::uintptr_t context) noexcept
 {
