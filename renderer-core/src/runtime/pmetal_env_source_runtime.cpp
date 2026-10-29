@@ -2956,6 +2956,27 @@ void pmetal_env_source_selector_event(
                 w.context_manager_matches_wrapper=
                     w.manager_field_readable &&
                     manager_field_v411==manager;
+#if defined(DSRRL_V418_RX34_GENERATIONAL_ISSUED_JOIN)
+                // V418 journal-only extension; no eligibility, selector,
+                // CPU/GPU CB, shader, row or source payload is modified.
+                // Context equality is necessary but not an actor identity.
+                const auto model_stamp_v418=v415::current_for(
+                    reinterpret_cast<std::uintptr_t>(owner));
+                if (model_stamp_v418.valid) {
+                    w.model_this=model_stamp_v418.model_this;
+                    w.model_class=model_stamp_v418.class_kind;
+                    w.model_material_index=model_stamp_v418.material_index;
+                    w.model_verified=true;
+                    w.fg_parent=model_stamp_v418.fg_parent;
+                    w.fg_reciprocal=
+                        model_stamp_v418.fg_parent_reciprocal;
+                    w.fg_registry_id=model_stamp_v418.fg_registry_id;
+                    w.registry_readable=
+                        model_stamp_v418.fg_registry_readable;
+                    w.registry_allocated=w.registry_readable &&
+                        ((w.fg_registry_id & 0x80000000u)!=0u);
+                }
+#endif
 #if defined(DSRRL_V415_FLVER_MODEL_ID_DIAG)
                 // Observational model-to-Source1 join on this selector thread.
                 // The source cache key and GPU output are NOT modified.
