@@ -1438,6 +1438,67 @@ extern "C" void dsrrl_flver_selector_observer(
              } else if (class_kind==1u) {
                  fg_reason=2u;
              }
+#if defined(DSRRL_V417_FGMODEL_REGISTRY_DIAG)
+             // Native FgModel ctor RVA 76E40F writes registration result
+             // to parent+0x38; its dtor RVA 76E464 consumes that ID.
+             // Registry ID may be recycled and is NOT an actor token.
+             // Parent+0x40 is a reference count, not a generation.
+             // Source (+0x30) is heterogeneous across native callsites.
+             std::uint32_t fg_registry_id=0u,fg_refcount=0u;
+             std::uintptr_t fg_upstream_word0=0u;
+             bool fg_registry_readable=false;
+             bool fg_word0_readable=false;
+             if (fg_reason==5u &&
+                 fg_parent_addr<=UINTPTR_MAX-0x44u &&
+                 range_ok(reinterpret_cast<const void *>(
+                     fg_parent_addr+0x38u),0xCu)) {
+                 std::memcpy(&fg_registry_id,
+                     reinterpret_cast<const void *>(
+                         fg_parent_addr+0x38u),sizeof(fg_registry_id));
+                 std::memcpy(&fg_refcount,
+                     reinterpret_cast<const void *>(
+                         fg_parent_addr+0x40u),sizeof(fg_refcount));
+                 fg_registry_readable=true;
+             }
+             if (fg_reason==5u && fg_upstream!=0u &&
+                 range_ok(reinterpret_cast<const void *>(fg_upstream),
+                          sizeof(fg_upstream_word0))) {
+                 std::memcpy(&fg_upstream_word0,
+                     reinterpret_cast<const void *>(fg_upstream),
+                     sizeof(fg_upstream_word0));
+                 fg_word0_readable=true;
+             }
+             if (fg_reason==5u) {
+                 v415::record_registry_observation(
+                     model_addr,fg_registry_id,fg_refcount,
+                     fg_upstream_word0,fg_word0_readable);
+             }
+             static std::atomic<std::uint64_t> reg_samples{0u};
+             const auto reg_n=reg_samples.fetch_add(
+                 1u,std::memory_order_relaxed)+1u;
+             if (reg_n<=256u || reg_n%8192u==0u) {
+                 char reg_line[460]{};
+                 std::snprintf(reg_line,sizeof(reg_line),
+                     "[DSRRL V417 FG REGISTRY PROVENANCE] "
+                     "n=%llu model=%p parent=%p context=%p "
+                     "registry_id=%u registry_readable=%u "
+                     "refcount=%u upstream=%p upstream_word0=%p "
+                     "upstream_word0_readable=%u "
+                     "parent_reciprocal=%u "
+                     "registry_lifetime=OPEN upstream_class=OPEN "
+                     "actor_identity=OPEN pixel=OPEN",
+                     static_cast<unsigned long long>(reg_n),
+                     model_ptr,reinterpret_cast<void *>(fg_parent_addr),
+                     owner,fg_registry_id,fg_registry_readable?1u:0u,
+                     fg_refcount,
+                     reinterpret_cast<void *>(fg_upstream),
+                     reinterpret_cast<void *>(fg_upstream_word0),
+                     fg_word0_readable?1u:0u,
+                     fg_reason==5u?1u:0u);
+                 reshade::log::message(
+                     reshade::log::level::info,reg_line);
+             }
+#endif
              static std::atomic<std::uint64_t> fg_samples{0u};
              const auto fg_number=fg_samples.fetch_add(
                  1u,std::memory_order_relaxed)+1u;
