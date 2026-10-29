@@ -16,6 +16,12 @@ struct model_draw_stamp {
     std::uintptr_t fg_parent_vtable=0u;
     std::uintptr_t fg_parent_upstream=0u; // raw FgModel+0x30; semantics OPEN
     bool fg_parent_reciprocal=false;
+    // V417: diagnostic fields from native FgModel. A registry slot is not
+    // an authenticated gameplay actor ID nor a memory-lifetime generation.
+    std::uint32_t fg_registry_id=0u;
+    std::uint32_t fg_refcount=0u;
+    std::uintptr_t upstream_word0=0u; // opaque first 8 bytes if readable
+    bool upstream_word0_readable=false;
     bool valid=false;
 };
 
@@ -34,6 +40,7 @@ inline void record_selector(
     g_selector_model={
         model_this,container,context,vtable,
         material_index,class_kind,
+        0u,0u,0u,false,
         0u,0u,0u,false,
         model_this!=0u && container!=0u &&
         context!=0u && class_kind!=0u
@@ -55,6 +62,22 @@ inline void record_verified_fgparent(
     g_selector_model.fg_parent_vtable = parent_vtable;
     g_selector_model.fg_parent_upstream = upstream;
     g_selector_model.fg_parent_reciprocal = true;
+}
+// Only optional V417 diagnostics. Does not change the validity of V416's
+// reciprocal pointer witness and must not be used as a selection carrier.
+inline void record_registry_observation(
+    std::uintptr_t model_this, std::uint32_t registry_id,
+    std::uint32_t refcount, std::uintptr_t word0,
+    bool word0_readable) noexcept
+{
+    if (!g_selector_model.valid ||
+        !g_selector_model.fg_parent_reciprocal ||
+        g_selector_model.model_this != model_this)
+        return;
+    g_selector_model.fg_registry_id=registry_id;
+    g_selector_model.fg_refcount=refcount;
+    g_selector_model.upstream_word0=word0;
+    g_selector_model.upstream_word0_readable=word0_readable;
 }
 inline model_draw_stamp current_for(
     std::uintptr_t context) noexcept
