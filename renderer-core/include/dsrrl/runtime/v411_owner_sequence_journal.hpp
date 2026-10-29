@@ -18,6 +18,15 @@ struct witness {
     std::uintptr_t context_vtable=0, context_manager=0;
     bool vtable_readable=false, manager_field_readable=false;
     bool context_manager_matches_wrapper=false;
+#if defined(DSRRL_V418_RX34_GENERATIONAL_ISSUED_JOIN)
+    // Exact model source identity attached at selector publication and read
+    // at RX34 issued draw. These are observer fields, NEVER bridge authority.
+    std::uintptr_t model_this=0u, fg_parent=0u;
+    std::uint32_t model_class=0u, fg_registry_id=0u;
+    std::int32_t model_material_index=-1;
+    bool model_verified=false, fg_reciprocal=false;
+    bool registry_readable=false, registry_allocated=false;
+#endif
 };
 enum class status:std::uint8_t {
     no_record, matched_snapshot, producer_changed, epoch_changed,
@@ -71,13 +80,30 @@ class journal {
             a.row_a==b.row_a && a.row_b==b.row_b &&
             a.beta_bits==b.beta_bits;
     }
+#if defined(DSRRL_V418_RX34_GENERATIONAL_ISSUED_JOIN)
+    static bool same_model_tuple(const witness &a,const witness &b) noexcept {
+        return a.model_this==b.model_this &&
+            a.fg_parent==b.fg_parent &&
+            a.model_class==b.model_class &&
+            a.model_material_index==b.model_material_index &&
+            a.fg_registry_id==b.fg_registry_id &&
+            a.model_verified==b.model_verified &&
+            a.fg_reciprocal==b.fg_reciprocal &&
+            a.registry_readable==b.registry_readable &&
+            a.registry_allocated==b.registry_allocated;
+    }
+#endif
     static bool same_witness_semantics(const witness &a,const witness &b) noexcept {
         return a.owner==b.owner && a.native_sequence==b.native_sequence &&
             a.selector_epoch==b.selector_epoch &&
             same_context_tuple(a,b) && same_source_tuple(a,b) &&
             a.vtable_readable==b.vtable_readable &&
             a.manager_field_readable==b.manager_field_readable &&
-            a.context_manager_matches_wrapper==b.context_manager_matches_wrapper;
+            a.context_manager_matches_wrapper==b.context_manager_matches_wrapper
+#if defined(DSRRL_V418_RX34_GENERATIONAL_ISSUED_JOIN)
+            && same_model_tuple(a,b)
+#endif
+            ;
     }
     static lookup_result resolve(const entry &e,std::uint64_t seq,
         std::uint64_t epoch,std::uintptr_t wrapper,
@@ -104,7 +130,11 @@ class journal {
                 matching=&w;matching_version=version;
                 matching_run=e.context_runs[(version-1)%history_depth];
             } else if(!same_context_tuple(*matching,w) ||
-                      !same_source_tuple(*matching,w)) {
+                      !same_source_tuple(*matching,w)
+#if defined(DSRRL_V418_RX34_GENERATIONAL_ISSUED_JOIN)
+                      || !same_model_tuple(*matching,w)
+#endif
+                      ) {
                 // A repeated native sequence+epoch cannot certify two
                 // different endpoint payloads; fail observationally.
                 conflicting_tuple=true;
