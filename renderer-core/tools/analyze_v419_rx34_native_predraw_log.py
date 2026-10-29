@@ -36,7 +36,10 @@ def scan(path):
                   ("owner","model","fg_parent","registry","slot",
                    "flver_sha","mtd_sha"))
         native_state=tuple(d.get(k,"") for k in
-                           ("bound_ps","bound_cb12","rtv0","rtv1","rtv2",
+                           ("bound_ps","bound_cb12",
+                            "cb12_first_constant","cb12_num_constants",
+                            "cb12_window_buffer_matches",
+                            "rtv0","rtv1","rtv2",
                             "rtv3","dsv","rtv0_fmt","size","dsv_fmt",
                             "viewport","index_format"))
         row=d.get("row","")
@@ -48,13 +51,19 @@ def scan(path):
                 "state":{
                     "ps":d.get("bound_ps"),"b12":d.get("bound_cb12"),
                     "ps_match":d.get("ps_match"),"b12_match":d.get("cb12_match"),
+                    "b12_ctx1":d.get("cb12_ctx1"),
+                    "b12_first_constant":d.get("cb12_first_constant"),
+                    "b12_num_constants":d.get("cb12_num_constants"),
                     "rtv0":d.get("rtv0"),"dsv":d.get("dsv"),
                     "rtv0_fmt":d.get("rtv0_fmt"),"size":d.get("size"),
                     "viewport":d.get("viewport"),"ib":d.get("ib"),
                     "index_count":d.get("index_count"),
                     "first_index":d.get("first_index")}})
     pairs=[]
-    labels=("bound_ps","bound_cb12","rtv0","rtv1","rtv2","rtv3",
+    labels=("bound_ps","bound_cb12",
+            "cb12_first_constant","cb12_num_constants",
+            "cb12_window_buffer_matches",
+            "rtv0","rtv1","rtv2","rtv3",
             "dsv","rtv0_fmt","size","dsv_fmt","viewport","index_format")
     for key,byrow in buckets.items():
         if "30" not in byrow or "31" not in byrow:continue
@@ -77,7 +86,7 @@ def scan(path):
       "limits":[
         "Bound PS/CB12 and RTV state captured before native DrawIndexed, not after restore.",
         "A D3D11 deferred context records commands; actual GPU execute/present order is OPEN.",
-        "PSGetConstantBuffers gives a resource pointer; effective C86 bytes/CB window not attested.",
+        "D3D11.1 CB12 window first/num constants is observed when supported; effective C86 bytes/consumer mapping are NOT attested.",
         "RTV/DSV and viewport identity do not certify a fragment of armor was visible.",
         "Captures are bounded to first 256 exact model witnesses plus every 8192nd.",
         "An absent row due to sampling or 8-deep producer journal is UNKNOWN, not evidence of another owner.",
