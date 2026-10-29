@@ -6,6 +6,7 @@
 #include <d3d11.h>
 #include <reshade.hpp>
 #include <atomic>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 
@@ -15,6 +16,7 @@ struct request {
     void *native_context=nullptr;
     std::uintptr_t context_owner=0,model=0,fg_parent=0;
     std::uint32_t registry=0,material_slot=0,row=0;
+    std::array<std::uint8_t,32> flver_sha{},mtd_sha{};
     std::uint64_t native_producer_seq=0,source_epoch=0;
     ID3D11PixelShader *expected_shader=nullptr;
     ID3D11Buffer *expected_cb12=nullptr;
@@ -136,11 +138,20 @@ inline void finish(bool issued,
     const auto p=pending;
     const auto s=observed;
     pending={};observed={};
-    char line[1050]{};
+    constexpr char hex[]="0123456789abcdef";
+    char flver[65]{},mtd[65]{};
+    for(std::size_t i=0;i<32u;++i){
+        flver[i*2u]=hex[p.flver_sha[i]>>4u];
+        flver[i*2u+1u]=hex[p.flver_sha[i]&15u];
+        mtd[i*2u]=hex[p.mtd_sha[i]>>4u];
+        mtd[i*2u+1u]=hex[p.mtd_sha[i]&15u];
+    }
+    char line[1300]{};
     std::snprintf(line,sizeof(line),
         "[DSRRL V419 RX34 PRE-DRAW NATIVE STATE] "
         "owner=%p model=%p fg_parent=%p registry=%08x "
-        "row=%u slot=%u native_producer_seq=%llu epoch=%llu "
+        "row=%u slot=%u flver_sha=%s mtd_sha=%s "
+        "native_producer_seq=%llu epoch=%llu "
         "native_ctx=%p captured=%u mismatch=%u issued=%u deferred=%u "
         "expected_ps=%p bound_ps=%p ps_match=%u "
         "expected_cb12=%p bound_cb12=%p cb12_match=%u cb12_bytes=%u "
@@ -154,6 +165,7 @@ inline void finish(bool issued,
         reinterpret_cast<void*>(p.context_owner),
         reinterpret_cast<void*>(p.model),
         reinterpret_cast<void*>(p.fg_parent),p.registry,p.row,p.material_slot,
+        flver,mtd,
         static_cast<unsigned long long>(p.native_producer_seq),
         static_cast<unsigned long long>(p.source_epoch),
         p.native_context,s.captured?1u:0u,s.context_mismatch?1u:0u,
