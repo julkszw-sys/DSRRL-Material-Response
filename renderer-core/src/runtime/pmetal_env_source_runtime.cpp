@@ -2967,6 +2967,38 @@ void pmetal_env_source_selector_event(
                     // model witness. Does not imply game actor lifetime, and
                     // is never a cache/bridge admission authority.
                     if (model_v415.fg_parent_reciprocal) {
+#if defined(DSRRL_V417_FGMODEL_REGISTRY_DIAG)
+                        static std::atomic<std::uint64_t> registry_joins{0u};
+                        const auto rn=registry_joins.fetch_add(
+                            1u,std::memory_order_relaxed)+1u;
+                        if (rn<=512u || rn%8192u==0u) {
+                            char reg_line[490]{};
+                            std::snprintf(reg_line,sizeof(reg_line),
+                                "[DSRRL V417 FG REGISTRY SOURCE JOIN] "
+                                "n=%llu model=%p parent=%p context=%p "
+                                "registry_id=%u refcount=%u upstream=%p "
+                                "upstream_word0=%p upstream_word0_readable=%u "
+                                "native_producer_seq=%llu selector_epoch=%llu "
+                                "row_a=%u row_b=%u selector_a=%d selector_b=%d "
+                                "registry_lifetime=OPEN actor=OPEN gpu=OPEN pixel=OPEN",
+                                static_cast<unsigned long long>(rn),
+                                reinterpret_cast<void *>(model_v415.model_this),
+                                reinterpret_cast<void *>(model_v415.fg_parent),
+                                owner,model_v415.fg_registry_id,
+                                model_v415.fg_refcount,
+                                reinterpret_cast<void *>(model_v415.fg_parent_upstream),
+                                reinterpret_cast<void *>(model_v415.upstream_word0),
+                                model_v415.upstream_word0_readable?1u:0u,
+                                static_cast<unsigned long long>(w.native_sequence),
+                                static_cast<unsigned long long>(w.selector_epoch),
+                                w.row_a,w.row_b,
+                                static_cast<int>(w.selector_a),
+                                static_cast<int>(w.selector_b));
+                            reshade::log::message(
+                                reshade::log::level::info,reg_line);
+                        }
+#endif
+
                         static std::atomic<std::uint64_t> fg_joins{0u};
                         const auto fg_n=fg_joins.fetch_add(
                             1u,std::memory_order_relaxed)+1u;
