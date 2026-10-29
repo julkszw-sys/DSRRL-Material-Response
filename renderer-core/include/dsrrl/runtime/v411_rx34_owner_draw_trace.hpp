@@ -183,7 +183,8 @@ inline void indexed_rx34(
     std::snprintf(v418_line,sizeof(v418_line),
         "[DSRRL V418 RX34 MODEL ISSUED JOIN] "
         "event=%s seq=%llu owner=%p route=%u slot=%u "
-        "shader=%p row=%u kind=%u native_producer_seq=%llu "
+        "shader=%p flver_sha=%s mtd_sha=%s "
+        "row=%u kind=%u native_producer_seq=%llu "
         "producer_epoch=%llu journal_status=%u candidates=%u "
         "model=%p class=%u material_index=%d fg_parent=%p "
         "parent_reciprocal=%u model_verified=%u "
@@ -197,7 +198,8 @@ inline void indexed_rx34(
         static_cast<unsigned long long>(change.sequence),
         reinterpret_cast<void *>(m.model_owner_instance),
         m.route_index,m.material_slot,
-        reinterpret_cast<void *>(p.shader),p.stable_envdiffuse_row,
+        reinterpret_cast<void *>(p.shader),flver,mtd,
+        p.stable_envdiffuse_row,
         p.source_kind,
         static_cast<unsigned long long>(
             p.stable_envdiffuse_native_producer_sequence),
