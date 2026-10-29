@@ -16,3 +16,9 @@ Verification: 17 byte-exact instruction preimages; three direct call targets; on
 Next read-only witness: for exact 20E019 caller, validate native packet[0]==owner and snapshot packet address, A/B/beta and relevant flags; copy to Source1 journal keyed by exact producer sequence/epoch, then compare against post-mutation/pre-DrawIndexed V419 PS/CB12 window/RTV/DSV. Never authorize a lighting fix based solely on packet equality.
 
 Status: STATIC NATIVE ABI CONFIRMED; historical V413 observational pattern CONFIRMED; V421 hook/runtime/actor/pixel OPEN. V359-RC1, R43 and EXE unchanged.
+
+## V413 timing correction — CONFIRMED by re-parsing original log
+
+The 224 producer sequences form 112 adjacent row30->row31 pairs. **107 of the 112 pairs have identical GetTickCount64 tick_ms**, while the remaining five differ by 15/16ms. Within 224 producer sequences, each emits ordered material slots 0->1, and **219 of 224 slot pairs share identical tick_ms**. All 448 exact source/draw associations remain matched. Thus the data do NOT support a simple claim that alternate rows exclusively occur on different display frames. The two states may be emitted in different render passes in one cycle, but no frame/RTV/DSV identity is observed in V413. GetTickCount64 equality is only a coarse CPU timestamp, not GPU frame identity.
+
+**Operational recommendation:** capture per-invocation draw packet and verify exact 20E019 provenance; join to V419 pre-native-DrawIndexed PS, CB12 window, RTV/DSV and indexed geometry before concluding the bright row should be chosen. NO row pinning or LightBank gain patch. No new V421 .addon64 was built or runtime tested.
