@@ -16,13 +16,13 @@ Sampling is bounded: first 256 exact opportunities and every 8192nd thereafter. 
 
 ## Exact native state sampled
 
-At pre-draw, read-only native Get methods obtain current PS binding, PS b12 buffer pointer and ByteWidth, RTV 0-3 and DSV pointers, RTV0 format/dimension/texture size/sample count, DSV view format, index buffer pointer/index format/index offset, first viewport dimensions and draw geometry arguments. The capture also tags immediate/deferred D3D11 context and compares actual PS/b12 to exact prepared mutation expectations when available. All temporary COM references are released; no Set, Map, UpdateSubresource, extra Draw or replay is introduced.
+At pre-draw, read-only native Get methods obtain current PS binding, PS b12 buffer pointer and ByteWidth, and (where D3D11.1 is available) PSGetConstantBuffers1 firstConstant/numConstants plus window-buffer identity, RTV 0-3 and DSV pointers, RTV0 format/dimension/texture size/sample count, DSV view format, index buffer pointer/index format/index offset, first viewport dimensions and draw geometry arguments. The capture also tags immediate/deferred D3D11 context and compares actual PS/b12 to exact prepared mutation expectations when available. All temporary COM references are released; no Set, Map, UpdateSubresource, extra Draw or replay is introduced.
 
 Diagnostic marker: [DSRRL V419 RX34 PRE-DRAW NATIVE STATE]
 
 ## Boundaries of certainty
 
-This certifies state binding at native DrawIndexed call, not CB byte contents or shader-equation C86 consumer. D3D11.1 CB offset/first constant is not independently attested. On deferred contexts it certifies only command recording, not GPU command completion or presentation. RTV/DSV and geometry are pass evidence, not proof that the observed draw contributed to the visible armor pixel. PTDE pixel behavior remains OPEN until runtime screenshot/trace validation.
+This certifies state binding at native DrawIndexed call, not CB byte contents or shader-equation C86 consumer. D3D11.1 CB firstConstant/numConstants is sampled when supported, but effective C86 bytes and their shader-register decoding remain unverified. On deferred contexts it certifies only command recording, not GPU command completion or presentation. RTV/DSV and geometry are pass evidence, not proof that the observed draw contributed to the visible armor pixel. PTDE pixel behavior remains OPEN until runtime screenshot/trace validation.
 
 The offline script analyze_v419_rx34_native_predraw_log.py compares row30 and row31 ONLY for exact context, model, FgModel, generational registry, material slot, FLVER and MTD SHA. Reports PS, b12, RTVs, DSV, viewport, geometry and confidence limitations. Missing sampled events are UNKNOWN.
 
