@@ -18,6 +18,9 @@
 #if defined(DSRRL_V411_OWNER_SEQUENCE_DIAG)
 #include "dsrrl/runtime/v411_rx34_owner_draw_trace.hpp"
 #endif
+#if defined(DSRRL_V419_RX34_PREDRAW_NATIVE_STATE)
+#include "dsrrl/runtime/v419_rx34_predraw_state.hpp"
+#endif
 #if defined(DSRRL_V285_ATOMIC_NONMETAL_DIAG)
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
 #if defined(DSRRL_V291_MATERIAL_STAGE_CENSUS)
@@ -8191,6 +8194,55 @@ bool on_draw_indexed(
         prepared.batch.mutation.
             synchronous_core_transaction = true;
 
+#if defined(DSRRL_V419_RX34_PREDRAW_NATIVE_STATE)
+    // Identity cut: exact V418 journal witness, Source1 RX34 STABLE only.
+    if (prepared.envspec_in_batch &&
+        !hemenvlerp_bound && decision.receiver_id==34u &&
+        material.owner_tuple_exact &&
+        material.model_owner_instance!=0u &&
+        prepared.envspec.ready &&
+        prepared.envspec.stable_envdiffuse_trace_valid &&
+        prepared.envspec.source_kind==1u &&
+        prepared.envspec.stable_envdiffuse_native_producer_sequence!=0u &&
+        prepared.envspec.stable_envdiffuse_source_serial!=0u &&
+        prepared.envspec.shader!=nullptr) {
+        const auto owner_v419=material.model_owner_instance;
+        const auto live_v419=dsrrl::runtime::v413::inspect_owner(owner_v419);
+        if(live_v419.readable && live_v419.manager_agrees) {
+            const auto joined_v419=dsrrl::runtime::v411::observations().lookup(
+                owner_v419,
+                prepared.envspec.stable_envdiffuse_native_producer_sequence,
+                prepared.envspec.stable_envdiffuse_source_serial,
+                live_v419.wrapper,live_v419.manager);
+            const auto &w=joined_v419.prior;
+            if(joined_v419.state==
+                    dsrrl::runtime::v411::status::matched_snapshot &&
+                joined_v419.candidates==1u &&
+                !joined_v419.superseded_by_newer &&
+                w.model_verified && w.fg_reciprocal &&
+                w.registry_readable && w.registry_allocated &&
+                w.row_a==prepared.envspec.stable_envdiffuse_row) {
+                dsrrl::runtime::v419::request req{};
+                req.native_context=cmd_list->get_native();
+                req.context_owner=owner_v419;
+                req.model=w.model_this;
+                req.fg_parent=w.fg_parent;
+                req.registry=w.fg_registry_id;
+                req.material_slot=material.material_slot;
+                req.row=prepared.envspec.stable_envdiffuse_row;
+                req.native_producer_seq=w.native_sequence;
+                req.source_epoch=w.selector_epoch;
+                req.expected_shader=prepared.envspec.shader;
+                for(std::uint32_t i=0u;
+                    i<prepared.batch.mutation.constant_buffer_count;++i)
+                    if(prepared.batch.mutation.constant_buffers[i].slot==12u)
+                        req.expected_cb12=
+                            prepared.batch.mutation.constant_buffers[i].buffer;
+                dsrrl::runtime::v419::arm(req);
+            }
+        }
+    }
+#endif
     if (direct_current_native)
         g_raw_draw_replay_recursing = true;
 
@@ -8207,6 +8259,11 @@ bool on_draw_indexed(
 
     if (direct_current_native)
         g_raw_draw_replay_recursing = false;
+#if defined(DSRRL_V419_RX34_PREDRAW_NATIVE_STATE)
+    dsrrl::runtime::v419::finish(
+        dsrrl::runtime::draw_tx_issued(dispatch.transaction),
+        index_count,instance_count,first_index,vertex_offset,first_instance);
+#endif
 #if defined(DSRRL_V230_RUNTIME_TELEMETRY)
     if (prepared.mr_in_batch && !prepared.envspec_in_batch)
         v230_nonmetal_route_trace(
