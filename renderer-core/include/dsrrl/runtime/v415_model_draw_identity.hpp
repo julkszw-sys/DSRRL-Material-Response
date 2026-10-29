@@ -11,6 +11,11 @@ struct model_draw_stamp {
     std::uintptr_t vtable=0u;
     std::int32_t material_index=-1;
     std::uint32_t class_kind=0u; // 1=FgFlverModel, 2=FlverModel
+    // V416: distinct read-only FgModel parent provenance; not an actor ID.
+    std::uintptr_t fg_parent=0u;
+    std::uintptr_t fg_parent_vtable=0u;
+    std::uintptr_t fg_parent_upstream=0u; // raw FgModel+0x30; semantics OPEN
+    bool fg_parent_reciprocal=false;
     bool valid=false;
 };
 
@@ -29,9 +34,27 @@ inline void record_selector(
     g_selector_model={
         model_this,container,context,vtable,
         material_index,class_kind,
+        0u,0u,0u,false,
         model_this!=0u && container!=0u &&
         context!=0u && class_kind!=0u
     };
+}
+// Called only after two-sided native FgModel/child identity verification.
+inline void record_verified_fgparent(
+    std::uintptr_t model_this,
+    std::uintptr_t parent,
+    std::uintptr_t parent_vtable,
+    std::uintptr_t upstream) noexcept
+{
+    if (!g_selector_model.valid ||
+        g_selector_model.class_kind != 1u ||
+        g_selector_model.model_this != model_this ||
+        parent == 0u)
+        return;
+    g_selector_model.fg_parent = parent;
+    g_selector_model.fg_parent_vtable = parent_vtable;
+    g_selector_model.fg_parent_upstream = upstream;
+    g_selector_model.fg_parent_reciprocal = true;
 }
 inline model_draw_stamp current_for(
     std::uintptr_t context) noexcept
