@@ -45,7 +45,7 @@ assert 'cb12_window_buffer_matches' in header
 assert 'if(cb12_window)cb12_window->Release();' in header
 assert 'ctx1->Release();' in header
 assert 'reinterpret_cast<void *>' in integrated
-assert 'native_draw_call=CAPTURED gpu_execution=OPEN pixel=OPEN' in header
+assert 'native_draw_call=INSTRUMENTED gpu_execution=OPEN pixel=OPEN' in header
 assert 'samples' in header or 'requests' in header
 # Strictly read-only calls and bounded sampling.
 for dangerous in ('->PSSet','->OMSet','->DrawIndexed','->Map(', '->UpdateSubresource('):
