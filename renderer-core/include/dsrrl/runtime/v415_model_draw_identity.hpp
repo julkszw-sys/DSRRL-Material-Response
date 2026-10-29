@@ -19,6 +19,7 @@ struct model_draw_stamp {
     // V417: diagnostic fields from native FgModel. A registry slot is not
     // an authenticated gameplay actor ID nor a memory-lifetime generation.
     std::uint32_t fg_registry_id=0u;
+    bool fg_registry_readable=false;
     std::uint32_t fg_refcount=0u;
     std::uintptr_t upstream_word0=0u; // opaque first 8 bytes if readable
     bool upstream_word0_readable=false;
@@ -41,7 +42,7 @@ inline void record_selector(
         model_this,container,context,vtable,
         material_index,class_kind,
         0u,0u,0u,false,
-        0u,0u,0u,false,
+        0u,false,0u,0u,false,
         model_this!=0u && container!=0u &&
         context!=0u && class_kind!=0u
     };
@@ -67,6 +68,7 @@ inline void record_verified_fgparent(
 // reciprocal pointer witness and must not be used as a selection carrier.
 inline void record_registry_observation(
     std::uintptr_t model_this, std::uint32_t registry_id,
+    bool registry_readable,
     std::uint32_t refcount, std::uintptr_t word0,
     bool word0_readable) noexcept
 {
@@ -75,6 +77,7 @@ inline void record_registry_observation(
         g_selector_model.model_this != model_this)
         return;
     g_selector_model.fg_registry_id=registry_id;
+    g_selector_model.fg_registry_readable=registry_readable;
     g_selector_model.fg_refcount=refcount;
     g_selector_model.upstream_word0=word0;
     g_selector_model.upstream_word0_readable=word0_readable;
