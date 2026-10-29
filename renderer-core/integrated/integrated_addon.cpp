@@ -8223,7 +8223,8 @@ bool on_draw_indexed(
                 w.registry_readable && w.registry_allocated &&
                 w.row_a==prepared.envspec.stable_envdiffuse_row) {
                 dsrrl::runtime::v419::request req{};
-                req.native_context=cmd_list->get_native();
+                req.native_context=reinterpret_cast<void *>(
+                    cmd_list->get_native());
                 req.context_owner=owner_v419;
                 req.model=w.model_this;
                 req.fg_parent=w.fg_parent;
