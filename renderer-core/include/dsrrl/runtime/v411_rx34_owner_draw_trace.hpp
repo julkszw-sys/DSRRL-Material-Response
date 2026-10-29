@@ -160,5 +160,66 @@ inline void indexed_rx34(
         static_cast<unsigned long long>(GetTickCount64()),
         static_cast<unsigned long>(GetCurrentThreadId()));
     reshade::log::message(reshade::log::level::warning,line);
+#if defined(DSRRL_V418_RX34_GENERATIONAL_ISSUED_JOIN)
+    // Read the same already-joined V411 SOURCE1 history record at the
+    // issued draw. No nearby-timestamp correlation or owner-only guessing.
+    // The registry slot/generation belongs to an FgModel, not a certified
+    // character entity, and has a 7-bit wrap and an unresolved namespace.
+    const bool exact_v418=
+        source1 &&
+        joined.state==status::matched_snapshot &&
+        joined.candidates==1u &&
+        joined.prior.model_verified &&
+        joined.prior.fg_reciprocal &&
+        joined.prior.registry_readable &&
+        joined.prior.registry_allocated &&
+        cache_seq_matches &&
+        joined.prior.row_a==p.stable_envdiffuse_row &&
+        !joined.superseded_by_newer;
+    const auto native_handle=joined.prior.fg_registry_id;
+    const auto registry_slot=native_handle&0x00FFFFFFu;
+    const auto registry_generation=(native_handle>>24u)&0x7Fu;
+    char v418_line[840]{};
+    std::snprintf(v418_line,sizeof(v418_line),
+        "[DSRRL V418 RX34 MODEL ISSUED JOIN] "
+        "event=%s seq=%llu owner=%p route=%u slot=%u "
+        "shader=%p row=%u kind=%u native_producer_seq=%llu "
+        "producer_epoch=%llu journal_status=%u candidates=%u "
+        "model=%p class=%u material_index=%d fg_parent=%p "
+        "parent_reciprocal=%u model_verified=%u "
+        "registry_handle=%08x registry_readable=%u allocated=%u "
+        "registry_slot=%u registry_generation=%u "
+        "cache_seq_matches=%u stamp_row_a=%u "
+        "matched_run=%llu latest_run=%llu "
+        "exact_renderable_join=%u actor_id=OPEN gpu_cb=OPEN "
+        "rtv=OPEN visible_pixel=OPEN",
+        switched?"transition":first?"first":"capacity_miss",
+        static_cast<unsigned long long>(change.sequence),
+        reinterpret_cast<void *>(m.model_owner_instance),
+        m.route_index,m.material_slot,
+        reinterpret_cast<void *>(p.shader),p.stable_envdiffuse_row,
+        p.source_kind,
+        static_cast<unsigned long long>(
+            p.stable_envdiffuse_native_producer_sequence),
+        static_cast<unsigned long long>(p.stable_envdiffuse_source_serial),
+        static_cast<unsigned>(joined.state),
+        static_cast<unsigned>(joined.candidates),
+        reinterpret_cast<void *>(joined.prior.model_this),
+        joined.prior.model_class,
+        joined.prior.model_material_index,
+        reinterpret_cast<void *>(joined.prior.fg_parent),
+        joined.prior.fg_reciprocal?1u:0u,
+        joined.prior.model_verified?1u:0u,
+        native_handle,
+        joined.prior.registry_readable?1u:0u,
+        joined.prior.registry_allocated?1u:0u,
+        registry_slot,registry_generation,
+        cache_seq_matches?1u:0u,
+        joined.prior.row_a,
+        static_cast<unsigned long long>(joined.matched_context_run),
+        static_cast<unsigned long long>(joined.latest_context_run),
+        exact_v418?1u:0u);
+    reshade::log::message(reshade::log::level::warning,v418_line);
+#endif
 }
 }
