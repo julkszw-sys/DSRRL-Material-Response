@@ -1470,8 +1470,8 @@ extern "C" void dsrrl_flver_selector_observer(
              }
              if (fg_reason==5u) {
                  v415::record_registry_observation(
-                     model_addr,fg_registry_id,fg_refcount,
-                     fg_upstream_word0,fg_word0_readable);
+                     model_addr,fg_registry_id,fg_registry_readable,
+                     fg_refcount,fg_upstream_word0,fg_word0_readable);
              }
              static std::atomic<std::uint64_t> reg_samples{0u};
              const auto reg_n=reg_samples.fetch_add(
