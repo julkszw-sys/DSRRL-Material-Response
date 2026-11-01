@@ -1368,11 +1368,12 @@ extern "C" void dsrrl_flver_selector_observer(
  }
 
 #if defined(DSRRL_V415_FLVER_MODEL_ID_DIAG)
- // Exact original native callsite 0x20E014:
- //   0x20DF00 lea rsi,[rdi+0x88] ; 0x20E011 mov rcx,rsi
- //   0x20E014 call selector(0x22BA20), return 0x20E019.
- // Thus container is [FlverModel this + 0x88] ONLY at this caller.
- // Validate model vtable before recording, never use as a policy gate.
+ // Exact original 0x22BA20 native callers have the same typed model+0x88:
+ // 0x20DF00/0x20E011 -> 0x20E014 (return 0x20E019),
+ // 0x20EAD5/0x20EB4C -> 0x20EB7A (return 0x20EB7F),
+ // 0x20FAF5/0x20FB6B -> 0x20FB99 (return 0x20FB9E).
+ // Do not extend to other callers. Validate model vtable before recording;
+ // this observer remains diagnostic-only, not a source/pixel policy gate.
  if ((rva==k_ret_sel_1 || rva==k_ret_sel_2 ||
       rva==k_ret_sel_3) && container!=nullptr &&
      reinterpret_cast<std::uintptr_t>(container)>=0x88u) {
