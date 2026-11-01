@@ -1523,8 +1523,11 @@ extern "C" void dsrrl_flver_selector_observer(
                      reshade::log::level::info,fg_line);
              }
 #endif
-             static std::atomic<std::uint64_t> model_samples{0u};
-             const auto n=model_samples.fetch_add(1u,
+             static std::array<std::atomic<std::uint64_t>,3> model_samples{};
+             const std::size_t caller_index=
+                 rva==k_ret_sel_1 ? 0u :
+                 rva==k_ret_sel_2 ? 1u : 2u;
+             const auto n=model_samples[caller_index].fetch_add(1u,
                  std::memory_order_relaxed)+1u;
              if (n<=256u || n%8192u==0u) {
                  char line[365]{};
