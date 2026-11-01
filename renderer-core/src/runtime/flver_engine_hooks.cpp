@@ -1373,7 +1373,8 @@ extern "C" void dsrrl_flver_selector_observer(
  //   0x20E014 call selector(0x22BA20), return 0x20E019.
  // Thus container is [FlverModel this + 0x88] ONLY at this caller.
  // Validate model vtable before recording, never use as a policy gate.
- if (rva==k_ret_sel_1 && container!=nullptr &&
+ if ((rva==k_ret_sel_1 || rva==k_ret_sel_2 ||
+      rva==k_ret_sel_3) && container!=nullptr &&
      reinterpret_cast<std::uintptr_t>(container)>=0x88u) {
      const auto model_addr=
          reinterpret_cast<std::uintptr_t>(container)-0x88u;
@@ -1530,11 +1531,12 @@ extern "C" void dsrrl_flver_selector_observer(
                      "[DSRRL V415 MODEL SELECTOR] "
                      "n=%llu model=%p class=%u container=%p "
                      "context=%p vtable=%p material_index=%d "
-                     "caller=20e019 native_actor=OPEN pixel=OPEN",
+                     "caller=%06llx native_actor=OPEN pixel=OPEN",
                      static_cast<unsigned long long>(n),
                      model_ptr,class_kind,container,owner,
                      reinterpret_cast<void *>(model_vtable),
-                     static_cast<int>(material_index));
+                     static_cast<int>(material_index),
+                     static_cast<unsigned long long>(rva));
                  reshade::log::message(
                      reshade::log::level::info,line);
              }
