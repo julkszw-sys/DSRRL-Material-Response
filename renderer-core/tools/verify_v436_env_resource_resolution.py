@@ -30,7 +30,7 @@ def verify(path):
  data=Path(path).read_bytes()
  assert hashlib.sha256(data).hexdigest()==SHA,"original EXE SHA mismatch"
  pe=struct.unpack_from("<I",data,0x3c)[0]
- assert data[pe:pe+4]==b"PE\\0\\0" and struct.unpack_from("<H",data,pe+24)[0]==0x20b
+ assert data[pe:pe+4]==b"PE"+bytes([0,0]) and struct.unpack_from("<H",data,pe+24)[0]==0x20b
  n=struct.unpack_from("<H",data,pe+6)[0]
  sh=pe+24+struct.unpack_from("<H",data,pe+20)[0]
  sections=[struct.unpack_from("<IIII",data,sh+40*i+8)[1:] for i in range(n)]
@@ -43,10 +43,10 @@ def verify(path):
  for site,target in CALL.items():
   b=at(site,5);assert b[0]==0xe8 and site+5+struct.unpack_from("<i",b,1)[0]==target,hex(site)
  for site,target in REF.items():
-  b=at(site,7);assert b[:3]==b"\\x48\\x8d\\x15" and site+7+struct.unpack_from("<i",b,3)[0]==target,hex(site)
+  b=at(site,7);assert b[:3]==bytes([0x48,0x8d,0x15]) and site+7+struct.unpack_from("<i",b,3)[0]==target,hex(site)
  for rva,expected in NAMES.items():
   b=at(rva,220)
-  s=b.decode("utf-16le").split("\\0")[0]
+  s=b.decode("utf-16le").split(chr(0))[0]
   assert s==expected,(hex(rva),s)
  assert struct.unpack("<I",at(0x563fb4,4))[0]==10000
  assert struct.unpack("<I",at(0x564029,4))[0]==10000
