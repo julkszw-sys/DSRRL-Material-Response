@@ -1,5 +1,8 @@
 param([Parameter(Mandatory=$true)][string]$ReShadeInclude)
 $ErrorActionPreference='Stop'
+# V438-only: MSVC C4127 is a known baseline constexpr/while warning; keep /WX
+# for every other diagnostic and compiler warning.
+$env:CL = (($env:CL + ' /wd4127').Trim())
 # Build V438 as a single integrated addon, with V437 ancestry and protected R43 intact.
 $source=Join-Path $PSScriptRoot 'build_v230_production.ps1'
 $body=[IO.File]::ReadAllText($source)
