@@ -1,0 +1,1 @@
+V439 capture starts automatically on native model selection; F9 disabled. Unsafe wrapper trampolines disabled for crash isolation.
