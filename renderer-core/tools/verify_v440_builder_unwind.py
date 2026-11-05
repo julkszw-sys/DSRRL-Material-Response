@@ -32,7 +32,9 @@ def check(b):
    assert len(out)<=8
    u=p.read(out[-1][2],70)
    assert (u[0]&7)==1
-   if not (u[0]>>3)&4:return out
+   flags=u[0]>>3
+   assert flags in (3,4),hex(out[-1][2])
+   if flags==3:return out
    at=4+((u[2]+1)&~1)*2
    parent=struct.unpack_from("<III",u,at)
    assert parent not in out
@@ -43,6 +45,8 @@ def check(b):
   assert chain(pc)==DRAW,hex(pc)
  for pc in (0x20df86,0x20e014,0x20e019):
   assert chain(pc)==MODEL,hex(pc)
+ assert p.read(0x174f4e8,1)[0]>>3==3
+ assert p.read(0x174b508,1)[0]>>3==3
  for rva,hexcode in [
   (0x2200d0,"4c8bdc"),(0x2200da,"498dabc8fdffff"),
   (0x220ce6,"488d55d0"),(0x220614,"488d9f08010000"),
