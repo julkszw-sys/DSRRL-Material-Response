@@ -48,8 +48,8 @@ VIRTUAL_MODEL_CALLS=(0x2172aa,0x220ced)
 def census(pe):
  out=collections.defaultdict(list)
  target_by_addr={v:k for k,v in TARGET.items()}
- for name,va,vsize,size,start in pe.sections:
-  if name!=".text":continue
+ for va,size,start in pe.sections:
+  if not (0x00000000<=va<=0x02000000):continue
   data=memoryview(pe.b)[start:start+size]
   for i in range(len(data)-4):
    if data[i]!=0xe8:continue
@@ -57,16 +57,17 @@ def census(pe):
    if dst in target_by_addr:out[target_by_addr[dst]].append(va+i)
  return {k:sorted(out[k]) for k in TARGET}
 def check(pe,strict_sha=True):
- if strict_sha:verify(pe)
- rtti(pe,require_sha=False)
- dispatch(pe,require_sha=False)
- asm_builder(pe,require_sha=False)
- default_builder(pe)
+ if strict_sha:verify(pe.b)
+ rtti(pe.b,sha=False)
+ dispatch(pe.b,sha=False)
+ asm_builder(pe.b,sha=False)
+ default_builder(pe.b)
  got=census(pe)
  for name,expected in EXPECTED.items():
   assert got[name]==sorted(expected),("direct_calls",name,got[name])
  for r,t in SPECIALIZED_RENDER_CALLS.items():
-  assert pe.call_target(r)==t,("specialized",hex(r))
+  raw=pe.read(r,5)
+  assert raw[0]==0xe8 and r+5+struct.unpack("<i",raw[1:])[0]==t,("specialized",hex(r))
  for r in VIRTUAL_MODEL_CALLS:
   assert pe.read(r,3)==bytes.fromhex("ff5018"),("vcall",hex(r))
  for r,expected in OWNER_PREIMAGES.items():
