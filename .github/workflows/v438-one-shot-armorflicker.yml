@@ -1,0 +1,63 @@
+name: V438 Armor Flicker One Shot — Windows x64 integrated addon
+on:
+  push:
+    branches:
+      - agent/v438-one-shot-armor-flicker-runtime-20261105
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source overlay and inherited Source2
+        shell: bash
+        run: |
+          python3 renderer-core/tools/v438_apply_draw_part_b.py
+          python3 -m py_compile renderer-core/tools/v438_apply_source.py
+          python3 -m py_compile renderer-core/tools/v438_apply_draw_part_a.py
+          python3 -m py_compile renderer-core/tools/v438_apply_draw_part_b.py
+          python3 renderer-core/tools/test_v400_native_producer_sequence_contract.py
+          python3 renderer-core/tools/test_v411_owner_sequence_contract.py
+          python3 renderer-core/tools/test_v418_issued_model_journal_contract.py
+          python3 renderer-core/tools/test_v419_native_predraw_source_contract.py
+          python3 - <<'PY'
+          from pathlib import Path
+          r = Path("renderer-core")
+          s = (r/"src/runtime/pmetal_env_source_runtime.cpp").read_text()
+          i = (r/"integrated/integrated_addon.cpp").read_text()
+          assert "WRAPPER_HOOKS_ACTIVE" in s and "v438::PACKER" in s
+          assert "v438::ENV_ISSUED" in i and "v438::ENV_JOURNAL" in i
+          assert "latest_hook_source(out)" in s
+          print("V438 source overlay and native provenance contracts PASS")
+          PY
+  native-x64-addon:
+    needs: source-contract
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Build inherited single ReShade addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Check binary PE x64 and SHA-256
+        shell: pwsh
+        run: |
+          $p = 'out-v438-one-shot-diagnostic/DSRRL_V438_Armor_Flicker_OneShot.addon64'
+          if (!(Test-Path $p)) { throw 'Missing V438 addon binary' }
+          $bytes = [IO.File]::ReadAllBytes((Resolve-Path $p))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Invalid PE' }
+          if ((Get-ChildItem 'out-v438-one-shot-diagnostic' -Filter '*.addon64').Count -ne 1) { throw 'Expected exactly one addon' }
+          (Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii 'out-v438-one-shot-diagnostic/SHA256.txt'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V438-Armor-Flicker-OneShot
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V438_Armor_Flicker_OneShot.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
