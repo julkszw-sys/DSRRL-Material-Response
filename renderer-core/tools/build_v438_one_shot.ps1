@@ -1,8 +1,6 @@
 param([Parameter(Mandatory=$true)][string]$ReShadeInclude)
 $ErrorActionPreference='Stop'
 # Build V438 as a single integrated addon, with V437 ancestry and protected R43 intact.
-python renderer-core/tools/v438_apply_draw_part_b.py
-if ($LASTEXITCODE -ne 0) { throw 'V438 source materialization failed' }
 $source=Join-Path $PSScriptRoot 'build_v230_production.ps1'
 $body=[IO.File]::ReadAllText($source)
 function Replace-One([string]$old,[string]$new) {
@@ -22,6 +20,8 @@ Replace-One '$env:DSRRL_V230_LOG_FREE_AUDIT=''1''' '# V438 keeps all INFO and WA
 Replace-One "Once 'cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated'" "Once 'cmake --build build-v438-one-shot-diagnostic --config Release --target dsrrl_renderer_core_integrated'"
 Replace-One "cmake --build build-v230-release --config Release --target dsrrl_renderer_core_integrated" "cmake --build build-v438-one-shot-diagnostic --config Release --target dsrrl_renderer_core_integrated"
 Replace-One '$file=''out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64''' '$file=''out-v438-one-shot-diagnostic/DSRRL_V438_Armor_Flicker_OneShot.addon64'''
+$v388Exit='if ($LASTEXITCODE -ne 0) { throw ''V388 STABLE source to indexed draw join contract failed'' }'
+Replace-One $v388Exit ($v388Exit + "`npython renderer-core/tools/v438_apply_draw_part_b.py`nif (`$LASTEXITCODE -ne 0) { throw 'V438 late source overlay failed' }")
 $tmp=Join-Path $PSScriptRoot '_v438_one_shot_generated_build.ps1'
 try {
  [IO.File]::WriteAllText($tmp,$script:body,[Text.UTF8Encoding]::new($false))
