@@ -15,8 +15,9 @@ MODEL=[
  (0x20de68,0x20e652,0x174b548),
  (0x20ddc5,0x20de68,0x174b51c),
  (0x20dda0,0x20ddc5,0x174b508)]
-def check(b):
- verify(b);p=PE(b)
+def check(b,verify_source=True):
+ if verify_source:verify(b)
+ p=PE(b)
  sections=[x for x in p.sections if x[0]==0x1d0b000]
  assert len(sections)==1
  va,raw,off=sections[0]
