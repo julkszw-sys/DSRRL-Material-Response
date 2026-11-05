@@ -6,6 +6,15 @@ $env:CL = (($env:CL + ' /wd4127').Trim())
 # Build V438 as a single integrated addon, with V437 ancestry and protected R43 intact.
 $source=Join-Path $PSScriptRoot 'build_v230_production.ps1'
 $body=[IO.File]::ReadAllText($source)
+# V350 nested script resets $env:CL. Scope diagnostic C4127 workaround to its generated copy.
+$nested = '$script:base=[IO.File]::ReadAllText($source)'
+$nestedPatch = @'
+$script:base=[IO.File]::ReadAllText($source)
+if (-not $script:base.Contains('$env:CL = ''/DDSRRL')) { throw 'V438 MSVC C4127 scope drift' }
+$script:base=$script:base.Replace('$env:CL = ''/DDSRRL', '$env:CL = ''/wd4127 /DDSRRL')
+'@
+if ($body.Split([string[]]@($nested),[StringSplitOptions]::None).Count -ne 2) { throw 'V438 nested builder preimage drift' }
+$body=$body.Replace($nested,$nestedPatch.TrimEnd())
 function Replace-One([string]$old,[string]$new) {
  if($script:body.Split([string[]]@($old),[StringSplitOptions]::None).Count -ne 2) {
     throw "V438 baseline drift: $old"
