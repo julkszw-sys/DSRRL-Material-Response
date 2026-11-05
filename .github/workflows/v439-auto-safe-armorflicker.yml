@@ -1,0 +1,32 @@
+name: V439 Auto Safe Armor Flicker x64
+on:
+  push:
+    branches: [agent/v439-auto-safe-flicker-runtime-20261105]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-x64-addon:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Apply safe auto capture
+        shell: pwsh
+        run: |
+          python renderer-core/tools/v439_prepare_build.py
+          python renderer-core/tools/v439_name_binary.py
+          python renderer-core/tools/v439_marker_binary.py
+      - name: Compile single addon
+        shell: pwsh
+        run: ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V439-Auto-Flicker-Safe
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V439_Auto_Flicker_Safe.addon64
+          if-no-files-found: error
