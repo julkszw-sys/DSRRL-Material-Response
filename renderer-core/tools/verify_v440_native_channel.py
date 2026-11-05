@@ -40,9 +40,9 @@ class PE:
   for va,raw,offset in self.sections:
    if va<=r<va+raw:return offset+r-va
   raise ValueError(hex(r))
-def verify(b):
+def verify(b,require_sha=True):
  h=hashlib.sha256(b).hexdigest()
- assert h==EXPECTED,"wrong owner retail EXE SHA"
+ if require_sha: assert h==EXPECTED,"wrong owner retail EXE SHA"
  p=PE(b)
  for r,code in OPCODES.items():
   x=bytes.fromhex(code)
