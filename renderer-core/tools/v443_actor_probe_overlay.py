@@ -43,7 +43,7 @@ s=s.replace(end,'''            source,
 #if defined(DSRRL_V438_ONE_SHOT_CAPTURE)
     if (v438::state().active.load(std::memory_order_acquire) &&
         (selector == 1310 || selector == 1311)) {
-        const auto w=v443::probe(g_source_base);
+        const auto w=v443::probe(reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr)));
         v438::emit(v438::ACTOR_NATIVE,{
             1u,static_cast<unsigned>(selector),w.status,w.emitter_family,
             w.emitter_return_rva,w.builder_return_rva,
@@ -64,7 +64,7 @@ s=s.replace(blend_end,'''            source_b,
     if (v438::state().active.load(std::memory_order_acquire) &&
         (selector_a == 1310 || selector_a == 1311 ||
          selector_b == 1310 || selector_b == 1311)) {
-        const auto w=v443::probe(g_source_base);
+        const auto w=v443::probe(reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr)));
         v438::emit(v438::ACTOR_NATIVE,{
             2u,static_cast<unsigned>(selector_a),w.status,w.emitter_family,
             w.emitter_return_rva,w.builder_return_rva,
