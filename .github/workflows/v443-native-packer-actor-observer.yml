@@ -1,0 +1,67 @@
+name: V443 read-only native packer actor x64 single addon
+on:
+  push:
+    branches: [agent/v443-armor-packer-actor-readonly-20261106]
+  pull_request:
+    branches: [agent/v439-auto-safe-flicker-runtime-20261105]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and minimal source contract
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/v443_actor_probe_overlay.py renderer-core/tools/v443_prepare_build.py renderer-core/tools/v443_name_binary.py
+          grep -q 'RtlVirtualUnwind' renderer-core/include/dsrrl/runtime/v443_native_actor_certificate.hpp
+          grep -q 'donor_ok' renderer-core/tools/v443_actor_probe_overlay.py
+          ! grep -q 'v438_install_wrappers' renderer-core/tools/v443_actor_probe_overlay.py
+  build-addon:
+    runs-on: windows-2022
+    needs: static-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Prepare V439 ancestry and V443 observer
+        shell: pwsh
+        run: |
+          python renderer-core/tools/v439_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 prepare failed' }
+          python renderer-core/tools/v439_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 name failed' }
+          python renderer-core/tools/v439_marker_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 marker failed' }
+          python renderer-core/tools/v443_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V443 preparation failed' }
+          python renderer-core/tools/v443_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V443 name failed' }
+      - name: Compile integrated addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if ($LASTEXITCODE -ne 0) { throw 'V443 native x64 build failed' }
+      - name: Check exactly one addon and observer marker
+        shell: pwsh
+        run: |
+          $dir='out-v438-one-shot-diagnostic'
+          $p="$dir/DSRRL_V443_Packer_Actor_ReadOnly.addon64"
+          if (!(Test-Path $p)) { throw 'V443 addon not found' }
+          if ((Get-ChildItem $dir -Filter '*.addon64').Count -ne 1) { throw 'Expected exactly one addon' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $p))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Bad x64 PE' }
+          if (![Text.Encoding]::ASCII.GetString($bytes).Contains('[DSRRL V443] PACKER_ACTOR_OBSERVER')) { throw 'Observer marker missing' }
+          (Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii "$dir/SHA256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V443-Packer-Actor-ReadOnly
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V443_Packer_Actor_ReadOnly.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
