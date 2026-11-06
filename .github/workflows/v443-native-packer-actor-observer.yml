@@ -2,6 +2,8 @@ name: V443 read-only native packer actor x64 single addon
 on:
   push:
     branches: [agent/v443-armor-packer-actor-readonly-20261106]
+  pull_request:
+    branches: [agent/v439-auto-safe-flicker-runtime-20261105]
   workflow_dispatch:
 permissions:
   contents: read
