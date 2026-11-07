@@ -2,6 +2,8 @@ name: V450 manual bounded actor RX34 audit - single addon
 on:
   push:
     branches: [agent/v450-manual-targeted-rx34-actor-audit-20261107]
+  pull_request:
+    branches: [agent/v448-actor-receiver-live-builder-shadow-20261107]
   workflow_dispatch:
 permissions:
   contents: read
