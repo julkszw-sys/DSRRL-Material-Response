@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-07",
+  "build": "V449 (offline RE only)",
+  "parent_addon": "V448",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "static_status": "PASS",
+  "instruction_preimages": 19,
+  "negative_mutations_rejected": 19,
+  "d3d11_methods": {
+    "DrawIndexed": {
+      "rva": "0x20E5C1",
+      "slot": 12
+    },
+    "DrawIndexedInstanced": {
+      "rva": "0x20E598",
+      "slot": 20
+    }
+  },
+  "model_select_rva": "0x20E014",
+  "native_model_draw_win64_unwind_region": [
+    "0x20DE68",
+    "0x20E652",
+    "0x174B548"
+  ],
+  "builder_virtual_call_rva": "0x220CED",
+  "builder_return_rva": "0x220CF0",
+  "builder_win64_unwind_region": [
+    "0x220C51",
+    "0x220D50",
+    "0x174F5C8"
+  ],
+  "native_model_draw_and_indexed_calls_same_unwind": true,
+  "builder_call_and_return_same_unwind": true,
+  "actual_runtime_vtable_identity": "OPEN",
+  "receiver_actor_in_game": "OPEN",
+  "bridge_activation": "OFF_SHADOW",
+  "ptde_pixel": "OPEN",
+  "raw_witnesses": "Reconstruct via verify_v449_flver_to_d3d11.py with original retail EXE; full machine-check output in V449 handoff ZIP."
+}
