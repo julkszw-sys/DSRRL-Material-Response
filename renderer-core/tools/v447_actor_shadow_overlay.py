@@ -77,7 +77,10 @@ patch_once(source,blend,blend.replace('    }\n#endif\n}',shared+'    }\n#endif\n
 # fields zero: the registry MUST return missing_receiver_identity, not PASS.
 needle='''        dsrrl::runtime::v438::emit(dsrrl::runtime::v438::ENV_ISSUED,{
 '''
-extra='''        dsrrl::runtime::v447::receiver_ticket rx447{};
+extra='''        if(decision.receiver_id==34u && material.route_index==345u &&
+           (prepared.stable_envdiffuse_row==30u ||
+            prepared.stable_envdiffuse_row==31u)) {
+        dsrrl::runtime::v447::receiver_ticket rx447{};
         rx447.native_sequence=prepared.stable_envdiffuse_native_producer_sequence;
         rx447.context=material.model_owner_instance;
         rx447.row_a=prepared.stable_envdiffuse_row;
@@ -93,6 +96,7 @@ extra='''        dsrrl::runtime::v447::receiver_ticket rx447{};
             static_cast<unsigned>(prepared.source_kind),
             decision.receiver_id,material.route_index,
             material.material_slot,dsrrl::runtime::v438::p(prepared.shader)});
+        }
 '''
 patch_once(integrated,needle,extra+needle)
 patch_once(source,
