@@ -2,6 +2,8 @@ name: V447 actor-source exact-ticket shadow one-addon
 on:
   push:
     branches: [agent/v447-actor-source-native-ticket-shadow-20261107]
+  pull_request:
+    branches: [agent/v443-armor-packer-actor-readonly-20261106]
   workflow_dispatch:
 permissions:
   contents: read
