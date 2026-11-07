@@ -1,0 +1,85 @@
+name: V448 exact live builder actor-to-RX34 shadow x64
+on:
+  push:
+    branches: [agent/v448-actor-receiver-live-builder-shadow-20261107]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile deterministic multi-actor join contract
+        shell: bash
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -pthread \
+            -Irenderer-core/include/dsrrl/runtime \
+            renderer-core/tests/test_v448_live_builder_core.cpp -o /tmp/v448_core
+          /tmp/v448_core
+      - name: Static source overlay, no invasive hooks
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/v448_actor_live_overlay.py renderer-core/tools/v448_prepare_build.py renderer-core/tools/v448_name_binary.py renderer-core/tools/analyze_v448_capture.py
+          ! grep -q 'v438_install_wrappers' renderer-core/tools/v448_actor_live_overlay.py
+          ! grep -q 'latest_hook_source(' renderer-core/tools/v448_actor_live_overlay.py
+          grep -q 'RtlVirtualUnwind' renderer-core/include/dsrrl/runtime/v443_native_actor_certificate.hpp
+          grep -q '0x220CF0' renderer-core/include/dsrrl/runtime/v448_live_builder_probe.hpp
+  native-x64-addon:
+    runs-on: windows-2022
+    needs: static-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Reproduce V439/V443/V447/V448 source overlays
+        shell: pwsh
+        run: |
+          python renderer-core/tools/v439_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 prepare' }
+          python renderer-core/tools/v439_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 name' }
+          python renderer-core/tools/v439_marker_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 marker' }
+          python renderer-core/tools/v443_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V443 prepare' }
+          python renderer-core/tools/v443_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V443 name' }
+          python renderer-core/tools/v447_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V447 prepare' }
+          python renderer-core/tools/v447_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V447 name' }
+          python renderer-core/tools/v448_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V448 prepare' }
+          python renderer-core/tools/v448_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V448 name' }
+      - name: Build exactly one integrated addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if ($LASTEXITCODE -ne 0) { throw 'V448 native x64 build failed' }
+      - name: Native PE and diagnostic marker attestation
+        shell: pwsh
+        run: |
+          $dir='out-v438-one-shot-diagnostic'
+          $file="$dir/DSRRL_V448_Live_Builder_Actor_Shadow.addon64"
+          if (!(Test-Path $file)) { throw 'Missing V448 addon' }
+          if ((Get-ChildItem $dir -Filter '*.addon64').Count -ne 1) { throw 'Multiple addon files' }
+          $raw=[IO.File]::ReadAllBytes((Resolve-Path $file))
+          if ($raw.Length -lt 1000000 -or $raw[0] -ne 0x4d -or $raw[1] -ne 0x5a) { throw 'Bad PE' }
+          $text=[Text.Encoding]::ASCII.GetString($raw)
+          foreach ($mark in @('[DSRRL V439] WRAPPER_HOOKS_DISABLED','[DSRRL V443] PACKER_ACTOR_OBSERVER','[DSRRL V447] ACTOR_SOURCE_BIND_SHADOW','[DSRRL V448] LIVE_BUILDER_ACTOR_RX34_SHADOW')) {
+            if (!$text.Contains($mark)) { throw "Missing marker $mark" }
+          }
+          (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii "$dir/SHA256.txt"
+          Write-Host 'CONSTRUCTION PASS; V448 source routing is SHADOW ONLY; runtime/pixel OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V448-LiveBuilder-Actor-RX34-Shadow-OneAddon
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V448_Live_Builder_Actor_Shadow.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
