@@ -22,6 +22,9 @@ for p in (source,integrated):
     patch_once(p, '#include "dsrrl/runtime/v438_one_shot_trace.hpp"',
                '#include "dsrrl/runtime/v438_one_shot_trace.hpp"\n'
                '#include "dsrrl/runtime/v447_actor_source_router.hpp"')
+patch_once(integrated, '#include "dsrrl/runtime/v447_actor_source_router.hpp"',
+           '#include "dsrrl/runtime/v447_actor_source_router.hpp"\n'
+           '#include "dsrrl/runtime/v443_native_actor_certificate.hpp"')
 
 # The original packer hook is already activated and captures V443's native
 # actor/packet certificate. Publish a *source-only* ticket after V443's event.
@@ -84,6 +87,26 @@ extra='''        if(decision.receiver_id==34u && material.route_index==345u &&
         rx447.native_sequence=prepared.stable_envdiffuse_native_producer_sequence;
         rx447.context=material.model_owner_instance;
         rx447.row_a=prepared.stable_envdiffuse_row;
+        // Try to recover the *receiver* entity independently from its live
+        // engine call stack. Do not assume the original emitter still lives
+        // here: no witness means zeros, NOT cached producer identity.
+        unsigned rx447_stack_verdict=0u;
+        if(dsrrl::runtime::v438::state().active.load(std::memory_order_acquire)){
+            const auto rw447=dsrrl::runtime::v443::probe(
+                reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr)));
+            rx447_stack_verdict=rw447.status;
+            std::uintptr_t rx447_packet_context=0u;
+            if(rw447.status==9u && rw447.packet &&
+               dsrrl::runtime::v443::read(
+                   static_cast<std::uintptr_t>(rw447.packet),rx447_packet_context) &&
+               rx447_packet_context==rx447.context){
+                rx447.entity=static_cast<std::uintptr_t>(rw447.entity);
+                rx447.drawparam=static_cast<std::uintptr_t>(rw447.dp);
+                rx447.packet=static_cast<std::uintptr_t>(rw447.packet);
+                rx447.model=static_cast<std::uintptr_t>(rw447.model);
+                // Actor generation remains zero until genuine lifetime RE.
+            }
+        }
         const auto binding447=dsrrl::runtime::v447::observations().resolve(rx447);
         dsrrl::runtime::v438::emit(dsrrl::runtime::v438::V447_RX34_BIND,{
             rx447.native_sequence,rx447.context,rx447.row_a,
@@ -95,7 +118,8 @@ extra='''        if(decision.receiver_id==34u && material.route_index==345u &&
             binding447.producer.row_b,
             static_cast<unsigned>(prepared.source_kind),
             decision.receiver_id,material.route_index,
-            material.material_slot,dsrrl::runtime::v438::p(prepared.shader)});
+            material.material_slot,dsrrl::runtime::v438::p(prepared.shader),
+            rx447_stack_verdict,rx447.entity,rx447.packet,rx447.model});
         }
 '''
 patch_once(integrated,needle,extra+needle)
