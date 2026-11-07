@@ -1,0 +1,84 @@
+name: V447 actor-source exact-ticket shadow one-addon
+on:
+  push:
+    branches: [agent/v447-actor-source-native-ticket-shadow-20261107]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile standalone actor isolation contract
+        shell: bash
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -pthread \
+            -Irenderer-core/include \
+            renderer-core/tests/test_v447_actor_router.cpp -o /tmp/test_v447
+          /tmp/test_v447
+      - name: Source overlay syntax and no invasive gate
+        shell: bash
+        run: |
+          python3 -m py_compile \
+            renderer-core/tools/v447_actor_shadow_overlay.py \
+            renderer-core/tools/v447_prepare_build.py \
+            renderer-core/tools/v447_name_binary.py
+          grep -q 'missing_receiver_identity' renderer-core/include/dsrrl/runtime/v447_actor_source_router.hpp
+          grep -q 'V447_RX34_BIND' renderer-core/tools/v447_actor_shadow_overlay.py
+          ! grep -q 'v438_install_wrappers' renderer-core/tools/v447_actor_shadow_overlay.py
+          ! grep -q 'latest_hook_source(' renderer-core/tools/v447_actor_shadow_overlay.py
+  native-x64-addon:
+    runs-on: windows-2022
+    needs: static-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Prepare V439/V443/V447 source overlays
+        shell: pwsh
+        run: |
+          python renderer-core/tools/v439_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 prep failed' }
+          python renderer-core/tools/v439_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 name failed' }
+          python renderer-core/tools/v439_marker_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V439 marker failed' }
+          python renderer-core/tools/v443_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V443 prep failed' }
+          python renderer-core/tools/v443_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V443 name failed' }
+          python renderer-core/tools/v447_prepare_build.py
+          if ($LASTEXITCODE -ne 0) { throw 'V447 prep failed' }
+          python renderer-core/tools/v447_name_binary.py
+          if ($LASTEXITCODE -ne 0) { throw 'V447 name failed' }
+      - name: Build exactly one native addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if ($LASTEXITCODE -ne 0) { throw 'V447 native build failed' }
+      - name: Verify artifact and observer identity
+        shell: pwsh
+        run: |
+          $dir='out-v438-one-shot-diagnostic'
+          $p="$dir/DSRRL_V447_Actor_Source_Shadow.addon64"
+          if (!(Test-Path $p)) { throw 'Missing V447 binary' }
+          if ((Get-ChildItem $dir -Filter '*.addon64').Count -ne 1) { throw 'Not a single addon' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $p))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Invalid addon PE' }
+          $text=[Text.Encoding]::ASCII.GetString($bytes)
+          foreach($marker in @('[DSRRL V443] PACKER_ACTOR_OBSERVER','[DSRRL V447] ACTOR_SOURCE_BIND_SHADOW','[DSRRL V439] WRAPPER_HOOKS_DISABLED')) {
+            if(!$text.Contains($marker)) { throw "Missing marker $marker" }
+          }
+          (Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii "$dir/SHA256.txt"
+          Write-Host 'CONSTRUCTION PASS only; runtime identity and pixel OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V447-Actor-Source-Shadow-SingleAddon
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V447_Actor_Source_Shadow.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
