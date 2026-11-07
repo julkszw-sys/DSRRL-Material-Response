@@ -26,7 +26,7 @@ int main(){
  {auto q=p;p.beta_bits=1;check(V::native_ab_mismatch);p=q;}
  {auto q=p;p.row_a=31;check(V::no_source);p=q;}
  {auto q=p;p.row_a=p.row_b=31;check(V::no_source);p=q;}
- {auto q=p;p.entity=0x218d25d0;p.drawparam=p.entity+0x108;p.native_a=p.native_b=1311;p.row_a=p.row_b=31;auto b=w;w.entity=p.entity;w.dp=p.drawparam;w.a=w.b=1311;check(V::exact_native_packet_generation_open);p=q;w=b;}
+ {auto q=p;p.entity=0x218d25d0;p.drawparam=p.entity+0x108;p.native_a=p.native_b=1311;p.row_a=p.row_b=31;auto b=w;w.entity=p.entity;w.dp=p.drawparam;w.a=w.b=1311;assert(v450::evaluate(p,w,905,p.context,31).state==V::exact_native_packet_generation_open);++count;p=q;w=b;}
  {auto q=p;p.entity=0x218d25d0;p.drawparam=p.entity+0x108;check(V::entity_mismatch);p=q;}
  assert(v450::evaluate(p,w,905,p.context,31).state==V::row_mismatch);++count;
  p.actor_generation=0;check(V::exact_native_packet_generation_open);
