@@ -2,6 +2,8 @@ name: V448 exact live builder actor-to-RX34 shadow x64
 on:
   push:
     branches: [agent/v448-actor-receiver-live-builder-shadow-20261107]
+  pull_request:
+    branches: [agent/v447-actor-source-native-ticket-shadow-20261107]
   workflow_dispatch:
 permissions:
   contents: read
