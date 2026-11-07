@@ -1,0 +1,75 @@
+name: V450 manual bounded actor RX34 audit - single addon
+on:
+  push:
+    branches: [agent/v450-manual-targeted-rx34-actor-audit-20261107]
+  pull_request:
+    branches: [agent/v448-actor-receiver-live-builder-shadow-20261107]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native actor exact packet join tests
+        shell: bash
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -pthread -Irenderer-core/include renderer-core/tests/test_v450_native_join.cpp -o /tmp/v450_join
+          /tmp/v450_join
+          python3 -m py_compile renderer-core/tools/v450_low_cost_overlay.py renderer-core/tools/v450_prepare_build.py renderer-core/tools/v450_name_binary.py
+          grep -q 'CAPTURE_START MANUAL_F9: 8s' renderer-core/tools/v450_low_cost_overlay.py
+          grep -q 'V450_RX34_NATIVE_JOIN' renderer-core/tools/v450_low_cost_overlay.py
+          ! grep -q 'latest_hook_source(' renderer-core/tools/v450_low_cost_overlay.py
+          ! grep -q 'v438_install_wrappers' renderer-core/tools/v450_low_cost_overlay.py
+  native-x64-addon:
+    runs-on: windows-2022
+    needs: static-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Reproduce V439 V443 V447 V448 V450 overlays
+        shell: pwsh
+        run: |
+          foreach($ver in @('v439','v443','v447','v448','v450')){
+            if($ver -eq 'v439'){$prefix='v439'}
+            if($ver -eq 'v443'){$prefix='v443'}
+            if($ver -eq 'v447'){$prefix='v447'}
+            if($ver -eq 'v448'){$prefix='v448'}
+            if($ver -eq 'v450'){$prefix='v450'}
+            python "renderer-core/tools/${prefix}_prepare_build.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} prep failed"}
+            python "renderer-core/tools/${prefix}_name_binary.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} name failed"}
+            if($ver -eq 'v439'){
+              python renderer-core/tools/v439_marker_binary.py
+              if($LASTEXITCODE -ne 0){throw 'V439 marker failed'}
+            }
+          }
+      - name: Build native ReShade addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if($LASTEXITCODE -ne 0){throw 'V450 x64 build failed'}
+      - name: Assert exactly one addon and provenance marker
+        shell: pwsh
+        run: |
+          $dir='out-v438-one-shot-diagnostic'
+          $p="$dir/DSRRL_V450_Manual_RX34_Light_Audit.addon64"
+          if(!(Test-Path $p)){throw 'Missing V450 addon'}
+          if((Get-ChildItem $dir -Filter '*.addon64').Count -ne 1){throw 'Expected single addon'}
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $p))
+          if($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){throw 'Bad PE'}
+          if(![Text.Encoding]::ASCII.GetString($bytes).Contains('[DSRRL V450] MANUAL_RX34_LIGHT_AUDIT')){throw 'V450 marker missing'}
+          (Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii "$dir/SHA256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V450-Manual-RX34-Light-Audit-SingleAddon
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V450_Manual_RX34_Light_Audit.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
