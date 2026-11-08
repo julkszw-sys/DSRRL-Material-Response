@@ -1,0 +1,71 @@
+name: V451 native model resource RX34 read-only single addon
+on:
+  push:
+    branches: [agent/v451-native-model-resource-rx34-20261108]
+  pull_request:
+    branches: [agent/v450-manual-targeted-rx34-actor-audit-20261107]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify V451 capture overlay and analyzer unit tests
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/v451_prepare_build.py renderer-core/tools/v451_name_binary.py renderer-core/tools/v451_model_resource_overlay.py renderer-core/tools/analyze_v451_model_resource_capture.py research/v451/verify_v451_native_model_resource.py
+          python3 renderer-core/tests/test_v451_model_resource_capture.py
+          grep -q 'V451_MODEL_RESOURCE_AT_ISSUE' renderer-core/tools/v451_model_resource_overlay.py
+          ! grep -q 'v438_install_wrappers' renderer-core/tools/v451_model_resource_overlay.py
+          ! grep -q 'latest_hook_source(' renderer-core/tools/v451_model_resource_overlay.py
+  native-x64-addon:
+    runs-on: windows-2022
+    needs: static-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Exact single-addon source reproduction V439 through V451
+        shell: pwsh
+        run: |
+          foreach($ver in @('v439','v443','v447','v448','v450','v451')){
+            python "renderer-core/tools/${ver}_prepare_build.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} preparation failed"}
+            python "renderer-core/tools/${ver}_name_binary.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} naming failed"}
+            if($ver -eq 'v439'){
+              python renderer-core/tools/v439_marker_binary.py
+              if($LASTEXITCODE -ne 0){throw 'V439 hook-disable marker failed'}
+            }
+          }
+      - name: Compile one ReShade addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if($LASTEXITCODE -ne 0){throw 'V451 x64 compile failed'}
+      - name: Attest PE, single addon, and read-only capture marker
+        shell: pwsh
+        run: |
+          $dir='out-v438-one-shot-diagnostic'
+          $path="$dir/DSRRL_V451_ModelResource_RX34_Manual_Audit.addon64"
+          if(!(Test-Path $path)){throw 'V451 addon missing'}
+          if((Get-ChildItem $dir -Filter '*.addon64').Count -ne 1){throw 'Not one addon'}
+          $raw=[IO.File]::ReadAllBytes((Resolve-Path $path))
+          if($raw.Length -lt 1000000 -or $raw[0] -ne 0x4d -or $raw[1] -ne 0x5a){throw 'Invalid PE'}
+          $s=[Text.Encoding]::ASCII.GetString($raw)
+          if(!$s.Contains('[DSRRL V450] MANUAL_RX34_LIGHT_AUDIT')){throw 'V450 manual mode missing'}
+          if(!$s.Contains('[DSRRL V451] MODEL_RESOURCE_ISSUED_SHADOW')){throw 'V451 marker missing'}
+          (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii "$dir/SHA256.txt"
+          Write-Host 'V451 CONSTRUCTION PASS only; runtime and pixel OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V451-ModelResource-RX34-Manual-OneAddon
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V451_ModelResource_RX34_Manual_Audit.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
