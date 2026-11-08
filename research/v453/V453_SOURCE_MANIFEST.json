@@ -1,0 +1,18 @@
+{
+  "project": "DSRRL Material Response",
+  "version": "V453 RE-only",
+  "source_branch": "research/v453-player-enemy-shared-model-identity-20261108",
+  "base_branch": "research/v452-chrins-owner-lightbank-20261108",
+  "source_complete": true,
+  "verify_command": "python research/v453/verify_v453_shared_chrins_model.py /path/to/your/original/DarkSoulsRemastered.exe --mutations",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "offline_handoff_zip_sha256": "9f5f658d141864af02c5e54275a157425b2cf1f9a5243a05d75917a258dcc941",
+  "latest_binary": "V451 read-only single addon unchanged",
+  "new_addon": false,
+  "patches": 0,
+  "r43_unchanged": true,
+  "source1_unchanged": true,
+  "runtime": "OPEN",
+  "bridge": "OFF",
+  "pixel": "OPEN"
+}
