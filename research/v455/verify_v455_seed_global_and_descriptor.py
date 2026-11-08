@@ -123,7 +123,7 @@ def verify(raw, with_census=True, with_sha=True):
   assert pe.read(a,len(want))==want,f"byte preimage drift {a:#x}"
  # A single 11-byte getter: MOV RAX,[RIP+global]; MOV EAX,[RAX+0x10]; RET.
  assert pe.read(0x1d2180,11)==bytes.fromhex("488b05e1a6a9018b4010c3")
- assert 0x1d2187+4+struct.unpack("<i",pe.read(0x1d2183,4))[0]==0x141c6c868-BASE
+ assert 0x1d2187+struct.unpack("<i",pe.read(0x1d2183,4))[0]==0x141c6c868-BASE
  assert pe.target(0x157d11,0xe8)==0x1d2180
  assert pe.target(0x157d24,0xe8)==0x11ba160
  assert pe.target(0x157df6,0xe8)==0x15a8e0
