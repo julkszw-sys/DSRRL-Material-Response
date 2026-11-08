@@ -2,10 +2,10 @@
   "version": "V451",
   "native_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
   "static": "PASS",
-  "witnesses": 28,
-  "calls": 4,
+  "witnesses": 41,
+  "calls": 6,
   "rtti": 4,
-  "negative_mutations": 37,
+  "negative_mutations": 50,
   "negative_mutation_result": "PASS",
   "model_descriptor_to_draw_entity": "CONFIRMED_STATIC",
   "FrpgModel_to_model_descriptor": "OPEN",
@@ -13,5 +13,9 @@
   "V451_runtime": "NOT_TESTED",
   "PTDE_pixel": "OPEN",
   "seed_model": "FrpgModelDrawEntitySeed",
-  "seed_asm": "FrpgAsmModelDrawEntitySeed"
+  "seed_asm": "FrpgAsmModelDrawEntitySeed",
+  "frpgmodel_via_registration_to_seed": "STATIC_CONFIRMED",
+  "frpgmodel_registration_handle_vs_seed_id": "OPEN",
+  "actor_lifetime": "OPEN",
+  "pixel": "OPEN"
 }
