@@ -1,0 +1,37 @@
+{
+  "version": "V455",
+  "status": "STATIC_CONFIRMED",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "research_branch": "research/v455-seed-id-global-snapshot-actor-descriptor-20261108",
+  "previous_claim_corrected": "0x1D2180 is not a fresh Seed ID generator: global [pointer+0x10] getter",
+  "seed_id_unique": "NOT_VERIFIED",
+  "model_registration_handle": "independent return from RVA 0x11BA160",
+  "owner_descriptor_recheck": "same descriptor can re-evaluate with owner+0x4B1>0",
+  "descriptor_channels": [
+    "owner+0x370",
+    "owner+0x378",
+    "owner+0x4E0"
+  ],
+  "model_selector_writer_byte": "model+0x93",
+  "model_selector_dirty_bit": "model+0x84 |= 0x20",
+  "direct_calls_census": {
+    "0x1d2180": 22,
+    "0x326b50": 16,
+    "0x326320": 3,
+    "0x326ef0": 1,
+    "0x326360": 0,
+    "0x32d410 E8": 1,
+    "0x32d410 E9": 1,
+    "0x157cf0": 2,
+    "0x15a8e0": 3
+  },
+  "original_local_validation": {
+    "preimages": 80,
+    "mutations": 81
+  },
+  "runtime": "OPEN",
+  "actor_join": "OPEN",
+  "pixel": "OPEN",
+  "source1_r43": "UNCHANGED",
+  "addon_created": false
+}
