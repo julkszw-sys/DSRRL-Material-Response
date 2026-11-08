@@ -4,12 +4,14 @@
   "static": "PASS",
   "witnesses": 28,
   "calls": 4,
-  "rtti": 2,
-  "negative_mutations": 33,
+  "rtti": 4,
+  "negative_mutations": 37,
   "negative_mutation_result": "PASS",
   "model_descriptor_to_draw_entity": "CONFIRMED_STATIC",
   "FrpgModel_to_model_descriptor": "OPEN",
   "gameplay_actor": "OPEN",
   "V451_runtime": "NOT_TESTED",
-  "PTDE_pixel": "OPEN"
+  "PTDE_pixel": "OPEN",
+  "seed_model": "FrpgModelDrawEntitySeed",
+  "seed_asm": "FrpgAsmModelDrawEntitySeed"
 }
