@@ -1,0 +1,27 @@
+{
+  "version": "V454",
+  "method": "original_SHA_locked_static_RE",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "status": "STATIC_CONFIRMED",
+  "opcode_witnesses": 34,
+  "direct_call_edges": 8,
+  "rtti_types": 5,
+  "vtable_slots": 6,
+  "negative_mutations": "46/46 PASS",
+  "ChrIns_shared_model_interface": "PlayerIns/EnemyIns +0x120 -> 0x321CE0 uses +0x60 model",
+  "PlayerIns_ChrModel_store": "OPEN",
+  "direct_seed_constructor_calls": [
+    "0x157DF6",
+    "0x4FBF21",
+    "0x4FDAD1"
+  ],
+  "descriptor_router": [
+    "0x32D4BA",
+    "0x32D4DE",
+    "0x32D518"
+  ],
+  "gameplay_actor_to_RX34": "OPEN",
+  "NPC_hypothesis": "OPEN",
+  "pixel": "OPEN",
+  "addon_modified": false
+}
