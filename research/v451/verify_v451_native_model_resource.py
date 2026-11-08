@@ -54,13 +54,17 @@ def verify(data,sha=True):
  for r,t in CALLS.items():assert p.call(r)==t,'call '+hex(r)
  assert p.rtti(0x12ec838)==('.?AVFrpgModel@NS_FRPG@@',0)
  assert p.rtti(0x12eca10)==('.?AVFrpgModelDrawEntity@NS_FRPG@@',0)
+ assert p.rtti(0x12cc308)==('.?AVFrpgModelDrawEntitySeed@NS_FRPG@@',0)
+ assert p.rtti(0x12cc2e8)==('.?AVFrpgAsmModelDrawEntitySeed@NS_FRPG@@',0)
+ assert p.u64(0x12cc310)==BASE+0x223ac0
+ assert p.u64(0x12cc2f0)==BASE+0x21af40
  assert p.u64(0x12ec858)==BASE+0x21c970
  assert p.u64(0x12eca30)==BASE+0x223380
  return {'result':'PASS','witnesses':len(OPC),'calls':len(CALLS),
-  'rtti':2,'scope':'descriptor -> drawEntity model-resource only',
+  'rtti':4,'typed_seed':'FrpgModelDrawEntitySeed','typed_asm_seed':'FrpgAsmModelDrawEntitySeed','scope':'descriptor -> drawEntity model-resource only',
   'frpgmodel_descriptor_identity':'UNVERIFIED','gameplay_actor':'OPEN','pixel':'OPEN'}
 def mutate(raw):
- p=PE(raw); sites=sorted(set(OPC)|set(CALLS)|{0x12ec830,0x12eca08,0x12ec858,0x12eca30})
+ p=PE(raw); sites=sorted(set(OPC)|set(CALLS)|{0x12ec830,0x12eca08,0x12ec858,0x12eca30,0x12cc300,0x12cc2e0,0x12cc310,0x12cc2f0})
  bad=[]
  for r in sites:
   q=bytearray(raw);q[p.at(r,1)]^=1
