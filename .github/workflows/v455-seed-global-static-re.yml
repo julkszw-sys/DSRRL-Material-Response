@@ -1,0 +1,25 @@
+name: V455 read-only static RE verifier source contract
+on:
+  push:
+    branches: [research/v455-seed-id-global-snapshot-actor-descriptor-20261108]
+  pull_request:
+    branches: [research/v454-chrins-shared-model-direct-seed-descriptor-20261108]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source and SHA-bound contract, no game code or binary required in CI
+        shell: bash
+        run: |
+          python3 -m py_compile research/v455/verify_v455_seed_global_and_descriptor.py
+          python3 research/v455/verify_v455_seed_global_and_descriptor.py --help
+          grep -q '0x1d2180:"488b05e1a6a901"' research/v455/verify_v455_seed_global_and_descriptor.py
+          grep -q '0x326c29:"888293000000"' research/v455/verify_v455_seed_global_and_descriptor.py
+          grep -q '0x326e5c:"e8effcffff"' research/v455/verify_v455_seed_global_and_descriptor.py
+          grep -q '"addon_built":False' research/v455/verify_v455_seed_global_and_descriptor.py
+          if grep -qi 'v438_install_wrappers' research/v455/verify_v455_seed_global_and_descriptor.py; then exit 1; fi
+          echo 'Source syntax PASS; original EXE exact-SHA validation belongs to local audit; runtime/pixel OPEN'
