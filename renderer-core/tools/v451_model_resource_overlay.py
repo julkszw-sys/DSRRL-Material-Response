@@ -7,6 +7,7 @@ from pathlib import Path
 R=Path('renderer-core')
 t=R/'include/dsrrl/runtime/v438_one_shot_trace.hpp'
 i=R/'integrated/integrated_addon.cpp'
+f=R/'src/runtime/flver_engine_hooks.cpp'
 s=R/'src/runtime/pmetal_env_source_runtime.cpp'
 def rep(path,old,new):
  x=path.read_text(encoding='utf-8')
@@ -14,6 +15,9 @@ def rep(path,old,new):
   raise RuntimeError(f'V451 drift in {path}: {x.count(old)} instances of {old[:90]!r}')
  path.write_text(x.replace(old,new,1),encoding='utf-8')
 
+# V439's automatic-capture scene-draw counter is unused after V450 manual mode.
+# Remove its hot atomic increment from the selector path entirely.
+rep(f,'             v438::state().scene_draws.fetch_add(1u,std::memory_order_relaxed);','')
 rep(t,'V450_RX34_NATIVE_JOIN=20','V450_RX34_NATIVE_JOIN=20,V451_MODEL_RESOURCE_AT_ISSUE=21')
 rep(t,'t!=V448_ISSUED_FRAME && t!=V450_RX34_NATIVE_JOIN &&',
       't!=V448_ISSUED_FRAME && t!=V450_RX34_NATIVE_JOIN &&\n    t!=V451_MODEL_RESOURCE_AT_ISSUE &&')
