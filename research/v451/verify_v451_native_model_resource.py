@@ -23,7 +23,7 @@ class PE:
   self.raw=raw
   assert raw[:2]==b'MZ'
   h=struct.unpack_from('<I',raw,0x3c)[0]
-  assert raw[h:h+4]==b'PE\\0\\0'
+  assert raw[h:h+4]==bytes((80,69,0,0))
   count=struct.unpack_from('<H',raw,h+6)[0]
   o=struct.unpack_from('<H',raw,h+20)[0]
   self.sections=[]
@@ -46,7 +46,7 @@ class PE:
   col=self.u64(v-8)-BASE
   sig,off,cd,td,cl,self_rva=struct.unpack('<IIIIII',self.read(col,24))
   assert sig==1 and self_rva==col
-  return self.read(td+16,128).split(b'\\0')[0].decode('ascii'),off
+  return self.read(td+16,128).split(bytes((0,)))[0].decode('ascii'),off
 def verify(data,sha=True):
  if sha:assert hashlib.sha256(data).hexdigest()==SHA,'nonoriginal EXE SHA'
  p=PE(data)
