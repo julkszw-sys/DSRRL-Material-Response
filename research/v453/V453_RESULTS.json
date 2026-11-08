@@ -1,0 +1,31 @@
+{
+  "status": "STATIC_PASS",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "aligned_preimages": 35,
+  "direct_call_edges": 7,
+  "vtable_cells": 10,
+  "rtti_classes": 6,
+  "negative_mutations": {
+    "total": 52,
+    "unrejected": [],
+    "status": "PASS"
+  },
+  "typed_common_model_slot": {
+    "ChrIns": "0x321CE0",
+    "EnemyIns": "0x321CE0",
+    "PlayerIns": "0x321CE0",
+    "offset": "+0x120"
+  },
+  "distinct_role_slots": {
+    "offset": "+0xA8",
+    "EnemyIns": "0x320980",
+    "PlayerIns": "0x357A20"
+  },
+  "model_owner_field": "+0x60",
+  "NPC_model_store": "0x34A17F",
+  "actor_provenance": "OPEN",
+  "player_runtime_type": "OPEN",
+  "row31_belongs_to_NPC": "UNPROVEN",
+  "pixel": "OPEN",
+  "new_addon": false
+}
