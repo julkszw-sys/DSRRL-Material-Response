@@ -1,0 +1,15 @@
+{
+  "version": "V451",
+  "native_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "static": "PASS",
+  "witnesses": 28,
+  "calls": 4,
+  "rtti": 2,
+  "negative_mutations": 33,
+  "negative_mutation_result": "PASS",
+  "model_descriptor_to_draw_entity": "CONFIRMED_STATIC",
+  "FrpgModel_to_model_descriptor": "OPEN",
+  "gameplay_actor": "OPEN",
+  "V451_runtime": "NOT_TESTED",
+  "PTDE_pixel": "OPEN"
+}
