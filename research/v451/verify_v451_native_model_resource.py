@@ -7,6 +7,11 @@ from pathlib import Path
 BASE=0x140000000
 SHA='a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b'
 OPC={
+0x157d08:'4d8bf0',0x157d0b:'488bea',0x157d11:'e86aa40700',
+0x157d1a:'448bf8',0x157d8d:'4c8bc5',0x157ddd:'418bd7',
+0x157df6:'e8e52a0000',0x15a900:'498be8',
+0x15a908:'8bfa',0x15a97e:'897e10',0x15a98b:'488d0576191701',
+0x15a9a1:'488906',0x15a9a7:'48896e20',
 0x21c3d3:'488d055e040d01',0x21c3df:'897110',0x21c4f3:'48897b18',
 0x21c550:'488b5318',0x21c554:'e897b7f3ff',0x21c559:'894310',
 0x21caa1:'8b5310',0x21cac7:'e8f45f0000',0x223adf:'488bf1',
@@ -17,7 +22,7 @@ OPC={
 0x11b3d59:'25ffffff00',0x11b3d5e:'488b4930',0x11b3d65:'488b4108',
 0x11b3d69:'488b04d0',0x220198:'488b4720',0x2201ae:'f30f104058',
 0x22024c:'488d8f10010000'}
-CALLS={0x21c554:0x157cf0,0x21cac7:0x222ac0,0x223b0f:0x21f900,0x1f2dec:0x11b3d50}
+CALLS={0x21c554:0x157cf0,0x157d11:0x1d2180,0x157df6:0x15a8e0,0x21cac7:0x222ac0,0x223b0f:0x21f900,0x1f2dec:0x11b3d50}
 class PE:
  def __init__(self,raw):
   self.raw=raw
@@ -61,8 +66,8 @@ def verify(data,sha=True):
  assert p.u64(0x12ec858)==BASE+0x21c970
  assert p.u64(0x12eca30)==BASE+0x223380
  return {'result':'PASS','witnesses':len(OPC),'calls':len(CALLS),
-  'rtti':4,'typed_seed':'FrpgModelDrawEntitySeed','typed_asm_seed':'FrpgAsmModelDrawEntitySeed','scope':'descriptor -> drawEntity model-resource only',
-  'frpgmodel_descriptor_identity':'UNVERIFIED','gameplay_actor':'OPEN','pixel':'OPEN'}
+  'rtti':4,'typed_seed':'FrpgModelDrawEntitySeed','typed_asm_seed':'FrpgAsmModelDrawEntitySeed','scope':'FrpgModel constructor -> registration -> typed seed constructor -> model draw entity -> resource lookup (static)',
+  'frpgmodel_via_registration_to_seed':'STATIC_CONFIRMED','frpgmodel_descriptor_identity':'STATIC_REGISTRATION_PATH_ONLY','gameplay_actor':'OPEN','pixel':'OPEN'}
 def mutate(raw):
  p=PE(raw); sites=sorted(set(OPC)|set(CALLS)|{0x12ec830,0x12eca08,0x12ec858,0x12eca30,0x12cc300,0x12cc2e0,0x12cc310,0x12cc2f0})
  bad=[]
