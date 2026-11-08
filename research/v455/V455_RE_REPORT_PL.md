@@ -52,7 +52,7 @@ Całe sekcje wykonywalne oryginalnego PE:
 - `0x157CF0`: 2 E8,
 - `0x15A8E0`: 3 E8.
 
-Weryfikator `research/v455/verify_v455_seed_global_and_descriptor.py` zawiera **79** dokładnych preimage instrukcji i kontrolę mutacyjną SHA; certyfikuje konkretny oryginalny EXE. Wariant lokalny dodatkowo sprawdza 80 preimage i 81 kontroli negatywnych. Wyniki lokalne zostały dołączone do handoffu.
+Weryfikator `research/v455/verify_v455_seed_global_and_descriptor.py` zawiera **78** dokładnych preimage instrukcji i kontrolę mutacyjną SHA; certyfikuje konkretny oryginalny EXE. Wariant lokalny dodatkowo sprawdza 80 preimage i 81 kontroli negatywnych. Wyniki lokalne zostały dołączone do handoffu.
 
 ## 4. Hipotezy migotania — bez nieuprawnionego wniosku
 **H_NPC** (przeniesienie ciemnego row31 NPC na gracza), **H_SELF** (inny descriptor/recalc w ramach PlayerIns) i **H_RENDER** (odrębne drawy/pass/coverage) pozostają **OPEN**. 294/294 poprawnych native ticket→RX34 nie dowodzi ani owner-to-player, ani pixel coverage. Indeks Seed jest niewłaściwym kluczem tożsamości.
