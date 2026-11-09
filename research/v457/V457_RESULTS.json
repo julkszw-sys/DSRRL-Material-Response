@@ -2,11 +2,11 @@
   "version": "V457",
   "static": "PASS",
   "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
-  "opcode_witnesses": 54,
+  "opcode_witnesses": 61,
   "E8_direct_edges": 19,
   "RIP_label_edges": 3,
   "negative_mutations": {
-    "attempted": 77,
+    "attempted": 84,
     "false_accepts": [],
     "status": "PASS"
   },
@@ -22,11 +22,12 @@
     "Scattering": "0x21F640"
   },
   "producer": "0x20B546 → 0x21C970 → 0x222AC0, command 0x804C",
-  "decoder": "0x22346C → 0x222B60 → 0x1D7580 at receiver+0x108; opcode-specific dispatch mapping OPEN",
+  "decoder": "CONFIRMED: 0x804C - 0x8046 = index 6; table RVA 0x2235C8 + 6*4 = 0x2235E0 stores 0x223466; 0x22346C -> 0x222B60 -> 0x1D7580(receiver+0x108)",
   "render_copy": "0x357BFD/0x357C37/0x357C71 → staging+0xAB/AC/AD; +0x96→+0xAE",
   "runtime_actor": "OPEN",
   "RX34_GPU": "OPEN",
   "PTDE_pixel": "OPEN",
   "addon_changed": false,
-  "zip_sha256": "b9d26511cbcca8ea8b434f771ee4c0151aa769d4788a0bc468510848e6dbb493"
+  "zip_sha256": "d3ae8b44dfb9d42922654994ee606c54b840ea6d4c2157c1a4dae0acce3d8a52",
+  "cpu_command_to_decoder": "CONFIRMED_STATIC"
 }
