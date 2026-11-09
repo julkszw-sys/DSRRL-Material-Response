@@ -1,0 +1,30 @@
+{
+  "status": "STATIC_PASS",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "instruction_witnesses": 101,
+  "direct_call_edges": 14,
+  "vtable_slots": 3,
+  "opcode": "0x804C",
+  "dispatch_jump_table_rva": "0x2235E0",
+  "dispatch_case_rva": "0x223466",
+  "reader": "0x222B60",
+  "receiver": "DrawEntity+0x108 FrpgDrawParam",
+  "three_16bit_selector_lanes": [
+    "+0x8",
+    "+0x18",
+    "+0x28"
+  ],
+  "temporal_index_transition_helper": "0x1D7820",
+  "per_player_secondary_copy": "PlayerIns+0x60 model+0x93 -> PlayerIns+0x850 controller+0xAB",
+  "per_model_registration_handle": "FrpgModel+0x10, NOT confirmed equal to Seed+0x10",
+  "actor_player_enemy_to_RX34": "OPEN",
+  "row30_31_same_actor_lerp": "HYPOTHESIS_NOT_RUNTIME_PROVEN",
+  "nearby_NPC_pollution": "OPEN",
+  "pixel_equivalence": "OPEN",
+  "addon_changed": false,
+  "negative_mutations": {
+    "attempted": 106,
+    "failed": [],
+    "status": "PASS"
+  }
+}

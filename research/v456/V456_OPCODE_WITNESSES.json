@@ -1,0 +1,507 @@
+[
+  {
+    "rva": "0x326c17",
+    "bytes": "0fbe8a93000000",
+    "semantics": "category5 old model selector"
+  },
+  {
+    "rva": "0x326c22",
+    "bytes": "838a8400000020",
+    "semantics": "category5 dirty +0x20"
+  },
+  {
+    "rva": "0x326c29",
+    "bytes": "888293000000",
+    "semantics": "category5 model+0x93 write"
+  },
+  {
+    "rva": "0x326f83",
+    "bytes": "0fbe8a93000000",
+    "semantics": "category1 old selector"
+  },
+  {
+    "rva": "0x326f8e",
+    "bytes": "838a8400000020",
+    "semantics": "category1 dirty +0x20"
+  },
+  {
+    "rva": "0x326f95",
+    "bytes": "888293000000",
+    "semantics": "category1 model+0x93 write"
+  },
+  {
+    "rva": "0x357ae0",
+    "bytes": "4053",
+    "semantics": "PlayerIns special virtual method"
+  },
+  {
+    "rva": "0x357b02",
+    "bytes": "4c8bf1",
+    "semantics": "this PlayerIns to R14"
+  },
+  {
+    "rva": "0x357b4d",
+    "bytes": "498b9650080000",
+    "semantics": "PlayerIns+0x850 auxiliary component"
+  },
+  {
+    "rva": "0x357b65",
+    "bytes": "498b5e60",
+    "semantics": "PlayerIns+0x60 model to RBX"
+  },
+  {
+    "rva": "0x357b91",
+    "bytes": "24fb",
+    "semantics": "Player branch flag"
+  },
+  {
+    "rva": "0x357bba",
+    "bytes": "0000",
+    "semantics": "Reader before packing"
+  },
+  {
+    "rva": "0x357bf5",
+    "bytes": "488d542440",
+    "semantics": "local destination for model packer"
+  },
+  {
+    "rva": "0x357bfd",
+    "bytes": "e8fe79ecff",
+    "semantics": "Player calls model pair 0x92/0x93 packer"
+  },
+  {
+    "rva": "0x357c02",
+    "bytes": "498b8e50080000",
+    "semantics": "Player+0x850 auxiliary consumer"
+  },
+  {
+    "rva": "0x357c09",
+    "bytes": "8b10",
+    "semantics": "packed state value"
+  },
+  {
+    "rva": "0x357c14",
+    "bytes": "0fb6d2",
+    "semantics": "low byte selector"
+  },
+  {
+    "rva": "0x357c17",
+    "bytes": "0fbe81ab000000",
+    "semantics": "previous aux +0xAB"
+  },
+  {
+    "rva": "0x357c22",
+    "bytes": "83899c00000020",
+    "semantics": "aux dirty+0x20"
+  },
+  {
+    "rva": "0x357c29",
+    "bytes": "8891ab000000",
+    "semantics": "aux +0xAB write"
+  },
+  {
+    "rva": "0x357c34",
+    "bytes": "488bcb",
+    "semantics": "player +0x94 packer call"
+  },
+  {
+    "rva": "0x357c5c",
+    "bytes": "83899c00000040",
+    "semantics": "aux dirty +0x40"
+  },
+  {
+    "rva": "0x357c63",
+    "bytes": "8891ac000000",
+    "semantics": "aux +0xAC write"
+  },
+  {
+    "rva": "0x20b4fa",
+    "bytes": "8b9384000000",
+    "semantics": "ChrModel state dirty read"
+  },
+  {
+    "rva": "0x20b543",
+    "bytes": "488bcb",
+    "semantics": "ChrModel rcx=this base"
+  },
+  {
+    "rva": "0x20b546",
+    "bytes": "e825140100",
+    "semantics": "ChrModel call FrpgModel update"
+  },
+  {
+    "rva": "0x21c978",
+    "bytes": "8bb980000000",
+    "semantics": "FrpgModel+0x80 dirty source"
+  },
+  {
+    "rva": "0x21c981",
+    "bytes": "0bb984000000",
+    "semantics": "combined with +0x84"
+  },
+  {
+    "rva": "0x21c98f",
+    "bytes": "c7818400000000000000",
+    "semantics": "clear FrpgModel+0x84"
+  },
+  {
+    "rva": "0x21ca5b",
+    "bytes": "40f6c7e0",
+    "semantics": "test dirty bits +0x20/40/80"
+  },
+  {
+    "rva": "0x21ca61",
+    "bytes": "488d942488000000",
+    "semantics": "packed selector first output address"
+  },
+  {
+    "rva": "0x21ca69",
+    "bytes": "488bcb",
+    "semantics": "FrpgModel this arg packer"
+  },
+  {
+    "rva": "0x21ca6c",
+    "bytes": "e88f2b0000",
+    "semantics": "call to first packer"
+  },
+  {
+    "rva": "0x21ca7c",
+    "bytes": "e83f2b0000",
+    "semantics": "call second packer"
+  },
+  {
+    "rva": "0x21ca89",
+    "bytes": "e8b22b0000",
+    "semantics": "call third packer"
+  },
+  {
+    "rva": "0x21ca95",
+    "bytes": "8b442470",
+    "semantics": "last pair"
+  },
+  {
+    "rva": "0x21caa1",
+    "bytes": "8b5310",
+    "semantics": "FrpgModel+0x10 registration handle"
+  },
+  {
+    "rva": "0x21cabf",
+    "bytes": "f30f1015c1913f01",
+    "semantics": "blend scalar"
+  },
+  {
+    "rva": "0x21cac7",
+    "bytes": "e8f45f0000",
+    "semantics": "emit opcode 0x804C"
+  },
+  {
+    "rva": "0x21f600",
+    "bytes": "440fbe8192000000",
+    "semantics": "first packed group from signed +0x92"
+  },
+  {
+    "rva": "0x21f608",
+    "bytes": "0fbe8193000000",
+    "semantics": "first packed index signed +0x93"
+  },
+  {
+    "rva": "0x21f60f",
+    "bytes": "41c1f803",
+    "semantics": "sign shift >>3"
+  },
+  {
+    "rva": "0x21f613",
+    "bytes": "4585c0",
+    "semantics": "check negative group"
+  },
+  {
+    "rva": "0x21f618",
+    "bytes": "85c0",
+    "semantics": "check negative selector"
+  },
+  {
+    "rva": "0x21f61c",
+    "bytes": "4183e07f",
+    "semantics": "group low7"
+  },
+  {
+    "rva": "0x21f620",
+    "bytes": "0fb6c0",
+    "semantics": "index convert byte"
+  },
+  {
+    "rva": "0x21f623",
+    "bytes": "41c1e008",
+    "semantics": "group <<8"
+  },
+  {
+    "rva": "0x21f627",
+    "bytes": "440bc0",
+    "semantics": "packed OR"
+  },
+  {
+    "rva": "0x21f631",
+    "bytes": "c702ffffffff",
+    "semantics": "invalid sentinel -1"
+  },
+  {
+    "rva": "0x21f5c0",
+    "bytes": "440fbe8192000000",
+    "semantics": "second group +0x92"
+  },
+  {
+    "rva": "0x21f5c8",
+    "bytes": "0fbe8194000000",
+    "semantics": "second index +0x94"
+  },
+  {
+    "rva": "0x21f640",
+    "bytes": "440fbe8192000000",
+    "semantics": "third group +0x92"
+  },
+  {
+    "rva": "0x21f648",
+    "bytes": "0fbe8195000000",
+    "semantics": "third index +0x95"
+  },
+  {
+    "rva": "0x222aca",
+    "bytes": "448bc2",
+    "semantics": "writer registration handle to r8"
+  },
+  {
+    "rva": "0x222ad2",
+    "bytes": "ba4c800000",
+    "semantics": "opcode 0x804c"
+  },
+  {
+    "rva": "0x222ae0",
+    "bytes": "e82b0cf900",
+    "semantics": "begin serializer call"
+  },
+  {
+    "rva": "0x222af7",
+    "bytes": "f30f1132",
+    "semantics": "write blend float"
+  },
+  {
+    "rva": "0x222b0d",
+    "bytes": "891a",
+    "semantics": "write first packed value"
+  },
+  {
+    "rva": "0x222b21",
+    "bytes": "8b442460",
+    "semantics": "write second packed value"
+  },
+  {
+    "rva": "0x222b39",
+    "bytes": "8b442468",
+    "semantics": "write third packed value"
+  },
+  {
+    "rva": "0x223386",
+    "bytes": "8d82ba7fffff",
+    "semantics": "dispatcher opcode-0x8046"
+  },
+  {
+    "rva": "0x223391",
+    "bytes": "83f812",
+    "semantics": "dispatcher range<=0x12"
+  },
+  {
+    "rva": "0x2233a1",
+    "bytes": "448b8c81c8352200",
+    "semantics": "read relative jump table"
+  },
+  {
+    "rva": "0x2233ac",
+    "bytes": "41ffe1",
+    "semantics": "jump through opcode table"
+  },
+  {
+    "rva": "0x223466",
+    "bytes": "498bd0",
+    "semantics": "0x804c decoder dispatch entry"
+  },
+  {
+    "rva": "0x22346c",
+    "bytes": "e8eff6ffff",
+    "semantics": "call decoder"
+  },
+  {
+    "rva": "0x222b66",
+    "bytes": "488b1a",
+    "semantics": "decoder stream ptr"
+  },
+  {
+    "rva": "0x222b77",
+    "bytes": "f30f100b",
+    "semantics": "decoder first float"
+  },
+  {
+    "rva": "0x222b8e",
+    "bytes": "458b00",
+    "semantics": "first packed value"
+  },
+  {
+    "rva": "0x222ba0",
+    "bytes": "448b09",
+    "semantics": "second packed value"
+  },
+  {
+    "rva": "0x222ba7",
+    "bytes": "498d8b08010000",
+    "semantics": "draw entity+0x108 DrawParam"
+  },
+  {
+    "rva": "0x222bb5",
+    "bytes": "8b02",
+    "semantics": "third packed value"
+  },
+  {
+    "rva": "0x222bbb",
+    "bytes": "e8c049fbff",
+    "semantics": "call DrawParam update"
+  },
+  {
+    "rva": "0x1d7592",
+    "bytes": "4883c108",
+    "semantics": "DrawParam+0x8 first lane"
+  },
+  {
+    "rva": "0x1d75aa",
+    "bytes": "e871020000",
+    "semantics": "first lane interpolate call"
+  },
+  {
+    "rva": "0x1d75af",
+    "bytes": "488d4f18",
+    "semantics": "DrawParam+0x18 second lane"
+  },
+  {
+    "rva": "0x1d75c0",
+    "bytes": "e85b020000",
+    "semantics": "second lane interpolate call"
+  },
+  {
+    "rva": "0x1d75ca",
+    "bytes": "488d4f28",
+    "semantics": "DrawParam+0x28 third lane"
+  },
+  {
+    "rva": "0x1d75db",
+    "bytes": "e840020000",
+    "semantics": "third lane interpolate call"
+  },
+  {
+    "rva": "0x1d7820",
+    "bytes": "0f57c0",
+    "semantics": "lerp helper compare zero vs duration"
+  },
+  {
+    "rva": "0x1d782f",
+    "bytes": "440fb74102",
+    "semantics": "old target or endpoint +0x2"
+  },
+  {
+    "rva": "0x1d7834",
+    "bytes": "0fb702",
+    "semantics": "incoming new endpoint"
+  },
+  {
+    "rva": "0x1d7837",
+    "bytes": "66443bc0",
+    "semantics": "compare incoming index"
+  },
+  {
+    "rva": "0x1d783d",
+    "bytes": "6685c0",
+    "semantics": "invalid input index"
+  },
+  {
+    "rva": "0x1d7842",
+    "bytes": "664585c0",
+    "semantics": "invalid old index"
+  },
+  {
+    "rva": "0x1d7848",
+    "bytes": "663901",
+    "semantics": "reversal/retarget compare"
+  },
+  {
+    "rva": "0x1d784d",
+    "bytes": "f30f104908",
+    "semantics": "existing duration"
+  },
+  {
+    "rva": "0x1d7859",
+    "bytes": "0f28c1",
+    "semantics": "interpolation retarget branch"
+  },
+  {
+    "rva": "0x1d787b",
+    "bytes": "33c0",
+    "semantics": "reset when changed"
+  },
+  {
+    "rva": "0x1d7880",
+    "bytes": "51",
+    "semantics": "new interpolation time"
+  },
+  {
+    "rva": "0x1d788b",
+    "bytes": "66894102",
+    "semantics": "set new target"
+  },
+  {
+    "rva": "0x1d7890",
+    "bytes": "c74108000080bf",
+    "semantics": "invalid endpoint duration -1"
+  },
+  {
+    "rva": "0x1d78a2",
+    "bytes": "66894102",
+    "semantics": "update target"
+  },
+  {
+    "rva": "0x1d78a6",
+    "bytes": "0fb702",
+    "semantics": "update start"
+  },
+  {
+    "rva": "0x21c554",
+    "bytes": "e897b7f3ff",
+    "semantics": "FrpgModel first registration call"
+  },
+  {
+    "rva": "0x21c559",
+    "bytes": "894310",
+    "semantics": "first registration handle store"
+  },
+  {
+    "rva": "0x21c71f",
+    "bytes": "e8ccb5f3ff",
+    "semantics": "second registration call"
+  },
+  {
+    "rva": "0x21c724",
+    "bytes": "894610",
+    "semantics": "second registration handle store"
+  },
+  {
+    "rva": "0x157d1a",
+    "bytes": "448bf8",
+    "semantics": "independent Seed ID from generator"
+  },
+  {
+    "rva": "0x157ddd",
+    "bytes": "418bd7",
+    "semantics": "constructor EDX Seed ID"
+  },
+  {
+    "rva": "0x157e00",
+    "bytes": "8bc7",
+    "semantics": "registration returns EDI"
+  }
+]
