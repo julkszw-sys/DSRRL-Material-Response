@@ -1,0 +1,92 @@
+{
+  "version": "V459",
+  "evidence_kind": "EXISTING_REAL_RUNTIME_V438_CSV_PLUS_CI_CONSTRUCTION",
+  "original_csv_sha256": "744d3af90a4f99eff8e7d22d8e78c2c6ced2e09141bda3ea0a23906d3e7d4329",
+  "actor_native_kind15_total": 682,
+  "default_builder_certified": 366,
+  "alt_builder_not_rx34": 316,
+  "native_ticket_kind16": 366,
+  "native_ticket_join_exact": 366,
+  "rx34_total": 306,
+  "rx34_Source1_independent_exact": 294,
+  "rx34_Source1_rows": {
+    "row30": 66,
+    "row31": 228
+  },
+  "rx34_Source2_not_independently_certified": 12,
+  "native_render_entities": 6,
+  "native_rownative": {
+    "row30_entities": 2,
+    "row31_entities": 4
+  },
+  "per_entity": [
+    {
+      "entity": "0x2189D9F0",
+      "native_samples": 94,
+      "Source1_issued": 30,
+      "row": 30,
+      "Light_current": "0x51E",
+      "Light_target": "0x51E",
+      "alpha_bits": 0
+    },
+    {
+      "entity": "0x218D2070",
+      "native_samples": 36,
+      "Source1_issued": 36,
+      "row": 30,
+      "Light_current": "0x51E",
+      "Light_target": "0x51E",
+      "alpha_bits": 0
+    },
+    {
+      "entity": "0x218D25D0",
+      "native_samples": 82,
+      "Source1_issued": 78,
+      "row": 31,
+      "Light_current": "0x51F",
+      "Light_target": "0x51F",
+      "alpha_bits": 0
+    },
+    {
+      "entity": "0x218D2B30",
+      "native_samples": 84,
+      "Source1_issued": 80,
+      "row": 31,
+      "Light_current": "0x51F",
+      "Light_target": "0x51F",
+      "alpha_bits": 0
+    },
+    {
+      "entity": "0x218D4B70",
+      "native_samples": 34,
+      "Source1_issued": 34,
+      "row": 31,
+      "Light_current": "0x51F",
+      "Light_target": "0x51F",
+      "alpha_bits": 0
+    },
+    {
+      "entity": "0x218D50D0",
+      "native_samples": 36,
+      "Source1_issued": 36,
+      "row": 31,
+      "Light_current": "0x51F",
+      "Light_target": "0x51F",
+      "alpha_bits": 0
+    }
+  ],
+  "single_entity_light_lerp_hypothesis": "FALSIFIED_FOR_CAPTURED_DEFAULT_BUILDER_SOURCE1_RX34",
+  "owner_identity": "OPEN",
+  "RX34_GPU_pixel": "OPEN",
+  "PTDE_visible_pixel": "OPEN",
+  "CI": {
+    "source_contract": "PASS",
+    "windows_x64_single_addon": "PASS",
+    "run_id": 42710560325,
+    "artifact_id": 13714429473,
+    "source_commit": "67062477c39f16f04a6ddebbc409e54a3cd2a657",
+    "binary_sha256": "5f5139c17bf6df954ef0ed9e957b99bd7e2265b7fef786f9e34ea717fdac5b19",
+    "binary_bytes": 6166016,
+    "latest_runtime": "NOT_TESTED"
+  }
+}

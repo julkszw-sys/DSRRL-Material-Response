@@ -1,0 +1,28 @@
+{
+  "version": "V459",
+  "repo": "julkszw-sys/DSRRL-Material-Response",
+  "branch": "agent/v459-rx34-typed-light-pair-one-addon-20261109",
+  "base_branch": "research/v458-frpgdrawparam-light-lerp-rx34-cpu-consumer-20261109",
+  "frozen_development_base": "V359-RC1 6e852cdc9085dd175159e564e223e0cc8589c535",
+  "source_build_commit": "67062477c39f16f04a6ddebbc409e54a3cd2a657",
+  "CI_run": 42710560325,
+  "artifact_id": 13714429473,
+  "addon_sha256": "5f5139c17bf6df954ef0ed9e957b99bd7e2265b7fef786f9e34ea717fdac5b19",
+  "addon_size": 6166016,
+  "addon_name": "DSRRL_V459_Typed_RX34_Light_Pair_Audit.addon64",
+  "reshade_commit": "3645e3025d1d98a90e318278858931f034d5d1f6",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "runtime_csv_sha256": "744d3af90a4f99eff8e7d22d8e78c2c6ced2e09141bda3ea0a23906d3e7d4329",
+  "independent_source_audit": "research/v459/audit_v438_native_light_pair.py",
+  "single_addon": true,
+  "renderer_mutations": false,
+  "new_exe_hooks": false,
+  "source1_r43_unchanged": true,
+  "build_only": "PASS",
+  "runtime": "OPEN",
+  "pixel": "OPEN",
+  "handoff": {
+    "name": "DSRRL_V459_RX34_LIGHT_PAIR_SINGLE_ADDON_FULL_HANDOFF.zip",
+    "sha256": "72eeba9a7f7a1efac6e85173f8fa0e5c7dde96da523be69edf18a2cc11615f96"
+  }
+}
