@@ -1,0 +1,32 @@
+{
+  "version": "V458",
+  "source_tree": {
+    "repo": "julkszw-sys/DSRRL-Material-Response",
+    "base": "research/v457-light-fog-scattering-native-consumer-census-20261109",
+    "branch": "research/v458-frpgdrawparam-light-lerp-rx34-cpu-consumer-20261109",
+    "verifier": "research/v458/verify_v458_instance_light_bridge.py",
+    "dependency": "research/v457/verify_v457_selector_consumer.py",
+    "report": "research/v458/V458_RE_REPORT_PL.md",
+    "results": "research/v458/V458_RESULTS.json"
+  },
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "reproduce": "python research/v458/verify_v458_instance_light_bridge.py <original_DarkSoulsRemastered.exe> --mutations",
+  "local_handoff_archive": {
+    "filename": "DSRRL_V458_TYPED_FRPGDRAWPARAM_LIGHT_CONSUMER_STATIC_RE_FULL.zip",
+    "sha256": "7659a9767bd0fa1ac94c2bf5d1142ae19246c9c77536a4bdbd77803450b00eba",
+    "contains_standalone_verifier": true,
+    "bytes": 11944
+  },
+  "validation": {
+    "exact_opcode_preimages": 116,
+    "direct_calls": 25,
+    "RTTI_types": 2,
+    "vtable_slots": 3,
+    "negative_mutations": "125/125_PASS",
+    "gameplay_actor_RX34": "OPEN",
+    "GPU_pixel": "OPEN"
+  },
+  "modified_exe": false,
+  "new_addon": false,
+  "Source1_R43_protected": "UNCHANGED"
+}

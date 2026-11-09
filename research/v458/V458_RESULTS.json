@@ -1,0 +1,58 @@
+{
+  "version": "V458",
+  "status": "STATIC_PASS",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "opcode_witnesses": 116,
+  "direct_E8_edges": 25,
+  "typed_RTTI": 2,
+  "typed_vtable_slots": 3,
+  "negative_controls": {
+    "attempted": 125,
+    "rejected": 125,
+    "false_accepts": [],
+    "status": "PASS"
+  },
+  "typed_render_receiver": {
+    "type": "FrpgModelDrawEntity",
+    "vtable_RVA": "0x12ECA10",
+    "dispatch_slot": "+0x20 -> 0x223380",
+    "builder_slot": "+0x50 -> 0x220000",
+    "embedded_type": "FrpgDrawParam",
+    "embedded_offset": "entity+0x108",
+    "constructor_call_RVA": "0x21F9C5 -> 0x1D7490"
+  },
+  "channel_offsets": {
+    "Light": {
+      "current": "+0x110",
+      "target": "+0x112",
+      "weight": "+0x114",
+      "duration": "+0x118",
+      "elapsed": "+0x11C"
+    },
+    "Fog": {
+      "current": "+0x120",
+      "target": "+0x122",
+      "weight": "+0x124",
+      "duration": "+0x128",
+      "elapsed": "+0x12C"
+    },
+    "Scattering": {
+      "current": "+0x130",
+      "target": "+0x132",
+      "weight": "+0x134",
+      "duration": "+0x138",
+      "elapsed": "+0x13C"
+    }
+  },
+  "route": "0x804C -> entity vtable+0x20 -> 0x222B60 -> 0x1D7580; builder 0x2200D0 reads two Light IDs and blend; 0x220639 -> 0x1C0BE0 -> 0x1C6900 category 5 two-resource Light consumer",
+  "staging_CPU": "+0x1240..+0x12B0",
+  "gameplay_owner_to_RX34": "OPEN",
+  "specific_RX34_GPU_CB": "OPEN",
+  "PTDE_pixel": "OPEN",
+  "addon_modified": false,
+  "handoff": {
+    "filename": "DSRRL_V458_TYPED_FRPGDRAWPARAM_LIGHT_CONSUMER_STATIC_RE_FULL.zip",
+    "sha256": "7659a9767bd0fa1ac94c2bf5d1142ae19246c9c77536a4bdbd77803450b00eba",
+    "bytes": 11944
+  }
+}
