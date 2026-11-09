@@ -144,11 +144,11 @@ def rtti(p,vt):
  assert sig==1 and rev==col,("COL",hex(vt))
  return p.read(td+16,180).split(b"\0")[0].decode("ascii","replace"),off,td+16
 def verify(raw,check_sha=True,census=True):
- if check_sha:assert hashlib.sha256(raw).hexdigest()==prior.EXE_SHA,"Wrong retail DSR EXE"
+ if check_sha:assert hashlib.sha256(raw).hexdigest()==prior.SHA,"Wrong retail DSR EXE"
  p=prior.PE(raw)
  for a,hexb in W.items():
   x=bytes.fromhex(hexb);assert p.read(a,len(x))==x,("instruction",hex(a))
- for a,d in EDGES.items():assert p.call(a)==d,("call",hex(a),hex(d))
+ for a,d in EDGES.items():assert p.direct(a)==d,("call",hex(a),hex(d))
  for vt,(name,slot,dest) in VT.items():
   got,offset,_=rtti(p,vt);assert got==name and offset==0,(hex(vt),got)
   assert struct.unpack("<Q",p.read(vt+slot,8))[0]==BASE+dest,("virtual slot",hex(vt),hex(slot))
@@ -156,9 +156,9 @@ def verify(raw,check_sha=True,census=True):
  assert 0x804c-0x8046==6
  assert 0x2235c8+4*6==0x2235e0 and struct.unpack("<I",p.read(0x2235e0,4))[0]==0x223466
  if census:
-  assert p.raw_e8(0x1d7580)==[0xc0240,0x219b2b,0x222bbb]
-  assert p.raw_e8(0x1d7490)==[0xbe8c6,0x215a29,0x21f9c5,0x574270,0x704f4a]
- return {"status":"STATIC_PASS","original_SHA256":prior.EXE_SHA,
+  assert p.raw_calls(0x1d7580)==[0xc0240,0x219b2b,0x222bbb]
+  assert p.raw_calls(0x1d7490)==[0xbe8c6,0x215a29,0x21f9c5,0x574270,0x704f4a]
+ return {"status":"STATIC_PASS","original_SHA256":prior.SHA,
  "opcode_witnesses":len(W),"E8_edges":len(EDGES),"RTTI_types":len(VT),"vtable_slots":len(VT)+1,
  "command":"0x804C -> FrpgModelDrawEntity vtable+0x20 -> 0x223380",
  "embedded":"FrpgDrawParam entity+0x108 initialized by 0x1D7490",
@@ -173,7 +173,7 @@ def controls(raw):
   positions.add(vt-8);positions.add(vt+slot);positions.add(rtti(p,vt)[2])
  fails=[]
  for a in sorted(positions):
-  q=bytearray(raw);q[p.off(a)]^=1
+  q=bytearray(raw);q[p.offset(a)]^=1
   try:verify(q,False,False)
   except (AssertionError,UnicodeDecodeError,ValueError):continue
   fails.append(hex(a))
