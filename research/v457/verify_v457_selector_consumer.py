@@ -26,7 +26,9 @@ W={
 0x21c98f:"c7818400000000000000",0x21ca5b:"40f6c7e0",
 0x21cac7:"e8f45f0000",0x222ad2:"ba4c800000",
 0x222af7:"f30f1132",0x222b0d:"891a",0x222b21:"8b442460",0x222b39:"8b442468",
-0x22346c:"e8eff6ffff",0x222ba7:"498d8b08010000",0x222bb5:"8b02",0x222bbb:"e8c049fbff",
+0x223386:"8d82ba7fffff",0x223391:"83f812",0x22339a:"488d0d5fccddff",
+0x2233a1:"448b8c81c8352200",0x2233a9:"4c03c9",0x2233ac:"41ffe1",
+0x2235e0:"66342200",0x22346c:"e8eff6ffff",0x222ba7:"498d8b08010000",0x222bb5:"8b02",0x222bbb:"e8c049fbff",
 0x2ee120:"440fbe8793000000",0x2ee139:"440fbe8794000000",0x2ee152:"440fbe8795000000",
 0x2fb96d:"440fbe8093000000",0x2fb98d:"440fbe8094000000",0x2fb9ad:"440fbe8095000000",
 0x357c17:"0fbe81ab000000",0x357c51:"0fbe81ac000000",0x357c8b:"0fbe81ad000000",
@@ -77,6 +79,11 @@ def verify(raw,sha=True,census=True):
  for a,t in LABEL_LEAS.items():
   b=p.read(a,7)
   assert b[:3]==b"\x48\x8d\x15" and a+7+struct.unpack("<i",b[3:])[0]==t,("LEA",hex(a))
+ # Prove exact 0x804C dispatch via normalized jump-table index 6.
+ assert 0x804c-0x8046==6
+ entry=0x2235c8+6*4
+ assert entry==0x2235e0 and struct.unpack("<i",p.read(entry,4))[0]==0x223466
+ assert p.direct(0x22346c)==0x222b60
  if census:
   for t,sites in CALLS.items():assert p.raw_calls(t)==sites,("raw E8",hex(t))
  return {"status":"STATIC_PASS","original_SHA256":SHA,"opcode_witnesses":len(W),
@@ -84,7 +91,7 @@ def verify(raw,sha=True,census=True):
          "semantics":{"0x93":"Light id","0x94":"Fog id","0x95":"Scattering id","0x96":"unnamed word, CPU state +0xAE"},
          "packers":{"Light":"0x21F600","Fog":"0x21F5C0","Scattering":"0x21F640"},
          "formula":"if signed family>>3 or signed channel is negative: -1; else (((signed family>>3)&127)<<8) | unsigned channel",
-         "route":"0x20B546→0x21C970→0x222AC0 (command ID 0x804C); 0x22346C→0x222B60→0x1D7580(receiver+0x108); opcode-to-dispatch matching needs final validation",
+         "route":"CONFIRMED exact 0x20B546→0x21C970→0x222AC0 emits 0x804C; 0x223380 switch index 6 table entry 0x2235E0 → 0x223466 → 0x222B60 → 0x1D7580(receiver+0x108)",
          "actor_to_RX34":"OPEN","pixel":"OPEN"}
 def negative(raw):
  p=PE(raw);faults=[]
