@@ -152,13 +152,14 @@ def verify(raw,check_sha=True,census=True):
  for vt,(name,slot,dest) in VT.items():
   got,offset,_=rtti(p,vt);assert got==name and offset==0,(hex(vt),got)
   assert struct.unpack("<Q",p.read(vt+slot,8))[0]==BASE+dest,("virtual slot",hex(vt),hex(slot))
+ assert struct.unpack("<Q",p.read(0x12eca60,8))[0]==BASE+0x220000, "Typed draw entity builder virtual slot +0x50" 
  assert 0x804c-0x8046==6
  assert 0x2235c8+4*6==0x2235e0 and struct.unpack("<I",p.read(0x2235e0,4))[0]==0x223466
  if census:
   assert p.raw_e8(0x1d7580)==[0xc0240,0x219b2b,0x222bbb]
   assert p.raw_e8(0x1d7490)==[0xbe8c6,0x215a29,0x21f9c5,0x574270,0x704f4a]
  return {"status":"STATIC_PASS","original_SHA256":prior.EXE_SHA,
- "opcode_witnesses":len(W),"E8_edges":len(EDGES),"RTTI_types":len(VT),"vtable_slots":len(VT),
+ "opcode_witnesses":len(W),"E8_edges":len(EDGES),"RTTI_types":len(VT),"vtable_slots":len(VT)+1,
  "command":"0x804C -> FrpgModelDrawEntity vtable+0x20 -> 0x223380",
  "embedded":"FrpgDrawParam entity+0x108 initialized by 0x1D7490",
  "light_slots":{"current":"entity+0x110","target":"entity+0x112","alpha":"entity+0x114","duration":"entity+0x118","elapsed":"entity+0x11C"},
@@ -167,7 +168,7 @@ def verify(raw,check_sha=True,census=True):
  "CPU_payload":"state+0x1240..+0x12B0",
  "actor_player_vs_NPC":"OPEN","RX34_GPU_CB":"OPEN","PTDE_pixel":"OPEN"}
 def controls(raw):
- p=prior.PE(raw);positions=set(W)|set(EDGES)
+ p=prior.PE(raw);positions=set(W)|set(EDGES)|{0x12eca60}
  for vt,(_,slot,_) in VT.items():
   positions.add(vt-8);positions.add(vt+slot);positions.add(rtti(p,vt)[2])
  fails=[]
