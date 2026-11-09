@@ -139,7 +139,7 @@ EDGES={
 VT={0x12eca10:(".?AVFrpgModelDrawEntity@NS_FRPG@@",0x20,0x223380),
     0x12e5c08:(".?AVFrpgDrawParam@NS_FRPG@@",0x0,0x1d76f0)}
 def rtti(p,vt):
- col=p.u64(vt-8)-BASE
+ col=struct.unpack("<Q",p.read(vt-8,8))[0]-BASE
  sig,off,cd,td,cl,rev=struct.unpack("<IIIIII",p.read(col,24))
  assert sig==1 and rev==col,("COL",hex(vt))
  return p.read(td+16,180).split(b"\0")[0].decode("ascii","replace"),off,td+16
@@ -151,7 +151,7 @@ def verify(raw,check_sha=True,census=True):
  for a,d in EDGES.items():assert p.call(a)==d,("call",hex(a),hex(d))
  for vt,(name,slot,dest) in VT.items():
   got,offset,_=rtti(p,vt);assert got==name and offset==0,(hex(vt),got)
-  assert p.u64(vt+slot)==BASE+dest,("virtual slot",hex(vt),hex(slot))
+  assert struct.unpack("<Q",p.read(vt+slot,8))[0]==BASE+dest,("virtual slot",hex(vt),hex(slot))
  assert 0x804c-0x8046==6
  assert 0x2235c8+4*6==0x2235e0 and struct.unpack("<I",p.read(0x2235e0,4))[0]==0x223466
  if census:
