@@ -1,0 +1,25 @@
+{
+  "version": "V460",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "opcode_witnesses": 56,
+  "direct_E8_edges": 11,
+  "negative_mutations": {
+    "attempted": 63,
+    "false_accepts": [],
+    "status": "PASS"
+  },
+  "confirmed": [
+    "FrpgModel+0x10 registrar handle differs by producer from Seed+0x10 global resource key",
+    "0x804C sender uses FrpgModel+0x10 in header+0x10",
+    "0x11B3710 sets opcode bit16 on reused handle; 0x11B36B0 omits explicit handle when bit16 set",
+    "Seed+0x10 lookup 0x11B3D50 -> Entity+0x20 and Seed+0x20 -> Entity+0x40"
+  ],
+  "status": {
+    "actor_to_entity": "OPEN",
+    "message_decoder_state": "OPEN",
+    "RX34_GPU": "OPEN",
+    "pixel": "OPEN",
+    "addon": "UNCHANGED"
+  },
+  "zip_sha256": "c51c3e52a1ff5e4b180f6c7e5af82dbadf92b86e50571c33d395ea9de70c6e44"
+}
