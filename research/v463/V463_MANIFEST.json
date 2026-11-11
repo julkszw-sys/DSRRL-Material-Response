@@ -1,0 +1,39 @@
+{
+  "version": "V463",
+  "repo": "julkszw-sys/DSRRL-Material-Response",
+  "branch": "agent/v463-playerins-worldchrman-rx34-handle-join-20261111",
+  "pr": 539,
+  "base_V359_RC1_source": "6e852cdc9085dd175159e564e223e0cc8589c535",
+  "single_addon_lineage": [
+    "V439",
+    "V443",
+    "V447",
+    "V448",
+    "V450",
+    "V451",
+    "V459",
+    "V463"
+  ],
+  "binary_source_commit": "f39bfb0c64550c08929d3a47810511359f5e13ad",
+  "CI_run": 43114160032,
+  "CI_artifact": 13896584718,
+  "addon_SHA256": "c4e4372967823de149095aa1d7308f77a365fcb59405836114ee6e1a96b7ad49",
+  "addon_bytes": 6166016,
+  "original_exe_SHA256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "handoff_zip_sha256": "784df7432939fb063e0ad26d5c451c4e8359045e000a42e1c6b9ac5a6c125d08",
+  "exact_repro_paths": [
+    "research/v463/verify_v463_worldchrman_typed.py",
+    "research/v463/V463_RE_REPORT_PL.md",
+    "renderer-core/tools/v463_prepare_build.py",
+    "renderer-core/tools/v463_name_binary.py",
+    "renderer-core/tools/v463_playerins_owner_overlay.py",
+    "renderer-core/tools/analyze_v463_playerins_rx34_owner.py",
+    "renderer-core/tests/test_v463_playerins_owner.py",
+    ".github/workflows/v463-rx34-playerins-native-handle.yml"
+  ],
+  "no_new_hooks": true,
+  "renderer_mutation": false,
+  "Source1_R43_unchanged": true,
+  "runtime": "OPEN",
+  "pixel": "OPEN"
+}
