@@ -1,0 +1,36 @@
+{
+  "version": "V460",
+  "status": "STATIC_PASS",
+  "source_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "RTTI_type_descriptors": 6017,
+  "complete_object_locators": 6089,
+  "ChrIns_RTTI_hierarchies": {
+    "ChrIns": [
+      "ChrIns",
+      "FieldInsBase"
+    ],
+    "EnemyIns": [
+      "EnemyIns",
+      "ChrIns",
+      "FieldInsBase"
+    ],
+    "PlayerIns": [
+      "PlayerIns",
+      "ChrIns",
+      "FieldInsBase"
+    ],
+    "ReplayGhostIns": [
+      "ReplayGhostIns",
+      "PlayerIns",
+      "ChrIns",
+      "FieldInsBase"
+    ]
+  },
+  "NpcTalkIns_occurrences": 1,
+  "NpcTalkIns_standalone_RTTI": "NOT_OBSERVED",
+  "NpcTalkIns_debug_template_RTTI": "OBSERVED",
+  "talkable_NPC_actual_gameplay_class": "OPEN",
+  "RX34_actor_ownership": "OPEN",
+  "addon_modified": false,
+  "pixel": "OPEN"
+}
