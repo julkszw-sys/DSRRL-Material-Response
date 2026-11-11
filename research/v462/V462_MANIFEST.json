@@ -1,0 +1,25 @@
+{
+  "version": "V462",
+  "repo": "julkszw-sys/DSRRL-Material-Response",
+  "branch": "research/v462-native-model-registration-to-drawentity-factory-command-20261111",
+  "base_branch": "research/v461-model-registration-vs-seed-context-rx34-temporal-cohorts-20261111",
+  "frozen_development_base": "V359-RC1 commit 6e852cdc9085dd175159e564e223e0cc8589c535",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "source_files": [
+    "research/v462/verify_v462_registration_transport.py",
+    "research/v462/V462_RE_REPORT_PL.md",
+    "research/v462/V462_RESULTS.json",
+    "research/v462/V462_MANIFEST.json"
+  ],
+  "self_contained_local_handoff": "DSRRL_V462_NATIVE_MODEL_HANDLE_TO_DRAWENTITY_REGISTRY_FULL.zip",
+  "handoff_sha256": "fdf0965f6dc31ee06b1acf9b73b89c4e32e118a76936b7210bc1c385359ec516",
+  "local_handoff_has_standalone_verifier": true,
+  "GitHub_verifier_dep": "research/v461/verify_v461_owner_handle.py",
+  "reproduce": "python research/v462/verify_v462_registration_transport.py <original_EXE> --mutations",
+  "original_exe_unchanged": true,
+  "new_addon": false,
+  "Source1_Source2_R43_unchanged": true,
+  "static": "PASS",
+  "runtime_scene_actor_join": "OPEN",
+  "pixel": "OPEN"
+}
