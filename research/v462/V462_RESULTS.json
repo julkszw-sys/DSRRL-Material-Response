@@ -1,0 +1,27 @@
+{
+  "version": "V462",
+  "static_status": "PASS",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "instruction_preimages": 72,
+  "direct_E8": 8,
+  "typed_Seed_vtable": "0x12CC308 slot+0x8 -> 0x223AC0",
+  "negative_controls": {
+    "attempted": 74,
+    "failed_accepts": 0,
+    "status": "PASS"
+  },
+  "model_registration_from_allocator": "0x157D24/0x11BA160",
+  "sender": "0x157D2D same EAX→R8D, 0x157D35 EAX→EDI and FrpgModel+0x10, 0x157D41→0x11B3710",
+  "serialization": "0x11B36B0 header=(payload_dwords<<17)|mode, bit16 duplicate-handle omits DWORD",
+  "receiver": "0x11BE7E4/7F0/7F9 parse; opcode1 0x11BE81B/851 R8D to Seed vtable+0x8 0x11BE858",
+  "entity": "0x223AC0→0x21F900→0x1F2DB0→0x11B8910, entity+0x10=R8D",
+  "registry": "0x11BE873 stores entity pointer at table[handle&0xFFFFFF]",
+  "scope": "CONFIRMED_STATIC for matching Seed family and properly routed create command",
+  "historical_six_entity_handles": "OPEN_NOT_RECORDED",
+  "PlayerIns_or_EnemyIns_owner": "OPEN",
+  "RX34_gpu_same_pixel": "OPEN",
+  "PTDE_visible": "OPEN",
+  "new_addon": false,
+  "original_EXE_patched": false,
+  "hand_off_sha256": "fdf0965f6dc31ee06b1acf9b73b89c4e32e118a76936b7210bc1c385359ec516"
+}
