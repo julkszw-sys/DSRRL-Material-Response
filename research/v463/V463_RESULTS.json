@@ -1,0 +1,45 @@
+{
+  "version": "V463",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "static": {
+    "opcode_witnesses": 52,
+    "direct_E8_edges": 8,
+    "RTTI": [
+      "WorldChrManImp vtable0x1328210",
+      "PlayerIns vtable0x13251F0",
+      "ChrModel vtable0x12EAF30"
+    ],
+    "negative_mutations": "56/56_PASS",
+    "world_global_RVA": "0x1C77E50",
+    "global_plus68": "ChrIns-family candidate; exact PlayerIns still requires runtime"
+  },
+  "native_handle_route": "FrpgModel+0x10 serialized native create→FrpgModelDrawEntity+0x10 (V462), compare complete DWORD, not lower24 slot only",
+  "build": {
+    "source_contract": "PASS",
+    "windows_x64": "PASS",
+    "one_addon_PE": "PASS",
+    "compiled_commit": "f39bfb0c64550c08929d3a47810511359f5e13ad",
+    "Actions_run": 43114160032,
+    "artifact_id": 13896584718,
+    "filename": "DSRRL_V463_PlayerIns_RX34_Handle_Join.addon64",
+    "bytes": 6166016,
+    "SHA256": "c4e4372967823de149095aa1d7308f77a365fcb59405836114ee6e1a96b7ad49",
+    "capture": "manual F9 8s max1024",
+    "new_exe_hook": false,
+    "render_mutation": false
+  },
+  "regressions": {
+    "synthetic_exact_player_nonplayer": "PASS",
+    "same_low24_different_generation": "PASS",
+    "source1_R43": "UNCHANGED"
+  },
+  "prior_failed_artifact": "CI 43113648962 produced compiled addon but uploaded only SHA due old V459 upload name; fixed and verified CI 43114160032 ZIP includes addon+SHA.",
+  "historical_V438": "No complete player/native handles, PlayerIns row30/31 attribution OPEN",
+  "runtime_V463": "NOT_TESTED",
+  "PlayerIns_owner": "OPEN",
+  "nonplayer_NPC_identity": "OPEN",
+  "GPU_same_pixel": "OPEN",
+  "PTDE_pixel": "OPEN",
+  "handoff_name": "DSRRL_V463_PLAYERINS_RX34_VERIFIED_HANDOFF.zip",
+  "handoff_sha256": "784df7432939fb063e0ad26d5c451c4e8359045e000a42e1c6b9ac5a6c125d08"
+}
