@@ -1,0 +1,61 @@
+{
+  "version": "V461",
+  "status": "STATIC_AND_ORIGINAL_CSV_PASS",
+  "source_original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "runtime_original_csv_sha256": "744d3af90a4f99eff8e7d22d8e78c2c6ced2e09141bda3ea0a23906d3e7d4329",
+  "static": {
+    "instruction_preimages": 46,
+    "direct_E8": 11,
+    "negative_mutations": "47/47_PASS",
+    "seed_context": "0x1D2180 global+0x10 read, NO per-call increment/generation",
+    "model_producer_registration_id": "FrpgModel+0x10 from registration callback 0x157D24; used 0x21CAA1",
+    "entity_instance_id": "entity+0x10 from factory argument R8D via 0x11B891E",
+    "resource_pointer": "entity+0x20, independent from instance ID",
+    "id_equality_on_runtime_actor": "OPEN"
+  },
+  "historical_runtime": {
+    "Source1_RX34_issued": 294,
+    "Source1_row30": 66,
+    "Source1_row31": 228,
+    "Source2_unverified": 12,
+    "unique_render_entities_over_session": 6,
+    "CPU_frame_buckets": 67,
+    "max_entities_in_one_bucket": 3,
+    "concurrent_entities_buckets": {
+      "1": 8,
+      "2": 38,
+      "3": 21
+    },
+    "mixed_row30_and_row31_buckets": 25,
+    "cohorts": [
+      {
+        "frames": "930–976",
+        "frame_buckets": 47,
+        "row30": [
+          "0x2189D9F0"
+        ],
+        "row31": [
+          "0x218D25D0",
+          "0x218D2B30"
+        ]
+      },
+      {
+        "frames": "1001–1020",
+        "frame_buckets": 20,
+        "row30": [
+          "0x218D2070"
+        ],
+        "row31": [
+          "0x218D4B70",
+          "0x218D50D0"
+        ]
+      }
+    ],
+    "all_six_unique_actors": "NOT_PROVEN"
+  },
+  "pixel": "OPEN",
+  "new_addon": "NOT_BUILT",
+  "H_NPC": "OPEN",
+  "H_SELF": "OPEN",
+  "handoff_sha256": "625ea366171152ae22a2e4b1f90b3bc83782b6277fd94768d79d32f4f999b9df"
+}
