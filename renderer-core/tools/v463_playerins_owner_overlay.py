@@ -14,6 +14,19 @@ def repl(path,old,new):
  assert x.count(old)==1,(str(path),x.count(old),old[:110])
  path.write_text(x.replace(old,new,1),encoding="utf-8")
 
+# V459 Light-pair columns have already been verified in V438; replace those
+# draw-time reads rather than performing redundant work on every RX34 draw.
+x=i.read_text(encoding="utf-8")
+start=x.index("        // V459: native typed FrpgModelDrawEntity+0x108 FrpgDrawParam.")
+end=x.index("        // V451 has 17 fields; use its remaining 7 slots",start)
+assert x.count("        // V459: native typed FrpgModelDrawEntity+0x108 FrpgDrawParam.")==1
+assert end>start
+x=x[:start]+"""        // V463: retain the already certified exact V451 builder witness.
+        const auto base459=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        const auto entity459=static_cast<std::uintptr_t>(issued448.w.entity);
+"""+x[end:]
+i.write_text(x,encoding="utf-8")
+
 needle="""        // V451 has 17 fields; use its remaining 7 slots to avoid increasing
         // capped event rate or producing an unjoinable second event.
         dsrrl::runtime::v438::emit(dsrrl::runtime::v438::V451_MODEL_RESOURCE_AT_ISSUE,{"""
