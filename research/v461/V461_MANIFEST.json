@@ -1,0 +1,27 @@
+{
+  "version": "V461",
+  "repo": "julkszw-sys/DSRRL-Material-Response",
+  "branch": "research/v461-model-registration-vs-seed-context-rx34-temporal-cohorts-20261111",
+  "base_branch": "research/v460-chrins-npctalk-native-rtti-census-20261111",
+  "frozen_active_development_base": "V359-RC1:6e852cdc9085dd175159e564e223e0cc8589c535",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "historical_runtime_csv_sha256": "744d3af90a4f99eff8e7d22d8e78c2c6ced2e09141bda3ea0a23906d3e7d4329",
+  "source_files": [
+    "research/v461/verify_v461_owner_handle.py",
+    "research/v461/audit_v461_rx34_cohorts.py",
+    "research/v461/V461_RE_REPORT_PL.md",
+    "research/v461/V461_RESULTS.json",
+    "research/v461/V461_MANIFEST.json"
+  ],
+  "reproducible_commands": [
+    "python research/v461/verify_v461_owner_handle.py <retail-original-exe> --mutations",
+    "python research/v461/audit_v461_rx34_cohorts.py <original-V438-CSV>"
+  ],
+  "local_handoff_archive": "DSRRL_V461_ACTOR_RESOURCE_HANDLE_COHORTS_FULL_STATIC_RE.zip",
+  "handoff_sha256": "625ea366171152ae22a2e4b1f90b3bc83782b6277fd94768d79d32f4f999b9df",
+  "original_exe_modified": false,
+  "new_addon": false,
+  "Source1_R43_unchanged": true,
+  "gameplay_ownership": "OPEN",
+  "ptde_pixel": "OPEN"
+}
