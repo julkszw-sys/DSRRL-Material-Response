@@ -75,6 +75,6 @@ jobs:
         with:
           name: DSRRL-V463-PlayerIns-Handle-RX34-OneAddon
           path: |
-            out-v438-one-shot-diagnostic/DSRRL_V459_Typed_RX34_Light_Pair_Audit.addon64
+            out-v438-one-shot-diagnostic/DSRRL_V463_PlayerIns_RX34_Handle_Join.addon64
             out-v438-one-shot-diagnostic/SHA256.txt
           if-no-files-found: error
