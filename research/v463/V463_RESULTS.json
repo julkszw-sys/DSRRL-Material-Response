@@ -1,0 +1,25 @@
+{
+  "version": "V463",
+  "exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "csv_sha256": "744d3af90a4f99eff8e7d22d8e78c2c6ced2e09141bda3ea0a23906d3e7d4329",
+  "static_witnesses": 31,
+  "negative_controls": "32/32_PASS",
+  "followup_decoder": "full handle compare cached; otherwise low24 table lookup, then vtable+0x10",
+  "generation_validation": "NOT_PRESENT_IN_LOCAL_LOOKUP_BASIC_BLOCK; downstream OPEN",
+  "kind16_entity_counts": {
+    "0x2189d9f0": 94,
+    "0x218d2070": 36,
+    "0x218d25d0": 82,
+    "0x218d2b30": 84,
+    "0x218d4b70": 34,
+    "0x218d50d0": 36
+  },
+  "kind16_v00_stable": false,
+  "kind16_lightbank_per_entity_stable": true,
+  "model_registration_full_handle_in_V438": "NOT_CAPTURED",
+  "ChrIns_owner_in_V438": "NOT_CAPTURED",
+  "runtime_new": "NOT_RUN",
+  "PTDE_pixel": "OPEN",
+  "new_addon": false,
+  "handoff_sha256": "f7edae8197976e6059f0d00850cee5fd286deb4f86fe76fc0ce819fbc44f8623"
+}
