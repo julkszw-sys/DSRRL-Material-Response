@@ -1,0 +1,18 @@
+{
+  "version": "V463",
+  "parent": "V462",
+  "github_branch": "research/v463-rx34-handle-lifetime-identity-falsifier-20261112",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "original_csv_sha256": "744d3af90a4f99eff8e7d22d8e78c2c6ced2e09141bda3ea0a23906d3e7d4329",
+  "standalone_handoff_sha256": "f7edae8197976e6059f0d00850cee5fd286deb4f86fe76fc0ce819fbc44f8623",
+  "active_base": "V359-RC1 frozen 6e852cdc9085dd175159e564e223e0cc8589c535",
+  "source_files": [
+    "verify_v463_handle_lifetime_full.py",
+    "audit_v463_rx34_id_gap.py",
+    "V463_RE_REPORT_PL.md",
+    "V463_RESULTS.json",
+    "V463_MANIFEST.json"
+  ],
+  "runtime": "NOT_RUN",
+  "pixel": "OPEN"
+}
