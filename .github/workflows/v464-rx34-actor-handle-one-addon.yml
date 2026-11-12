@@ -1,0 +1,81 @@
+name: V464 exact ChrIns owner handle RX34 single-addon (read-only)
+on:
+  push:
+    branches: [agent/v464-rx34-player-enemy-handle-owner-one-addon-20261112]
+  pull_request:
+    branches: [agent/v459-rx34-typed-light-pair-one-addon-20261109]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate V459 lineage plus V464 exact actor-owner hook fail-open scope
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/v459_prepare_build.py renderer-core/tools/v459_name_binary.py renderer-core/tools/v459_light_pair_overlay.py renderer-core/tools/analyze_v459_rx34_typed_light_pair.py research/v459/audit_v438_native_light_pair.py renderer-core/tools/v464_prepare_build.py renderer-core/tools/v464_name_binary.py renderer-core/tools/v464_actor_owner_overlay.py renderer-core/tools/analyze_v464_rx34_actor_owner.py renderer-core/tests/test_v464_owner_join_contract.py
+          python3 renderer-core/tests/test_v459_rx34_typed_light_pair.py
+          python3 renderer-core/tests/test_v464_owner_join_contract.py
+          grep -q 'V451_MODEL_RESOURCE_AT_ISSUE' renderer-core/tools/v459_light_pair_overlay.py
+          grep -q '0x12ECA10' renderer-core/tools/v459_light_pair_overlay.py
+          grep -q '0x12E5C08' renderer-core/tools/v459_light_pair_overlay.py
+          ! grep -q 'latest_hook_source(' renderer-core/tools/v459_light_pair_overlay.py
+          ! grep -q 'v438_install_wrappers' renderer-core/tools/v459_light_pair_overlay.py
+          ! grep -q 'CreateHook' renderer-core/tools/v459_light_pair_overlay.py
+          grep -q '0x32D410u' renderer-core/include/dsrrl/runtime/v464_actor_owner.hpp
+          grep -q 'V464_OWNER_HANDLE_AT_ISSUE' renderer-core/tools/v464_actor_owner_overlay.py
+          ! grep -q 'publish_hook_source(' renderer-core/tools/v464_actor_owner_overlay.py
+          ! grep -q 'latest_hook_source(' renderer-core/tools/v464_actor_owner_overlay.py
+          echo 'V464 source contract PASS; new owner hook construction only, runtime and PTDE pixel OPEN'
+  native-x64-single-addon:
+    runs-on: windows-2022
+    needs: source-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Reproduce V439 to V464 in one integrated source tree
+        shell: pwsh
+        run: |
+          foreach($ver in @('v439','v443','v447','v448','v450','v451','v459','v464')){
+            python "renderer-core/tools/${ver}_prepare_build.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} prepare failed"}
+            python "renderer-core/tools/${ver}_name_binary.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} name failed"}
+            if($ver -eq 'v439'){
+              python renderer-core/tools/v439_marker_binary.py
+              if($LASTEXITCODE -ne 0){throw 'V439 hook marker failed'}
+            }
+          }
+      - name: Build only one x64 ReShade addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if($LASTEXITCODE -ne 0){throw 'V464 native build failed'}
+      - name: PE and read-only typed-data attestations
+        shell: pwsh
+        run: |
+          $dir='out-v438-one-shot-diagnostic'
+          $out="$dir/DSRRL_V464_Player_Enemy_RX34_Handle_Owner_Probe.addon64"
+          if(!(Test-Path $out)){throw 'V464 addon missing'}
+          if((Get-ChildItem $dir -Filter '*.addon64').Count -ne 1){throw 'Multiple addons'}
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $out))
+          if($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){throw 'Invalid x64 PE'}
+          $s=[Text.Encoding]::ASCII.GetString($bytes)
+          foreach($mark in @('[DSRRL V450] MANUAL_RX34_LIGHT_AUDIT','[DSRRL V451] MODEL_RESOURCE_ISSUED_SHADOW','[DSRRL V459] RX34_TYPED_LIGHT_PAIR_INLINE_V451_EVENT','[DSRRL V464] CHRINS_OWNER_ROUTER_TYPED_HANDLE')){
+            if(!$s.Contains($mark)){throw "Missing required integrated marker: $mark"}
+          }
+          (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii "$dir/SHA256.txt"
+          Write-Host 'V464 SOURCE/BUILD PASS; actor owner runtime activation and PTDE pixels OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V464-Actor-Handle-RX34-OneAddon
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V459_Typed_RX34_Light_Pair_Audit.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
