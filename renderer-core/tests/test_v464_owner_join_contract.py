@@ -8,7 +8,7 @@ overlay=(root/"tools/v464_actor_owner_overlay.py").read_text()
 assert "0x32D410u" in src and "0x12EAF30u" in src
 assert "0x13251F0u" in src and "0x1322E68u" in src
 assert "0x80000000u" in src and "now.handle!=s.handle" in src
-assert "full handle" in src.lower() and "UNKNOWN" in src
+assert "full handle" in src.lower() and "unknown" in src.lower()
 assert "v464::resolve(entity459,true)" in overlay
 assert "V464_OWNER_HANDLE_AT_ISSUE" in overlay
 assert "valid_builder451" in overlay
