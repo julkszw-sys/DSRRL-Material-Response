@@ -37,16 +37,16 @@ W={int(x,16):bytes.fromhex(y) for x,y in (line.split(':') for line in """11be816
 11b891e:44894110
 21caa1:8b5310""".splitlines())}
 def verify(b,checksha=True):
- if checksha:assert hashlib.sha256(b).hexdigest()==v.ORIGINAL,'EXE SHA mismatch'
- pe=v.PE(b)
+ if checksha:assert hashlib.sha256(b).hexdigest()==v.original,'EXE SHA mismatch'
+ pe=v.prior.PE(b)
  for r,raw in W.items():assert pe.read(r,len(raw))==raw,hex(r)
- return {'status':'STATIC_PASS','sha256':v.ORIGINAL,'opcode_witnesses':len(W),
+ return {'status':'STATIC_PASS','sha256':v.original,'opcode_witnesses':len(W),
  'create':'full handle R8D -> typed Seed factory -> entity+0x10; table indexed by low24',
  'followup':'if full DWORD handle matches EBX cached, reuse RDI; otherwise registry[low24] -> virtual+0x10',
  'generation_check_in_this_lookup_basic_block':False,
  'generation_check_downstream':'OPEN','gameplay_owner':'OPEN','pixel':'OPEN'}
 def negatives(b):
- pe=v.PE(b);fail=[]
+ pe=v.prior.PE(b);fail=[]
  for r in W:
   x=bytearray(b);x[pe.off(r)]^=1
   try:verify(x,False)
