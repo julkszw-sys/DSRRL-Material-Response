@@ -48,6 +48,14 @@ jobs:
               if($LASTEXITCODE -ne 0){throw 'V439 hook marker failed'}
             }
           }
+      - name: Build single native x64 ReShade addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if($LASTEXITCODE -ne 0){throw 'V465 build failed'}
+      - name: Attest one PE with V465 log markers
+        shell: pwsh
+        run: |
           $header=Get-Content 'renderer-core/include/dsrrl/runtime/v438_one_shot_trace.hpp' -Raw
           $idx=$header.IndexOf('GetAsyncKeyState')
           if($idx -ge 0){
@@ -57,14 +65,6 @@ jobs:
           }
           if(!$header.Contains('ALLY_AUTO_CAPTURE_START')){throw 'V465 auto recorder missing'}
           if(!$header.Contains('ACTOR_HANDLE status=')){throw 'V465 log aggregation missing'}
-      - name: Build single native x64 ReShade addon
-        shell: pwsh
-        run: |
-          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
-          if($LASTEXITCODE -ne 0){throw 'V465 build failed'}
-      - name: Attest one PE with V465 log markers
-        shell: pwsh
-        run: |
           $dir='out-v438-one-shot-diagnostic'
           $out="$dir/DSRRL_V465_Ally_Auto_Actor_RX34_LogOnly.addon64"
           if(!(Test-Path $out)){throw 'V465 addon missing'}
