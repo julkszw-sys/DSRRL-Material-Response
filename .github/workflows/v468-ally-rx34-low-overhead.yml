@@ -1,0 +1,91 @@
+name: V468 low overhead RX34 WorldPlayer source census one addon
+on:
+  push:
+    branches: [agent/v468-rx34-low-overhead-no-native-hook-20261113]
+  pull_request:
+    branches: [agent/v467-rx34-typed-world-player-census-20261113]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source syntax, no F9 or CSV and fail-open contract
+        shell: bash
+        run: |
+          set -e
+          python3 -m py_compile renderer-core/tools/v465_prepare_build.py renderer-core/tools/v465_name_binary.py renderer-core/tools/v465_actor_owner_overlay.py renderer-core/tools/v465_ally_log_overlay.py renderer-core/tools/v466_prepare_build.py renderer-core/tools/v466_name_binary.py renderer-core/tools/v466_prewindow_owner_overlay.py renderer-core/tools/v467_prepare_build.py renderer-core/tools/v467_name_binary.py renderer-core/tools/v467_owner_probe_overlay.py renderer-core/tools/v468_prepare_build.py renderer-core/tools/v468_name_binary.py renderer-core/tools/v468_low_overhead_overlay.py
+          python3 renderer-core/tests/test_v465_ally_log_source.py
+          python3 renderer-core/tests/test_v466_prewindow_owner_source.py
+          python3 renderer-core/tests/test_v467_source_census.py
+          python3 renderer-core/tests/test_v468_low_overhead_source.py
+          grep -q 'V465_CHRINS_OWNER' renderer-core/tools/v465_actor_owner_overlay.py
+          grep -q 'V465_RX34_HANDLE' renderer-core/tools/v465_actor_owner_overlay.py
+          grep -q 'ALLY_AUTO_CAPTURE_START' renderer-core/tools/v465_ally_log_overlay.py
+          grep -q 'no_CSV=1' renderer-core/tools/v465_ally_log_overlay.py
+          ! grep -q 'latest_hook_source(' renderer-core/tools/v465_actor_owner_overlay.py
+          ! grep -q 'GetAsyncKeyState' renderer-core/tools/v465_ally_log_overlay.py
+          grep -q 'PRETRIGGER_ONLY' renderer-core/tools/v466_prewindow_owner_overlay.py
+          grep -q 'v.live_owner_hits>0u' renderer-core/tools/v466_prewindow_owner_overlay.py
+          echo 'V468 low-overhead contract PASS; runtime FPS and pixels OPEN'
+  native-x64-single-addon:
+    needs: source-contract
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Reproduce V439-V468 single integrated addon
+        shell: pwsh
+        run: |
+          foreach($ver in @('v439','v443','v447','v448','v450','v451','v459','v465','v466','v467','v468')){
+            python "renderer-core/tools/${ver}_prepare_build.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} prepare failed"}
+            python "renderer-core/tools/${ver}_name_binary.py"
+            if($LASTEXITCODE -ne 0){throw "${ver} name failed"}
+            if($ver -eq 'v439'){
+              python renderer-core/tools/v439_marker_binary.py
+              if($LASTEXITCODE -ne 0){throw 'V439 hook marker failed'}
+            }
+          }
+      - name: Build single native x64 ReShade addon
+        shell: pwsh
+        run: |
+          ./renderer-core/tools/build_v438_one_shot.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+          if($LASTEXITCODE -ne 0){throw 'V468 build failed'}
+      - name: Attest one PE with V465 log markers
+        shell: pwsh
+        run: |
+          $header=Get-Content 'renderer-core/include/dsrrl/runtime/v438_one_shot_trace.hpp' -Raw
+          $idx=$header.IndexOf('GetAsyncKeyState')
+          if($idx -ge 0){
+            Write-Host "Unexpected key query at $idx"
+            Write-Host $header.Substring([Math]::Max(0,$idx-300),[Math]::Min(750,$header.Length-[Math]::Max(0,$idx-300)))
+            throw 'V465 still depends on keyboard'
+          }
+          if(!$header.Contains('ALLY_AUTO_CAPTURE_START')){throw 'V465 auto recorder missing'}
+          if(!$header.Contains('ACTOR_HANDLE status=')){throw 'V465 log aggregation missing'}
+          $dir='out-v438-one-shot-diagnostic'
+          $out="$dir/DSRRL_V468_RX34_LowOverhead_WorldPlayer.addon64"
+          if(!(Test-Path $out)){throw 'V468 addon missing'}
+          if((Get-ChildItem $dir -Filter '*.addon64').Count -ne 1){throw 'Multiple addons'}
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $out))
+          if($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){throw 'Invalid x64 PE'}
+          $s=[Text.Encoding]::ASCII.GetString($bytes)
+          foreach($mark in @('[DSRRL V450] MANUAL_RX34_LIGHT_AUDIT','[DSRRL V451] MODEL_RESOURCE_ISSUED_SHADOW','[DSRRL V459] RX34_TYPED_LIGHT_PAIR_INLINE_V451_EVENT','[DSRRL V465] ALLY_LOG_ONLY_AUTO_RX34','[DSRRL V468] CHRINS_OWNER_HOOK_DISABLED_PERF','[DSRRL V466] SUMMARY handles=','[DSRRL V467] OWNER_SOURCE_DIAG')){
+            if(!$s.Contains($mark)){throw "Missing integrated marker: $mark"}
+          }
+          (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant() | Out-File -Encoding ascii "$dir/SHA256.txt"
+          Write-Host 'V468 construction PASS only. Runtime & PTDE pixel OPEN'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V468-RX34-LowOverhead-WorldPlayer-OneAddon
+          path: |
+            out-v438-one-shot-diagnostic/DSRRL_V468_RX34_LowOverhead_WorldPlayer.addon64
+            out-v438-one-shot-diagnostic/SHA256.txt
+          if-no-files-found: error
