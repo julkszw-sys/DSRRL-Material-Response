@@ -84,6 +84,6 @@ jobs:
         with:
           name: DSRRL-V466-Ally-RX34-Owner-Phase-Aware-OneAddon
           path: |
-            out-v438-one-shot-diagnostic/DSRRL_V465_Ally_Auto_Actor_RX34_LogOnly.addon64
+            out-v438-one-shot-diagnostic/DSRRL_V466_Ally_RX34_Phase_Aware_Owner.addon64
             out-v438-one-shot-diagnostic/SHA256.txt
           if-no-files-found: error
