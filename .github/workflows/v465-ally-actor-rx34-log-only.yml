@@ -2,6 +2,8 @@ name: V465 ROG Ally RX34 actor ownership log-only auto single addon
 on:
   push:
     branches: [agent/v465-chrins-owner-full-handle-rx34-one-addon-20261113]
+  pull_request:
+    branches: [agent/v459-rx34-typed-light-pair-one-addon-20261109]
   workflow_dispatch:
 permissions:
   contents: read
