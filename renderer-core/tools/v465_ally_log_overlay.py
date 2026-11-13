@@ -23,7 +23,7 @@ h=t.read_text(encoding="utf-8")
 a=h.index("inline void emit(kind t,")
 b=h.index("inline void drain(",a)
 h=h[:a]+'''// V465 log-only: old ring/CSV emission is intentionally disabled.
-inline void emit(kind, std::initializer_list<u64>={}) noexcept {}
+inline void emit(kind, std::initializer_list<u64> = {}) noexcept {}
 '''+h[b:]
 a=h.index("inline void on_present() noexcept {")
 # The old on_present is the last method in namespace v438; replace its body
