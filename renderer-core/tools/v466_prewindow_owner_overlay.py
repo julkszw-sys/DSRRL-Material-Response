@@ -79,7 +79,7 @@ text = replace_exact(
     """    const bool identity_candidate=v.owner && v.entity &&
       (v.owner_type==1u || v.owner_type==2u) &&
       !v.ownership_conflict && !v.entity_conflict &&
-      ((v.row30>0u) != (v.row31>0u));
+      (v.row30>0u || v.row31>0u);
     const bool joined_ok=identity_candidate && v.live_owner_hits>0u;
     const bool prior_candidate=identity_candidate && !joined_ok &&
       v.pre_owner_hits>0u;
@@ -87,14 +87,17 @@ text = replace_exact(
     else {
       ++unknown; // PRETRIGGER_ONLY is never counted as CPU_JOIN.
       if(prior_candidate)++prior_only;
-    }""",
+    }
+    // Same native handle can issue both rows across time. Not same-pixel proof.
+    const char *row_scope=(v.row30>0u && v.row31>0u)?"BOTH_ROWS":
+      v.row30>0u?"ROW30":v.row31>0u?"ROW31":"NONE";""",
     "no historical owner promoted to live join")
 text = replace_exact(
     text,
     """      "[DSRRL V465] ACTOR_HANDLE status=%s handle=%08x class=%s owner=%llx model=%llx entity=%llx row30=%llu row31=%llu owner_hits=%llu draw_hits=%llu conflicting_owner=%u conflicting_receiver=%u",
       joined_ok?"CPU_JOIN":"UNKNOWN",v.full_handle,""",
-    """      "[DSRRL V466] ACTOR_HANDLE status=%s handle=%08x class=%s owner=%llx model=%llx entity=%llx row30=%llu row31=%llu owner_hits=%llu pre_owner_hits=%llu live_owner_hits=%llu draw_hits=%llu conflicting_owner=%u conflicting_receiver=%u",
-      joined_ok?"CPU_JOIN":prior_candidate?"PRETRIGGER_ONLY":"UNKNOWN",v.full_handle,""",
+    """      "[DSRRL V466] ACTOR_HANDLE status=%s row_scope=%s handle=%08x class=%s owner=%llx model=%llx entity=%llx row30=%llu row31=%llu owner_hits=%llu pre_owner_hits=%llu live_owner_hits=%llu draw_hits=%llu conflicting_owner=%u conflicting_receiver=%u",
+      joined_ok?"CPU_JOIN":prior_candidate?"PRETRIGGER_ONLY":"UNKNOWN",row_scope,v.full_handle,""",
     "phase-aware log marker")
 text = replace_exact(
     text,
