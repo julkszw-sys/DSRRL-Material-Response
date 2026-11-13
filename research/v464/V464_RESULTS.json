@@ -1,0 +1,14 @@
+{
+  "version": "V464",
+  "original_exe_sha256": "a45aaa36dd2f6cc151670a639ea5547043cf38ea79ff4178b963c6ed71f98d7b",
+  "opcode_witnesses": 31,
+  "negative_mutations": "32/32_PASS",
+  "allocator": "0x11BA160",
+  "handle": "(slotIndex & 0x00FFFFFF)|(slotEntry & 0xFF000000)|0x80000000",
+  "slot_entry_update": "xor 3",
+  "monotonic_generation": "OPEN",
+  "actual_RX34_actor_owners": "OPEN",
+  "pixel": "OPEN",
+  "addon_modified": false,
+  "zip_sha256": "d4ba2b052e1d0c3ae4bea6bbe4b9738dc7b574d535b5715588f023ed953dfc47"
+}
