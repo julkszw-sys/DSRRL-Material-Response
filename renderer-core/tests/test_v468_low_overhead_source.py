@@ -15,6 +15,12 @@ for marker in ("if(false && v465_prep_chrins())",
  "note_rx34() noexcept",
  "original_game_code=1 no_native_detour=1"):
  assert marker in overlay,marker
+for tag in ("V415 MODEL SELECTOR","V416 FGMODEL PARENT","V417 FG REGISTRY PROVENANCE","V415 MODEL SOURCE JOIN"):
+ assert tag in overlay,tag
+assert "if (number<=8u || number%8192u==0u)" in overlay
+assert "if (reg_n<=8u || reg_n%8192u==0u)" in overlay
+assert "if (n<=8u || n%8192u==0u)" in overlay
+assert "if (fg_number<=8u || fg_number%8192u==0u)" in overlay
 assert "import v468_low_overhead_overlay" in prep
 assert "DSRRL_V468_RX34_LowOverhead_WorldPlayer.addon64" in name
 for forbidden in ("DrawIndexed(","set_lightbank(","shader_patch(","DrawIndexedInstanced("):
