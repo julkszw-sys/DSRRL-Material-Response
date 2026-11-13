@@ -132,9 +132,12 @@ bool v465_arm_chrins() noexcept {
     bytes[10]=0xffu;bytes[11]=0xe0u;bytes[12]=0x90u;
     // Existing write() restores page protection and flushes instruction cache.
     // Only mark hooked after successful write; verify bytes before PASS.
+    // If the write changes bytes but flushing fails, restore() must still
+    // know that it owns a potentially modified target.
+    g_v465_chrins.patched=true;
     if(!write(g_v465_chrins.target,bytes.data(),bytes.size()))return false;
     if(std::memcmp(g_v465_chrins.target,bytes.data(),bytes.size())!=0)return false;
-    g_v465_chrins.patched=true;return true;
+    return true;
 }
 #endif
 std::wstring path(){''')
@@ -157,7 +160,9 @@ fail:
    }else{
      // Restoration failure is not concealed as success.
      const bool restored=restore(g_v465_chrins);
-     g_v465_chrins_original=nullptr;
+     // Never clear the only valid trampoline when restoring live EXE code
+     // fails: the existing detour may still be executing.
+     if(restored)g_v465_chrins_original=nullptr;
      reshade::log::message(restored?reshade::log::level::warning:
                                    reshade::log::level::error,
        restored?"[DSRRL V465] CHRINS_OWNER_HOOK_FAILOPEN ARM_FAILED":
