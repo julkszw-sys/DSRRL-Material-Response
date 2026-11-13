@@ -79,4 +79,39 @@ replace_exact(
 }""",
  "one-shot RX34 trigger counter")
 
-print("V468 overlay PASS: native ChrIns hook DISABLED; receiver/world VM reads ONLY inside active capture; one addon; no renderer mutation")
+
+# V466 runtime showed ~2,389 ReShade.log lines in 21:24:39-40,
+# mainly first-512/256 historical V415/V416/V417 diagnostic dumps.
+# These log messages are not consumed by the lighting pipeline, and
+# reducing their initial burst leaves the observation counters, semantic
+# routing, operator bridges and every-8192 checkpoints unchanged.
+P=R/"src/runtime/pmetal_env_source_runtime.cpp"
+
+def throttle_initial_diagnostic_logs(path,marker,before,after):
+ s=path.read_text(encoding="utf8")
+ anchor='"[DSRRL '+marker+'] '
+ assert s.count(anchor)==1,(marker,"marker count",s.count(anchor))
+ at=s.index(anchor)
+ idx=s.rfind(before,0,at)
+ assert idx>=0 and at-idx<900,(marker,"unexpected diagnostic scope",at-idx)
+ # Only mutate this one exact local logging guard, never the event counter.
+ path.write_text(s[:idx]+after+s[idx+len(before):],encoding="utf8")
+
+throttle_initial_diagnostic_logs(
+ F,"V415 MODEL SELECTOR",
+ "if (n<=256u || n%8192u==0u) {",
+ "if (n<=8u || n%8192u==0u) {")
+throttle_initial_diagnostic_logs(
+ F,"V416 FGMODEL PARENT",
+ "if (fg_number<=256u || fg_number%8192u==0u) {",
+ "if (fg_number<=8u || fg_number%8192u==0u) {")
+throttle_initial_diagnostic_logs(
+ F,"V417 FG REGISTRY PROVENANCE",
+ "if (reg_n<=256u || reg_n%8192u==0u) {",
+ "if (reg_n<=8u || reg_n%8192u==0u) {")
+throttle_initial_diagnostic_logs(
+ P,"V415 MODEL SOURCE JOIN",
+ "if (number<=512u || number%8192u==0u) {",
+ "if (number<=8u || number%8192u==0u) {")
+
+print("V468 PASS: no native owner detour, active-only RX34 reads, 4 diagnostic log bursts capped at 8, same operators")
