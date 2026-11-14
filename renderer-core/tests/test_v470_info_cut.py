@@ -8,7 +8,8 @@ for term in ("materialize_v230_release_cleanup.py","reshade::log::level::info,",
              "reshade::log::level::error","V350 PTDE LERP RGB","GPU RESIDENT RC1","DSRRL BUILD_ID",
              'assert total>=25', 'src").rglob("*.cpp")'):
  assert term in src,term
-assert "import v470_release_info_cleanup_overlay" in p
+assert "v470_release_info_cleanup_overlay.py" in p
+assert "audit_active_islands_hotpath.py" in p
 assert "DSRRL_V470_RX34_Focused_LogLowOverhead.addon64" in n
 for forbidden in ("DrawIndexed(","set_lightbank(","shader_patch(","DSRRL_V230_RUNTIME_TELEMETRY=OFF"):
  assert forbidden not in src
