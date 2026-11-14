@@ -47,7 +47,9 @@ def strip_info_log_calls(s):
             at=pos
     return s,count
 
-paths=[ROOT/"integrated/integrated_addon.cpp",*sorted((ROOT/"src").rglob("*.cpp"))]
+generated=Path("build-v438-one-shot-diagnostic/generated/dsrrl/runtime/integrated_addon_physical_cut.cpp")
+assert generated.is_file(),"post-audit generated source missing; fail closed"
+paths=[generated,ROOT/"integrated/integrated_addon.cpp",*sorted((ROOT/"src").rglob("*.cpp"))]
 total=0
 for p in paths:
     before=p.read_text(encoding="utf-8")
