@@ -10,7 +10,7 @@ for term in ("materialize_v230_release_cleanup.py","reshade::log::level::info,",
  assert term in src,term
 assert "v470_release_info_cleanup_overlay.py" in p
 assert "Replace-One 'python renderer-core/tools/test_v230_release_contract.py'" in p
-assert "After generated source is materialized and audited" in p
+assert "before V470 post-audit cleanup" in p
 assert "generated.is_file()" in src
 assert "DSRRL_V470_RX34_Focused_LogLowOverhead.addon64" in n
 for forbidden in ("DrawIndexed(","set_lightbank(","shader_patch(","DSRRL_V230_RUNTIME_TELEMETRY=OFF"):
