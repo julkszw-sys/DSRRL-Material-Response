@@ -9,7 +9,7 @@ for term in ("materialize_v230_release_cleanup.py","reshade::log::level::info,",
              'assert total>=25', 'src").rglob("*.cpp")'):
  assert term in src,term
 assert "v470_release_info_cleanup_overlay.py" in p
-assert "Replace-One $buildV470" in p
+assert "Replace-One 'python renderer-core/tools/test_v230_release_contract.py'" in p
 assert "After generated source is materialized and audited" in p
 assert "generated.is_file()" in src
 assert "DSRRL_V470_RX34_Focused_LogLowOverhead.addon64" in n
