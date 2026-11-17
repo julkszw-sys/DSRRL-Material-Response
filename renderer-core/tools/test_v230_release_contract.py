@@ -4,8 +4,8 @@ from pathlib import Path
 import json
 root=Path(__file__).resolve().parents[1]
 version=json.loads((root/"integrated/VERSION.json").read_text("utf8"))
-assert version["version"]=="2.3.0", "Add-on version not v2.3.0"
-assert version["artifact_stem"]=="DSRRL_Restored_Lighting_v2_3_0"
+assert version["version"]=="2.3.1", "Add-on version not v2.3.1"
+assert version["artifact_stem"]=="DSRRL_Restored_Lighting_v2_3_1"
 builder=(root/"tools/build_v230_production.ps1").read_text("utf8")
 assert "/DDSRRL_V230_PRODUCTION" in builder
 assert "/DDSRRL_V359_ATTESTED_GI_NAME_ALIAS" in builder
@@ -15,7 +15,7 @@ for token in ("/DDSRRL_V352_LONG_SOAK_PRESENT",
     assert token not in builder, f"Diagnostic feature still compiled: {token}"
 assert "Once '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF' '-DDSRRL_FULL_TELEMETRY_DEFAULT_ON=OFF'" in builder
 assert "build_v350_gpu_resident_pointlight_off_rc2.ps1" in builder
-assert "DSRRL_Restored_Lighting_v2.3.0.addon64" in builder
+assert "DSRRL_Restored_Lighting_v2.3.1.addon64" in builder
 assert "DSRRL_V350_PTDE_LERP_RGB_COMPONENT_SWIZZLE" in (root/"tools/build_v350_gpu_resident_pointlight_off_rc2.ps1").read_text("utf8")
 qpc=(root/"include/dsrrl/runtime/qpc_causality_bisect.hpp").read_text("utf8")
 assert "DSRRL_QPC_SCOPE_SHELL_NO_CLOCK" in qpc
@@ -38,6 +38,6 @@ env=(root/"src/runtime/envspec_resource_runtime.cpp").read_text("utf8")
 assert "v359_verified_native_name_probe_locked" in env
 assert "g_v359_map_conflict" in env
 assert "v359_match_original_gi_name" in env
-print("V230_RELEASE_CONTRACT_PASS version=2.3.0 qpc_scope=RETAINED gpu_residency=RETAINED")
+print("V230_RELEASE_CONTRACT_PASS version=2.3.1 qpc_scope=RETAINED gpu_residency=RETAINED")
 print("V230_TELEMETRY_DISABLED v352/v353/v296root=COMPILED_OUT hot_effect=FALSE")
 print("V230_V359_EXACT_GI_SOURCE_OWNERSHIP_AND_FAILOPEN_RETAINED")
