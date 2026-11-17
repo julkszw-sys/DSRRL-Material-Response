@@ -1,9 +1,9 @@
 {
   "schema": "dsrrl.core_islands.version.v1",
   "product_line": "DSRRL Restored Lighting",
-  "version": "2.3.0",
-  "artifact_stem": "DSRRL_Restored_Lighting_v2_3_0",
-  "branch": "release/v2.3.0-v359-prep",
+  "version": "2.3.1",
+  "artifact_stem": "DSRRL_Restored_Lighting_v2_3_1",
+  "branch": "agent/v231-release-clean-from-b235-recovery-20261117",
   "status": "RELEASE_PREPARATION",
   "architecture": "renderer-core+operator-islands+single-addon",
   "legacy_monolith": {
