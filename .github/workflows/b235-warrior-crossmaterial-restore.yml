@@ -1,0 +1,83 @@
+name: B235 Warrior crossmaterial recovery exact parent one-addon
+on:
+  push:
+    branches: [agent/b235-warrior-crossmaterial-fixes-from-exact-binary-20261117]
+  workflow_dispatch:
+  pull_request:
+    branches: [agent/b235-exact-original-base-20261117]
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python source and production lineage syntax
+        shell: bash
+        run: |
+          python3 -m py_compile renderer-core/tools/materialize_v230_armor_v13_exact_supplement.py renderer-core/tools/materialize_v230_v13_target_loader_closure.py renderer-core/tools/materialize_b235_remove_v296_unproven_crossgate.py renderer-core/tools/test_b235_warrior_recovery.py
+          python3 renderer-core/tools/test_v350_gpu_resident_rc1_source.py
+          python3 renderer-core/tools/test_v350_gpu_resident_pointlight_off_rc2_source.py
+          python3 renderer-core/tools/test_v351_fallback_census.py --output b235_fallback_census.json
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path("renderer-core/tools/build_v230_production.ps1").read_text("utf8")
+          assert "build_v350_gpu_resident_pointlight_off_rc2.ps1" in b
+          assert "materialize_v230_armor_v13_exact_supplement.py" in b
+          assert "materialize_v230_v13_target_loader_closure.py" in b
+          assert "materialize_b235_remove_v296_unproven_crossgate.py" in b
+          assert "test_b235_warrior_recovery.py" in b
+          assert "materialize_v230_release_cleanup.py" in b
+          assert b.index("materialize_v230_release_cleanup.py") < b.index("materialize_v230_armor_v13_exact_supplement.py")
+          assert "DSRRL_V230_V13_TARGET_LOADER_CLOSURE" in b
+          print("B235 exact original recipe lineage + 4 scoped restore source stages PASS")
+          PY
+  native-one-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Rebuild exact B235 from C++ original parent
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: PE audit and package one unique addon with SHA256
+        shell: pwsh
+        run: |
+          $original='out-v230-release/DSRRL_Restored_Lighting_v2.3.0.addon64'
+          if (!(Test-Path $original)) { throw 'Missing original B235-derived native PE' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $original))
+          if ($bytes.Length -lt 1000000 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE64 output' }
+          $raw=[Text.Encoding]::ASCII.GetString($bytes)
+          foreach($marker in @('[DSRRL V350 PTDE LERP RGB]','[DSRRL GPU RESIDENT RC1]','[DSRRL V13 LOADER CUT]','v230_production','2.3.0')) {
+            if (!$raw.Contains($marker)) { throw "Compiled source marker missing: $marker" }
+          }
+          foreach($marker in @('[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]','[DSRRL V296 ROOTCAUSE]','[DSRRL QPC CAUSALITY]')) {
+            if ($raw.Contains($marker)) { throw "Unwanted legacy profiler: $marker" }
+          }
+          New-Item -ItemType Directory -Force b235_recovery | Out-Null
+          Copy-Item $original 'b235_recovery/DSRRL_B235_Warrior_CrossMaterial_Recovery.addon64'
+          $file='b235_recovery/DSRRL_B235_Warrior_CrossMaterial_Recovery.addon64'
+          $sha=(Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  DSRRL_B235_Warrior_CrossMaterial_Recovery.addon64" | Set-Content 'b235_recovery/SHA256.txt' -Encoding ascii
+          @"
+          B235 exact uploaded baseline SHA256 d55cc4782d343e06c75d86847eaf06e4a019c4ae0272ce64e114e658cf0e0a26
+          Original GitHub parent 232ac131fe55c670047bc633e6b13d3c8c95a306
+          This is a new reproducible source-derived one-addon descendant, NOT the original B235 binary.
+          V13 missing 34 Diffuse pairs and 1 Normal triple + actual resource callback closure.
+          57 verified MTD identity supplement entries, exact two-source SHA precedence.
+          Exact bank/receiver cached shader negative retry; source-only V296 veto cleanup.
+          This is construction and CI proof only. In-game runtime and PTDE pixel equivalence OPEN.
+          Sidecar DDS files must already be present in game folder; this addon does not contain DDS assets.
+          Only ONE DSRRL .addon64 should be installed at once.
+          "@ | Set-Content 'b235_recovery/README.txt' -Encoding utf8
+          Write-Host "B235_RECOVERY_SINGLE_ADDON_PASS bytes=$($bytes.Length) sha256=$sha source=$env:GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-B235-Warrior-CrossMaterial-OneAddon
+          path: b235_recovery/
+          if-no-files-found: error
