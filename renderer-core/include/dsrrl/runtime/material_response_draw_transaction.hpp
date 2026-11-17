@@ -243,6 +243,15 @@ private:
     std::unordered_map<std::uint32_t, ID3D11Buffer *> b12_by_route_;
     std::atomic<std::uint64_t> resource_epoch_{1u};
 
+    // 5 exact shader banks x 64 possible MR receiver IDs. A source shader
+    // registration publishes only its own bank+receiver availability, so a
+    // prior TLS negative cache miss may be retried without invalidating
+    // unrelated hot positive caches or taking locks for permanently absent
+    // receivers. Read-only for draw; no authorization semantics.
+    static constexpr std::size_t k_replacement_key_receivers = 64u;
+    std::array<std::atomic_bool, 5u * k_replacement_key_receivers>
+        replacement_key_published_{};
+
     std::atomic<std::uint64_t> replacement_register_ok_{0};
     std::atomic<std::uint64_t> replacement_register_fail_{0};
     std::atomic<std::uint64_t> combined_ul_register_ok_{0};
