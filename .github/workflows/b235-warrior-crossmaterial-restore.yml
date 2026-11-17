@@ -3,6 +3,8 @@ on:
   push:
     branches: [agent/b235-warrior-crossmaterial-fixes-from-exact-binary-20261117]
   workflow_dispatch:
+  pull_request:
+    branches: [agent/b235-exact-original-base-20261117]
 permissions:
   contents: read
 jobs:
