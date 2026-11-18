@@ -45,6 +45,13 @@ int main() {
     const auto a = tk(0x2189d9f0u,0x81000f10u,30);
     const auto b = tk(0x218d25d0u,0x81000d8cu,31);
     assert(same_material(a.material,b.material));
+    assert(targeted_receiver(a.material,34u));
+    assert(!targeted_receiver(a.material,33u));
+    assert(!targeted_receiver(a.material,35u));
+    assert(!targeted_receiver(a.material,36u));
+    assert(!targeted_receiver(a.material,0u));
+    auto other_route=a.material;other_route.route_index=229u;
+    assert(!targeted_receiver(other_route,34u));
     assert(same_native_descriptor(a,a.context,0x051e,0x051e,0u));
     assert(!same_native_descriptor(a,b.context,0x051e,0x051e,0u));
     assert(!same_native_descriptor(a,a.context,0x051f,0x051f,0u));
