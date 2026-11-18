@@ -11,6 +11,19 @@ namespace dsrrl::runtime::v475 {
 using material_identity = operators::material_response::material_identity;
 using source = pmetal_envspec_source;
 
+// Receiver-first context transport is scoped to one existing producer
+// API call, so historical V304 source_.latest(material, source) is untouched.
+inline thread_local std::uint32_t active_receiver_id = 0u;
+class receiver_scope {
+    std::uint32_t previous_ = 0u;
+public:
+    explicit receiver_scope(std::uint32_t id) noexcept
+        : previous_(active_receiver_id) { active_receiver_id = id; }
+    receiver_scope(const receiver_scope &) = delete;
+    receiver_scope &operator=(const receiver_scope &) = delete;
+    ~receiver_scope() noexcept { active_receiver_id = previous_; }
+};
+
 struct ticket {
     std::uintptr_t entity = 0u;
     std::uintptr_t draw_param = 0u;
