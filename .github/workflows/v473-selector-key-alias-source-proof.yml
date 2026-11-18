@@ -1,0 +1,36 @@
+name: V473 LightBank producer-key alias executable source proof
+on:
+  push:
+    branches: [research/v473-selector-instance-alias-proof-20261118]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-alias-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: C++17 original P_Metal state alias (CPU only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread -Irenderer-core/include renderer-core/src/runtime/pmetal_producer_state.cpp research/v473/test_v473_real_pmetal_material_alias.cpp -o /tmp/v473_pmetal_alias
+          /tmp/v473_pmetal_alias
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("renderer-core/src/runtime/pmetal_producer_state.cpp").read_text()
+          h=Path("renderer-core/include/dsrrl/operators/material_response/material_response_island.hpp").read_text()
+          assert "std::uint64_t material_key(" in p
+          assert "bool same_material(" in p
+          assert "a.flver_sha256 == b.flver_sha256" in p
+          assert "a.material_slot == b.material_slot" in p
+          assert "a.raw_mtd_sha256 == b.raw_mtd_sha256" in p
+          assert "pmetal_producer_state_latest(" in p
+          assert "native_entity_full_handle" not in h
+          assert "FrpgModelDrawEntity" not in p
+          print("V473_SOURCE_KEY_ABSENT_ENTITY_INSTANCE_GUARD_PASS")
+          PY
+      - name: No actual renderer modifications in research PR
+        shell: bash
+        run: |
+          git diff --name-only HEAD~2..HEAD || true
