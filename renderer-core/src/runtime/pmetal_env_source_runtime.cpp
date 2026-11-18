@@ -2514,6 +2514,11 @@ void pmetal_env_source_runtime::uninstall() noexcept
 void pmetal_env_source_selector_clear() noexcept
 {
     pmetal_producer_state_clear();
+#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+    // Any intervening Flver material selection cancels the prior native
+    // instance receipt, including non-P_Metal materials.
+    v475::tls.begin_selector();
+#endif
 }
 
 void pmetal_env_source_selector_event(
