@@ -2922,8 +2922,7 @@ void pmetal_env_source_selector_event(
 bool pmetal_env_source_runtime::latest(
     const operators::material_response::
         material_identity &material,
-    pmetal_envspec_source &out,
-    std::uint32_t receiver_id) const noexcept
+    pmetal_envspec_source &out) const noexcept
 {
     out = {};
 
@@ -2961,7 +2960,7 @@ bool pmetal_env_source_runtime::latest(
     // Never remap row30/31; use only the Source1 value authenticated there.
     // No receipt/mismatch leaves the existing production Source1/R43 policy
     // untouched. A candidate cannot authorize stock material widening.
-    if (v475::targeted_receiver(material, receiver_id)) {
+    if (v475::targeted_receiver(material, v475::active_receiver_id)) {
         v475::ticket live_ticket{};
         if (v475::capture_exact_live_ticket(
                 material, epoch, live_ticket)) {
