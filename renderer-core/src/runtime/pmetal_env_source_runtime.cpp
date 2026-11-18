@@ -10,6 +10,9 @@
 #include "dsrrl/runtime/v203_equipment_envspec36_gate.hpp"
 #endif
 #include "dsrrl/runtime/pmetal_producer_state.hpp"
+#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+#include "dsrrl/runtime/v475_native_instance_scope.hpp"
+#endif
 #include "dsrrl/runtime/pmetal_selector_policy.hpp"
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
 #include "dsrrl/operators/material_response/mtd_semantic_census.hpp"
@@ -2511,6 +2514,11 @@ void pmetal_env_source_runtime::uninstall() noexcept
 void pmetal_env_source_selector_clear() noexcept
 {
     pmetal_producer_state_clear();
+#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+    // Any intervening Flver material selection cancels the prior native
+    // instance receipt, including non-P_Metal materials.
+    v475::tls.begin_selector();
+#endif
 }
 
 void pmetal_env_source_selector_event(
@@ -2523,6 +2531,9 @@ void pmetal_env_source_selector_event(
         material_identity &material) noexcept
 {
     pmetal_producer_state_clear();
+#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+    v475::tls.begin_selector();
+#endif
 
     if (!g_selector_enabled.load(
             std::memory_order_acquire) ||
@@ -2734,6 +2745,20 @@ void pmetal_env_source_selector_event(
             material,
             next,
             epoch);
+        #if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+        {
+            v475::ticket live_ticket{};
+            std::uint32_t native_beta_bits = 0u;
+            std::memcpy(&native_beta_bits, &beta, sizeof(beta));
+            if (v475::capture_exact_live_ticket(
+                    material, epoch, live_ticket) &&
+                v475::same_native_descriptor(
+                    live_ticket,
+                    reinterpret_cast<std::uintptr_t>(owner),
+                    raw_a, raw_b, native_beta_bits))
+                (void)v475::tls.publish(live_ticket, next);
+        }
+        #endif
 
         static std::atomic_bool
             selector_shadow_hit_logged{false};
@@ -2870,6 +2895,20 @@ void pmetal_env_source_selector_event(
         material,
         next,
         epoch);
+    #if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+    {
+        v475::ticket live_ticket{};
+        std::uint32_t native_beta_bits = 0u;
+            std::memcpy(&native_beta_bits, &beta, sizeof(beta));
+            if (v475::capture_exact_live_ticket(
+                    material, epoch, live_ticket) &&
+                v475::same_native_descriptor(
+                    live_ticket,
+                    reinterpret_cast<std::uintptr_t>(owner),
+                    raw_a, raw_b, native_beta_bits))
+                (void)v475::tls.publish(live_ticket, next);
+    }
+    #endif
 
     if (telemetry::effect_enabled())
         g_last_publish_tid.store(
@@ -2917,6 +2956,30 @@ bool pmetal_env_source_runtime::latest(
             g_consumer_fail);
         return false;
     }
+
+#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+    // The *only* new candidate route. Probe the same original DSR native
+    // default-builder frame observed by the selector. Both receipt and draw
+    // must match entity, embedded DP, full generational handle, packet,
+    // context, model, frame, native A/B/beta, epoch and full material SHA.
+    // Never remap row30/31; use only the Source1 value authenticated there.
+    // No receipt/mismatch leaves the existing production Source1/R43 policy
+    // untouched. A candidate cannot authorize stock material widening.
+    if (v475::targeted_receiver(material, v475::active_receiver_id)) {
+        v475::ticket live_ticket{};
+        if (v475::capture_exact_live_ticket(
+                material, epoch, live_ticket)) {
+            pmetal_envspec_source native_matched{};
+            if (v475::tls.take(
+                    live_ticket,
+                    native_matched) == v475::verdict::exact) {
+                out = native_matched;
+                telemetry::hot_count(g_consumer_ok);
+                return true;
+            }
+        }
+    }
+#endif
 
     if (pmetal_producer_state_latest(
             material,

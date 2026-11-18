@@ -1,0 +1,96 @@
+name: V475 RX34 exact Source1 native-instance candidate
+on:
+  push:
+    branches: [research/v475-exact-instance-selector-source1-candidate-20261118]
+  pull_request:
+    branches: [agent/v231-release-clean-from-b235-recovery-20261117]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test exact native-instance Source1 ticket on real production types
+        shell: bash
+        run: |
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror -pedantic -pthread -Irenderer-core/include renderer-core/tests/test_v475_exact_source1_ticket.cpp -o /tmp/v475
+          /tmp/v475
+          clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-omit-frame-pointer -Irenderer-core/include renderer-core/tests/test_v475_exact_source1_ticket.cpp -o /tmp/v475_san
+          /tmp/v475_san
+          python3 renderer-core/tools/test_v231_clean_release_source.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('renderer-core/src/runtime/pmetal_env_source_runtime.cpp').read_text('utf8')
+          b=Path('renderer-core/tools/build_v230_production.ps1').read_text('utf8')
+          assert p.count('v475::tls.publish(live_ticket, next)') == 2
+          assert p.count('v475::tls.begin_selector()') == 2  # any FLVER selection invalidates previous scope
+          assert p.count('v475::tls.take(') == 1
+          assert p.count('#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)') == 6  # includes global selector clear and exact receiver gate
+          assert 'if (latest_hook_source(out))' in p
+          assert 'DSRRL_V475_EXACT_LOCAL_SOURCE1' in b
+          assert 'v475::targeted_receiver(material, v475::active_receiver_id)' in p
+          assert 'source_.latest(material, source)' in Path('renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp').read_text('utf8')
+          assert 'v475::receiver_scope exact_receiver_scope(decision.receiver_id)' in Path('renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp').read_text('utf8')
+          assert 'DSRRL_V230_V13_TARGET_LOADER_CLOSURE' not in b
+          assert '2.3.1.addon64' in b
+          print('V475_ACTUAL_SOURCE1_PATH_CONNECTED_PASS release baseline preserved')
+          PY
+  native-one-addon:
+    needs: source-contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 3645e3025d1d98a90e318278858931f034d5d1f6
+          path: _reshade
+      - name: Compile single x64 V475 candidate from exact v2.3.1 base
+        shell: pwsh
+        run: ./renderer-core/tools/build_v230_production.ps1 -ReShadeInclude "${{ github.workspace }}/_reshade/include"
+      - name: Audit PE and package single research addon
+        shell: pwsh
+        run: |
+          $file='out-v230-release/DSRRL_Restored_Lighting_v2.3.1.addon64'
+          if (!(Test-Path $file)) {throw 'Native candidate missing'}
+          $b=[IO.File]::ReadAllBytes((Resolve-Path $file))
+          if ($b.Length -lt 1000000 -or $b[0] -ne 0x4d -or $b[1] -ne 0x5a) {throw 'PE invalid'}
+          $pe=[BitConverter]::ToInt32($b,0x3c)
+          if ([BitConverter]::ToUInt16($b,$pe+4) -ne 0x8664) {throw 'PE not AMD64'}
+          $raw=[Text.Encoding]::ASCII.GetString($b)
+          foreach($required in @('2.3.1','v230_production','[DSRRL V350 PTDE LERP RGB]','[DSRRL GPU RESIDENT RC1]')) {
+            if (!$raw.Contains($required)) {throw "Missing $required"}
+          }
+          foreach($bad in @('[DSRRL V13 LOADER CUT]','[DSRRL V296 ROOTCAUSE]','[DSRRL V352 PERF]','[DSRRL V353 CPU_STAGE]')) {
+            if ($raw.Contains($bad)) {throw "Unwanted diagnostic $bad"}
+          }
+          $commit=(git rev-parse HEAD).Trim()
+          if (!$raw.Contains($commit)) {throw 'Source commit missing from PE'}
+          New-Item -ItemType Directory -Force 'v475_candidate' | Out-Null
+          $addon='v475_candidate/DSRRL_V475_Exact_Instance_Source1_CANDIDATE.addon64'
+          Copy-Item $file $addon
+          $sha=(Get-FileHash $addon -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  DSRRL_V475_Exact_Instance_Source1_CANDIDATE.addon64" | Set-Content 'v475_candidate/SHA256.txt' -Encoding ascii
+          @"
+          V475 experimental source-bound RX34 per-instance Source1. NOT PUBLIC RELEASE.
+          Base official v2.3.1 unchanged. Source $commit
+          Exact typed default native builder FrpgModelDrawEntity full 32-bit handle.
+          Same DrawParam, packet, model, native frame, material identity, epoch.
+          Steady row30/31 only, no row substitution or actor guessing.
+          V475 exact matches prioritize original Source1 per-instance signal.
+          Other/missing joins retain original v2.3.1 Source1 and protected R43 Source2.
+          Build/source tests PASS does not mean game runtime or PTDE pixels PASS.
+          External PTDE DDS sidecars required. Do not install two DSRRL add-ons.
+          "@ | Set-Content 'v475_candidate/RESEARCH_ONLY.txt' -Encoding utf8
+          Write-Host "V475_CANDIDATE_ONE_ADDON_PASS sha=$sha bytes=$($b.Length) source=$commit"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSRRL-V475-Exact-Instance-Source1-OneAddon-Experimental
+          path: v475_candidate/
+          if-no-files-found: error
