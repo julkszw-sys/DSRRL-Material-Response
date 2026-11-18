@@ -32,6 +32,8 @@ jobs:
           assert p.count('#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)') == 5
           assert 'if (latest_hook_source(out))' in p
           assert 'DSRRL_V475_EXACT_LOCAL_SOURCE1' in b
+          assert 'v475::targeted_receiver(material, receiver_id)' in p
+          assert 'source_.latest(material, source, decision.receiver_id)' in Path('renderer-core/src/runtime/pmetal_envspec_draw_runtime.cpp').read_text('utf8')
           assert 'DSRRL_V230_V13_TARGET_LOADER_CLOSURE' not in b
           assert '2.3.1.addon64' in b
           print('V475_ACTUAL_SOURCE1_PATH_CONNECTED_PASS release baseline preserved')
