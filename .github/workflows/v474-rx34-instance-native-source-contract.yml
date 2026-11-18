@@ -1,0 +1,40 @@
+name: V474 RX34 native instance Source1 join fail-open source contract
+on:
+  push:
+    branches: [research/v474-rx34-instance-local-bridge-contract-20261118]
+  pull_request:
+    branches: [research/v473-selector-instance-alias-proof-20261118]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-source-cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Original v2.3.1 source API and V474 exact native instance journal
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -Wall -Wextra -Werror -O2 -pthread -I. -Irenderer-core/include \
+            research/v474/test_v474_instance_source_join.cpp -o /tmp/v474_instance_test
+          /tmp/v474_instance_test
+          c++ -std=c++17 -Wall -Wextra -Werror -O1 -g -pthread -fsanitize=address,undefined \
+            -fno-omit-frame-pointer -I. -Irenderer-core/include \
+            research/v474/test_v474_instance_source_join.cpp -o /tmp/v474_instance_sanitized
+          ASAN_OPTIONS=detect_leaks=1 /tmp/v474_instance_sanitized
+          python3 -m py_compile research/v474/verify_v474_native_light_instance.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('renderer-core/src/runtime/pmetal_producer_state.cpp').read_text()
+          t=Path('renderer-core/include/dsrrl/operators/material_response/material_response_island.hpp').read_text()
+          assert 'same_material(' in s and 'pmetal_producer_state_latest(' in s
+          assert 'native_entity_full_handle' not in t
+          hdr=Path('research/v474/instance_source_journal.hpp').read_text()
+          for x in ('t.draw_param-t.entity==0x108u','native_builder_sequence','same_registration','!authentic(t)','x.poisoned=true','void retire('):
+            assert x in hdr, x
+          print('V474 SOURCE_AUTHORITY_CONTRACT PASS; no rendering modified')
+          PY
+      - name: Only research files touched
+        shell: bash
+        run: |
+          git diff --name-only HEAD~4..HEAD || true
