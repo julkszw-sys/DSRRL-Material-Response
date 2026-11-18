@@ -29,7 +29,7 @@ jobs:
           assert p.count('v475::tls.publish(live_ticket, next)') == 2
           assert p.count('v475::tls.begin_selector()') == 2  # any FLVER selection invalidates previous scope
           assert p.count('v475::tls.take(') == 1
-          assert p.count('#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)') == 5
+          assert p.count('#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)') == 6  # includes global selector clear and exact receiver gate
           assert 'if (latest_hook_source(out))' in p
           assert 'DSRRL_V475_EXACT_LOCAL_SOURCE1' in b
           assert 'v475::targeted_receiver(material, v475::active_receiver_id)' in p
