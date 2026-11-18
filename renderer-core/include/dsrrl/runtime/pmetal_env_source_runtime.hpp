@@ -102,7 +102,7 @@ class pmetal_env_source_runtime {
 public:
     bool install() noexcept;
     void uninstall() noexcept;
-    bool latest(const operators::material_response::material_identity &material, pmetal_envspec_source &out, std::uint32_t receiver_id = 0u) const noexcept;
+    bool latest(const operators::material_response::material_identity &material, pmetal_envspec_source &out) const noexcept;
     pmetal_env_source_runtime_telemetry telemetry() const noexcept;
     void reset() noexcept;
 };
