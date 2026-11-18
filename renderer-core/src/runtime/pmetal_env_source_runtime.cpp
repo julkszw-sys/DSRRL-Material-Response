@@ -2743,8 +2743,14 @@ void pmetal_env_source_selector_event(
         #if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
         {
             v475::ticket live_ticket{};
+            std::uint32_t native_beta_bits = 0u;
+            std::memcpy(&native_beta_bits, &beta, sizeof(beta));
             if (v475::capture_exact_live_ticket(
-                    material, epoch, live_ticket))
+                    material, epoch, live_ticket) &&
+                v475::same_native_descriptor(
+                    live_ticket,
+                    reinterpret_cast<std::uintptr_t>(owner),
+                    raw_a, raw_b, native_beta_bits))
                 (void)v475::tls.publish(live_ticket, next);
         }
         #endif
@@ -2887,9 +2893,15 @@ void pmetal_env_source_selector_event(
     #if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
     {
         v475::ticket live_ticket{};
-        if (v475::capture_exact_live_ticket(
-                material, epoch, live_ticket))
-            (void)v475::tls.publish(live_ticket, next);
+        std::uint32_t native_beta_bits = 0u;
+            std::memcpy(&native_beta_bits, &beta, sizeof(beta));
+            if (v475::capture_exact_live_ticket(
+                    material, epoch, live_ticket) &&
+                v475::same_native_descriptor(
+                    live_ticket,
+                    reinterpret_cast<std::uintptr_t>(owner),
+                    raw_a, raw_b, native_beta_bits))
+                (void)v475::tls.publish(live_ticket, next);
     }
     #endif
 
