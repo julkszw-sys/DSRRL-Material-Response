@@ -54,6 +54,13 @@ inline bool same_source(const source &a, const source &b) noexcept {
         a.phn_k135_valid == b.phn_k135_valid;
 }
 
+inline bool targeted_receiver(const material_identity &material,
+                              std::uint32_t receiver_id) noexcept {
+    return receiver_id == 34u && material.valid &&
+        material.owner_tuple_exact && material.material_slot_valid &&
+        material.actual_material_exact && material.route_index == 345u;
+}
+
 inline bool well_formed(const ticket &t) noexcept {
     if (!t.exact_type || !t.default_builder ||
         t.entity == 0u || t.entity > UINTPTR_MAX - 0x108u ||
