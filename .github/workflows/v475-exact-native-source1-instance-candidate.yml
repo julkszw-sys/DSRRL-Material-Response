@@ -27,7 +27,7 @@ jobs:
           p=Path('renderer-core/src/runtime/pmetal_env_source_runtime.cpp').read_text('utf8')
           b=Path('renderer-core/tools/build_v230_production.ps1').read_text('utf8')
           assert p.count('v475::tls.publish(live_ticket, next)') == 2
-          assert p.count('v475::tls.begin_selector()') == 1
+          assert p.count('v475::tls.begin_selector()') == 2  # any FLVER selection invalidates previous scope
           assert p.count('v475::tls.take(') == 1
           assert p.count('#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)') == 5
           assert 'if (latest_hook_source(out))' in p
