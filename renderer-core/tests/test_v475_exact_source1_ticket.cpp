@@ -44,6 +44,17 @@ ticket tk(std::uintptr_t entity,unsigned handle,unsigned row) {
 int main() {
     const auto a = tk(0x2189d9f0u,0x81000f10u,30);
     const auto b = tk(0x218d25d0u,0x81000d8cu,31);
+    assert(active_receiver_id == 0u);
+    {
+        receiver_scope rx34(34u);
+        assert(active_receiver_id == 34u);
+        {
+            receiver_scope nested(33u);
+            assert(active_receiver_id == 33u);
+        }
+        assert(active_receiver_id == 34u);
+    }
+    assert(active_receiver_id == 0u);
     assert(same_material(a.material,b.material));
     assert(targeted_receiver(a.material,34u));
     assert(!targeted_receiver(a.material,33u));
