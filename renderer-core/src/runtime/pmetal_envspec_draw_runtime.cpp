@@ -11,6 +11,9 @@
 #include "dsrrl/runtime/v287_nonmetal_trace.hpp"
 #endif
 #include "dsrrl/runtime/runtime_hot_telemetry.hpp"
+#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+#include "dsrrl/runtime/v475_instance_source1_transport.hpp"
+#endif
 #include "dsrrl/runtime/pixel_srv_shadow.hpp"
 #if defined(DSRRL_V336_WANDERER_SRV_AUDIT)
 #include "dsrrl/runtime/v336_wanderer_srv_witness.hpp"
@@ -903,8 +906,13 @@ bool pmetal_envspec_draw_runtime::prepare(
     }
     effect_latch(effect_semantic_ready_);
 
+#if defined(DSRRL_V475_EXACT_LOCAL_SOURCE1)
+    // The exact MR decision.receiver_id travels only across the original
+    // production latest(material,source) call and is restored on exit.
+    v475::receiver_scope exact_receiver_scope(decision.receiver_id);
+#endif
     pmetal_envspec_source source{};
-    if (!source_.latest(material, source, decision.receiver_id) ||
+    if (!source_.latest(material, source) ||
         !std::isfinite(source.beta)) {
         telemetry::hot_count(source_rejects_);
         effect_fail(
