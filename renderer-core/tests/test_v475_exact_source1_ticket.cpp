@@ -45,6 +45,11 @@ int main() {
     const auto a = tk(0x2189d9f0u,0x81000f10u,30);
     const auto b = tk(0x218d25d0u,0x81000d8cu,31);
     assert(same_material(a.material,b.material));
+    assert(same_native_descriptor(a,a.context,0x051e,0x051e,0u));
+    assert(!same_native_descriptor(a,b.context,0x051e,0x051e,0u));
+    assert(!same_native_descriptor(a,a.context,0x051f,0x051f,0u));
+    assert(!same_native_descriptor(a,a.context,0x051e,0x051f,0u));
+    assert(!same_native_descriptor(a,a.context,0x051e,0x051e,0x3f000000u));
     thread_scope_journal journal{};
     source out{};
     assert(journal.publish(a,src(30)));
