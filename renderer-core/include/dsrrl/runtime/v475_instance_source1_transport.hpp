@@ -74,6 +74,21 @@ inline bool well_formed(const ticket &t) noexcept {
         (t.packed_a == 0x051eu || t.packed_a == 0x051fu);
 }
 
+// The native FLVER selector descriptor is a different object from the model
+// builder packet. Positive Source1 ingress requires equality at their actual
+// semantic cut, not merely equal low-byte row or shared FLVER material.
+inline bool same_native_descriptor(const ticket &t,
+                                   std::uintptr_t descriptor_owner,
+                                   std::uint16_t descriptor_a,
+                                   std::uint16_t descriptor_b,
+                                   std::uint32_t descriptor_beta_bits) noexcept {
+    return well_formed(t) &&
+        t.context == descriptor_owner &&
+        t.packed_a == descriptor_a &&
+        t.packed_b == descriptor_b &&
+        t.beta_bits == descriptor_beta_bits;
+}
+
 inline bool source_matches_ticket(const ticket &t, const source &s) noexcept {
     if (!well_formed(t))
         return false;
