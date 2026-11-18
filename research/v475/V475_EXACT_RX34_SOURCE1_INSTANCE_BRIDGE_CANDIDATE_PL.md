@@ -21,6 +21,8 @@ W `renderer-core/src/runtime/pmetal_env_source_runtime.cpp`, pod ścisłym `DSRR
 
 **Scope:** tylko potwierdzony **rzeczywisty** `decision.receiver_id=34` przekazany z `pmetal_envspec_draw_runtime` (negatywne testy RX33/35/36), P_Metal route345, native RX34 default builder, steady `0x51E`/row30 i `0x51F`/row31, beta0, pełna material identity. Inne materiały, inne rows, Lerp, inne receivery, alternatywne buildery i cross-thread bez identycznej ramki nie otrzymują nowego źródła. Fail-open do dotychczasowego baseline, bez zmiany stock renderer ani całej polityki Source2.
 
+**Zachowana zgodność V304:** pierwsza próba przeniesienia identyfikatora receivera przez zmianę `source_.latest(material,source,receiver_id)` została zatrzymana przez historyczny CI `test_v304_typed_donor_contract.py`. Nie obchodzimy tego audytu. Właściwy kod przywraca identyczne produkcyjne `source_.latest(material, source)`; w jego otoczeniu `v475::receiver_scope(decision.receiver_id)` ustawia automatycznie przywracany, tylko-wątkowy identyfikator RX34. Test C++ sprawdza nested RAII restoration, CI sprawdza dokładny oryginalny kontrakt. Jeśli nowy renderer nie dostarczy tego receiver scope, v475 pozostaje nieaktywny.
+
 **Brak** row30→31, globalnego row lock, gain, zmiany shader/MTD/CB/LightBank PBL/SSS, nowego detoura/draw replay czy modyfikacji DarkSoulsRemastered.exe na dysku. Bazowe V13 DDS/MTD i release-clean v2.3.1 niezmienione poza lokalnym warunkowym transportem w **eksperymentalnej** gałęzi. Bez telemetry burstów.
 
 ## Dlaczego to nadal nie jest „celny selektor” w sensie pełnego PASS
